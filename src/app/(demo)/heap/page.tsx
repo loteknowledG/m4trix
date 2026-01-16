@@ -22,6 +22,7 @@ import { useStore } from "@/hooks/use-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { get, set } from "idb-keyval";
+import { Check, Circle, CheckCircle } from "lucide-react";
 
 // Local TextScramble component — lightweight scramble for numbers
 function TextScramble({
@@ -95,12 +96,15 @@ type GifItem = {
   id: string;
   src: string;
   name?: string;
+  selected?: boolean;
 };
 
 export default function HeapPage() {
   const [gifs, setGifs] = useState<GifItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const anySelected = gifs.some((g) => !!g.selected);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const selectedCount = gifs.filter((g) => !!g.selected).length;
   
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -252,6 +256,10 @@ export default function HeapPage() {
     setGifs((s) => s.filter((g) => g.id !== id));
   }, []);
 
+  const toggleSelect = useCallback((id: string) => {
+    setGifs((s) => s.map((g) => (g.id === id ? { ...g, selected: !g.selected } : g)));
+  }, []);
+
   const sidebar = useStore(useSidebar, (x) => x);
   if (!sidebar) return null;
   const { settings, setSettings } = sidebar;
@@ -271,8 +279,10 @@ export default function HeapPage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-        <div className="ml-4">
-          <TextScramble value={gifs.length} className="text-sm font-medium text-muted-foreground" />
+        <div className="ml-4 text-sm font-medium text-muted-foreground">
+          <TextScramble value={selectedCount} className="inline" />
+          <span className="px-2">/</span>
+          <TextScramble value={gifs.length} className="inline" />
         </div>
       </div>
       <div className="mt-6">
@@ -316,14 +326,39 @@ export default function HeapPage() {
             {gifs.map((g) => (
               <div
                 key={g.id}
-                className="relative bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm h-40"
+                onClick={(e) => {
+                  if (anySelected) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleSelect(g.id);
+                  }
+                }}
+                className={`relative group bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm h-40 ${
+                  g.selected ? "ring-2 ring-primary/60" : ""
+                }`}
               >
                 <button
-                  onClick={() => removeGif(g.id)}
-                  className="absolute z-10 top-1 right-1 bg-black/40 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                  aria-label="Remove gif"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleSelect(g.id);
+                  }}
+                  className={`absolute z-10 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
+                    g.selected || anySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  } transition-opacity pointer-events-auto`}
+                  aria-label="Select gif"
                 >
-                  ×
+                  {!g.selected && (
+                    <div className="relative w-7 h-7 flex items-center justify-center">
+                      <Circle size={18} className="text-white/70" />
+                      <Check size={14} className="absolute opacity-0 hover:opacity-100 transition-opacity text-white" />
+                    </div>
+                  )}
+                  {g.selected && (
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
+                      <CheckCircle size={14} />
+                    </span>
+                  )}
                 </button>
                 <img
                   src={g.src}
