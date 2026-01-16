@@ -22,7 +22,24 @@ import { useStore } from "@/hooks/use-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { get, set } from "idb-keyval";
-import { Check, Circle, CheckCircle, X } from "lucide-react";
+import { Check, Circle, CheckCircle, X, MoreVertical, Trash2, SquarePen } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { ToastProvider, useToast } from "@/components/ui/toast";
 
 // Local TextScramble component — lightweight scramble for numbers
 function TextScramble({
@@ -99,7 +116,30 @@ type GifItem = {
   selected?: boolean;
 };
 
-export default function HeapPage() {
+function HeapInner() {
+  const toast = useToast();
+  const [storySheetOpen, setStorySheetOpen] = useState(false);
+
+  // aggregate duplicate notifications so multiple duplicates show as one toast
+  const dupSetRef = useRef<Set<string>>(new Set());
+  const dupTimerRef = useRef<number | null>(null);
+  const queueDuplicateToast = useCallback((src: string) => {
+    dupSetRef.current.add(src);
+    if (dupTimerRef.current) window.clearTimeout(dupTimerRef.current);
+    dupTimerRef.current = window.setTimeout(() => {
+      const n = dupSetRef.current.size;
+      dupSetRef.current.clear();
+      dupTimerRef.current = null;
+      if (n > 0) toast.show(`${n} duplicate GIF${n > 1 ? "s" : ""} ignored`);
+    }, 250);
+  }, [toast]);
+
+  const stories = [
+    { id: "s1", title: "Pandora", count: 304 },
+    { id: "s2", title: "Marion4", count: 153 },
+    { id: "s3", title: "Marion", count: 253 },
+  ];
+
   const [gifs, setGifs] = useState<GifItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const anySelected = gifs.some((g) => !!g.selected);
@@ -107,6 +147,14 @@ export default function HeapPage() {
   const selectedCount = gifs.filter((g) => !!g.selected).length;
   const clearSelection = useCallback(() => {
     setGifs((s) => s.map((g) => ({ ...g, selected: false })));
+  }, []);
+
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "matrix - heap";
+    return () => {
+      document.title = prev ?? "matrix";
+    };
   }, []);
   
   const [isDragActive, setIsDragActive] = useState(false);
@@ -158,21 +206,44 @@ export default function HeapPage() {
   }, [gifs, loaded]);
 
   const addGifFromFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
+    // reject empty files
+    if (!file || file.size === 0) return;
+    // only accept GIF files
+    const isGifMime = file.type === "image/gif";
+    const isGifExt = file.name?.toLowerCase().endsWith(".gif");
+    if (!isGifMime && !isGifExt) return;
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string | null;
       if (!result) return;
-      setGifs((s) => [{ id: `${Date.now()}-${Math.random()}`, src: result, name: file.name }, ...s]);
+      setGifs((s) => {
+        // avoid duplicates by src
+        if (s.some((x) => x.src === result)) {
+          queueDuplicateToast(result);
+          return s;
+        }
+        return [{ id: `${Date.now()}-${Math.random()}`, src: result, name: file.name }, ...s];
+      });
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [toast]);
 
   const addGifFromUrl = useCallback((url: string) => {
     // simple validation
     if (!url) return;
-    setGifs((s) => [{ id: `${Date.now()}-${Math.random()}`, src: url, name: url }, ...s]);
-  }, []);
+    const u = url.trim();
+    // accept data gif or urls that look like gif
+    const isDataGif = u.startsWith("data:image/gif");
+    const isGifUrl = u.toLowerCase().split("?")[0].endsWith(".gif");
+    if (!isDataGif && !isGifUrl) return;
+    setGifs((s) => {
+      if (s.some((x) => x.src === u)) {
+        queueDuplicateToast(u);
+        return s;
+      }
+      return [{ id: `${Date.now()}-${Math.random()}`, src: u, name: u }, ...s];
+    });
+  }, [toast]);
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -269,22 +340,66 @@ export default function HeapPage() {
   return (
     <ContentLayout
       title="Heap"
-      navLeft={anySelected ? (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              clearSelection();
-            }}
-            className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
-            aria-label="Clear selection"
-          >
-            <X size={16} />
-          </button>
-          <span className="text-sm font-medium">{selectedCount} selected</span>
-        </div>
-      ) : undefined}
+      navLeft={
+        anySelected ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                clearSelection();
+              }}
+              className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+              aria-label="Clear selection"
+            >
+              <X size={16} />
+            </button>
+            <span className="text-sm font-medium">{selectedCount} selected</span>
+          </div>
+        ) : (
+          <div className="text-sm font-medium">heap</div>
+        )
+      }
+      navRight={
+        anySelected ? (
+          <div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  aria-label="More actions"
+                >
+                  <MoreVertical size={16} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setStorySheetOpen(true);
+                  }}
+                >
+                  <SquarePen className="mr-2" />
+                  Move to Story
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setGifs((s) => s.filter((g) => !g.selected));
+                  }}
+                >
+                  <Trash2 className="mr-2" />
+                  Move to Trash
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null
+      }
     >
       <div className="mt-6">
         <div
@@ -301,6 +416,45 @@ export default function HeapPage() {
               : "border-2 border-dashed border-border/60 bg-transparent"
           }`}
         >
+          <Sheet open={storySheetOpen} onOpenChange={setStorySheetOpen}>
+            <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
+              <SheetHeader>
+                <div className="flex items-center justify-between">
+                  <SheetTitle>Add to story</SheetTitle>
+                  <SheetClose />
+                </div>
+                <SheetDescription className="text-sm">Select a story to add the selected items.</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-3 overflow-y-auto max-h-[60vh]">
+                <button className="flex items-center gap-3 w-full p-3 rounded border">
+                  <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">+</div>
+                  <div className="text-sm">New story</div>
+                </button>
+                {stories.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      const ids = gifs.filter((g) => g.selected).map((g) => g.id);
+                      console.debug("Add to story", s.id, ids);
+                      // simulate adding: clear selection
+                      setGifs((prev) => prev.map((g) => ({ ...g, selected: false })));
+                      setStorySheetOpen(false);
+                    }}
+                    className="flex items-center gap-3 w-full p-3 rounded hover:bg-accent"
+                  >
+                    <div className="w-10 h-10 bg-zinc-800 rounded" />
+                    <div className="text-sm text-left">
+                      <div className="font-medium">{s.title}</div>
+                      <div className="text-xs text-muted-foreground">{s.count} items</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <SheetFooter className="mt-4">
+                <div />
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
           <input
             ref={fileInputRef}
             type="file"
@@ -311,7 +465,7 @@ export default function HeapPage() {
           />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p className="text-sm text-muted-foreground text-center">
-              {isDragActive ? "Release to add GIFs" : "Drop GIFs anywhere here or click to browse"}
+              {isDragActive ? "Release to add GIFs" : "Drag and drop or click here to upload your animated GIFs"}
             </p>
           </div>
 
@@ -376,5 +530,13 @@ export default function HeapPage() {
         </div>
       </div>
     </ContentLayout>
+  );
+}
+
+export default function HeapPage() {
+  return (
+    <ToastProvider>
+      <HeapInner />
+    </ToastProvider>
   );
 }
