@@ -22,7 +22,7 @@ import { useStore } from "@/hooks/use-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { get, set } from "idb-keyval";
-import { Check, Circle, CheckCircle } from "lucide-react";
+import { Check, Circle, CheckCircle, X } from "lucide-react";
 
 // Local TextScramble component — lightweight scramble for numbers
 function TextScramble({
@@ -105,6 +105,9 @@ export default function HeapPage() {
   const anySelected = gifs.some((g) => !!g.selected);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedCount = gifs.filter((g) => !!g.selected).length;
+  const clearSelection = useCallback(() => {
+    setGifs((s) => s.map((g) => ({ ...g, selected: false })));
+  }, []);
   
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -264,27 +267,25 @@ export default function HeapPage() {
   if (!sidebar) return null;
   const { settings, setSettings } = sidebar;
   return (
-    <ContentLayout title="Heap">
-      <div className="flex items-center justify-between">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/">Home</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Heap</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="ml-4 text-sm font-medium text-muted-foreground">
-          <TextScramble value={selectedCount} className="inline" />
-          <span className="px-2">/</span>
-          <TextScramble value={gifs.length} className="inline" />
+    <ContentLayout
+      title="Heap"
+      navLeft={anySelected ? (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              clearSelection();
+            }}
+            className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+            aria-label="Clear selection"
+          >
+            <X size={16} />
+          </button>
+          <span className="text-sm font-medium">{selectedCount} selected</span>
         </div>
-      </div>
+      ) : undefined}
+    >
       <div className="mt-6">
         <div
           onDrop={onDrop}
@@ -343,7 +344,7 @@ export default function HeapPage() {
                     e.preventDefault();
                     toggleSelect(g.id);
                   }}
-                  className={`absolute z-10 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
+                  className={`absolute z-0 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
                     g.selected || anySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   } transition-opacity pointer-events-auto`}
                   aria-label="Select gif"
