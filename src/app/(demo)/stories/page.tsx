@@ -1,39 +1,88 @@
-import Link from "next/link";
+"use client";
 
-import PlaceholderContent from "@/components/demo/placeholder-content";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { get } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator
-} from "@/components/ui/breadcrumb";
+import { ArrowLeft } from "lucide-react";
+import { CountingNumber } from "@/components/ui/counting-number";
+import { Badge } from "@/components/ui/badge";
+
+type StoryMeta = { id: string; title?: string; count?: number };
 
 export default function StoriesPage() {
+  const [stories, setStories] = useState<StoryMeta[]>([]);
+  const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const saved = (await get<StoryMeta[]>("stories")) || [];
+        if (!mounted) return;
+        setStories(saved);
+
+        // load preview (first item src) for each story
+        const previewEntries = await Promise.all(
+          saved.map(async (s) => {
+            try {
+              const items = (await get<any[]>(`story:${s.id}`)) || [];
+              const first = Array.isArray(items) && items.length > 0 ? items[0] : (items && items.items && items.items[0]) || null;
+              const src = first ? (first.src || first) : null;
+              return [s.id, src] as const;
+            } catch (e) {
+              return [s.id, null] as const;
+            }
+          })
+        );
+        if (!mounted) return;
+        const map: Record<string, string | null> = {};
+        previewEntries.forEach(([id, src]) => (map[id] = src));
+        setPreviews(map);
+      } catch (err) {
+        console.error("Failed to load stories", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
-    <ContentLayout title="All Stories">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/">Home</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/heap">Heap</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Stories</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-      <PlaceholderContent />
+    <ContentLayout title="Stories" navLeft={null}>
+      <div className="py-4">
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : stories.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">No stories yet. Create one from the heap.</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {stories.map((s) => (
+              <Link key={s.id} href={`/stories/${s.id}`} className="block border rounded-lg overflow-hidden shadow hover:shadow-md transition">
+                <div className="h-40 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
+                  {previews[s.id] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No preview</div>
+                  )}
+                </div>
+                <div className="p-4 flex items-center justify-between">
+                  <div className="font-medium truncate">{s.title && s.title.trim() ? s.title : "Untitled"}</div>
+                  <div>
+                    <Badge shape="circle" variant="black">
+                      <CountingNumber value={s.count ?? 0} className="text-sm text-white" />
+                    </Badge>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </ContentLayout>
   );
 }

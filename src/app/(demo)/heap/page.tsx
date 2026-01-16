@@ -20,9 +20,10 @@ import {
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
-import { Check, Circle, CheckCircle, X, MoreVertical, Trash2, SquarePen } from "lucide-react";
+import MomentCard from "@/components/moment-card";
+import { Check, Circle, CheckCircle, X, MoreVertical, Trash2, SquarePen, Upload, ArrowLeft, ArrowRight } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -134,14 +135,24 @@ function HeapInner() {
     }, 250);
   }, [toast]);
 
-  const stories = [
-    { id: "s1", title: "Pandora", count: 304 },
-    { id: "s2", title: "Marion4", count: 153 },
-    { id: "s3", title: "Marion", count: 253 },
-  ];
+  const router = useRouter();
+  type Story = { id: string; title: string; count?: number };
+  const [stories, setStories] = useState<Story[]>([]);
+  const loadStories = useCallback(async () => {
+    try {
+      const saved = (await get<Story[]>("stories")) || [];
+      if (Array.isArray(saved)) setStories(saved);
+    } catch (e) {
+      console.error("Failed to load stories", e);
+    }
+  }, []);
+  useEffect(() => {
+    loadStories();
+  }, [loadStories]);
 
   const [gifs, setGifs] = useState<GifItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [modalItem, setModalItem] = useState<GifItem | null>(null);
   const anySelected = gifs.some((g) => !!g.selected);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedCount = gifs.filter((g) => !!g.selected).length;
@@ -197,11 +208,68 @@ function HeapInner() {
     };
   }, [loadSaved]);
 
+  // navigation helpers for modal preview
+  const showPrev = useCallback(() => {
+    if (!modalItem) return;
+    const idx = gifs.findIndex((g) => g.id === modalItem.id);
+    if (idx === -1) return;
+    if (idx > 0) setModalItem(gifs[idx - 1]);
+    else if (gifs.length > 0) setModalItem(gifs[gifs.length - 1]); // wrap to last
+  }, [gifs, modalItem]);
+
+  const showNext = useCallback(() => {
+    if (!modalItem) return;
+    const idx = gifs.findIndex((g) => g.id === modalItem.id);
+    if (idx === -1) return;
+    if (idx < gifs.length - 1) setModalItem(gifs[idx + 1]);
+    else if (gifs.length > 0) setModalItem(gifs[0]); // wrap to first
+  }, [gifs, modalItem]);
+
+  // close modal on Escape, navigate with ArrowLeft/ArrowRight, and lock scrolling while modal open
+  useEffect(() => {
+    if (!modalItem) return;
+    const prevOverflow = document.body.style.overflow || "";
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setModalItem(null);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        showPrev();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        showNext();
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      try {
+        document.body.style.overflow = prevOverflow;
+      } catch (err) {
+        // ignore in non-browser
+      }
+    };
+  }, [modalItem, showPrev, showNext]);
+
   // persist gifs to IndexedDB whenever they change (only after initial load)
   useEffect(() => {
     if (!loaded) return;
     set("heap-gifs", gifs)
-      .then(() => console.debug("Saved gifs to idb", gifs.length))
+      .then(() => {
+        console.debug("Saved gifs to idb", gifs.length);
+        try {
+          window.dispatchEvent(new CustomEvent("heap-updated", { detail: { count: gifs.length } }));
+        } catch (e) {
+          // ignore in non-browser
+        }
+      })
       .catch((e) => console.error("Failed to save gifs to idb", e));
   }, [gifs, loaded]);
 
@@ -420,35 +488,112 @@ function HeapInner() {
             <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
               <SheetHeader>
                 <div className="flex items-center justify-between">
-                  <SheetTitle>Add to story</SheetTitle>
+                  <SheetTitle>Move to story</SheetTitle>
                   <SheetClose />
                 </div>
-                <SheetDescription className="text-sm">Select a story to add the selected items.</SheetDescription>
+                <SheetDescription className="text-sm">Select a story to move the selected items.</SheetDescription>
               </SheetHeader>
               <div className="mt-4 space-y-3 overflow-y-auto max-h-[60vh]">
-                <button className="flex items-center gap-3 w-full p-3 rounded border">
+                <button
+                  onClick={async () => {
+                    setStorySheetOpen(false);
+                    try {
+                      const selected = gifs.filter((g) => !!g.selected);
+                      if (selected.length === 0) {
+                        router.push("/stories");
+                        return;
+                      }
+                      const id = `${Date.now()}-${Math.random()}`;
+                      await set(`story:${id}`, selected);
+                      const saved = (await get("stories")) || [];
+                      const meta = { id, title: "New story", count: selected.length };
+                      await set("stories", [meta, ...saved]);
+                      try {
+                        window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+                      } catch (e) {
+                        // no-op in non-browser environments
+                      }
+                      await set("stories-active", id);
+                        try {
+                          toast.show(`Moved ${selected.length} GIFs to new story`);
+                        } catch (e) {}
+                      setGifs((prev) => prev.filter((g) => !g.selected));
+                        router.push(`/stories/${id}`);
+                    } catch (err) {
+                      console.error("Failed to create story", err);
+                      router.push("/stories");
+                    }
+                  }}
+                  className="flex items-center gap-3 w-full p-3 rounded border"
+                >
                   <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">+</div>
                   <div className="text-sm">New story</div>
                 </button>
-                {stories.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => {
-                      const ids = gifs.filter((g) => g.selected).map((g) => g.id);
-                      console.debug("Add to story", s.id, ids);
-                      // simulate adding: clear selection
-                      setGifs((prev) => prev.map((g) => ({ ...g, selected: false })));
-                      setStorySheetOpen(false);
-                    }}
-                    className="flex items-center gap-3 w-full p-3 rounded hover:bg-accent"
-                  >
-                    <div className="w-10 h-10 bg-zinc-800 rounded" />
-                    <div className="text-sm text-left">
-                      <div className="font-medium">{s.title}</div>
-                      <div className="text-xs text-muted-foreground">{s.count} items</div>
-                    </div>
-                  </button>
-                ))}
+                {stories.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No stories yet — create a new story.</div>
+                ) : (
+                  stories.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={async () => {
+                        setStorySheetOpen(false);
+                        try {
+                          const selected = gifs.filter((g) => !!g.selected);
+                          if (selected.length === 0) {
+                            // nothing to move, just navigate
+                            router.push(`/stories/${s.id}`);
+                            return;
+                          }
+
+                          const storyKey = `story:${s.id}`;
+                          const existing = (await get<any>(storyKey)) || null;
+
+                          if (Array.isArray(existing)) {
+                            await set(storyKey, [...existing, ...selected]);
+                          } else if (existing && Array.isArray(existing.items)) {
+                            existing.items = [...existing.items, ...selected];
+                            await set(storyKey, existing);
+                          } else {
+                            // unknown format, overwrite with array
+                            await set(storyKey, selected);
+                          }
+
+                          // update stories metadata count
+                          const saved = (await get<any>("stories")) || [];
+                          const idx = saved.findIndex((m: any) => m.id === s.id);
+                          if (idx > -1) {
+                            saved[idx] = { ...saved[idx], count: (saved[idx].count || 0) + selected.length };
+                            await set("stories", saved);
+                          }
+
+                          try {
+                            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id: s.id } }));
+                          } catch (e) {
+                            // ignore
+                          }
+
+                          await set("stories-active", s.id);
+                          try {
+                            toast.show(`Moved ${selected.length} GIFs to ${s.title || "story"}`);
+                          } catch (e) {}
+                          // remove moved gifs from heap
+                          setGifs((prev) => prev.filter((g) => !g.selected));
+                          router.push(`/stories/${s.id}`);
+                        } catch (err) {
+                          console.error("Failed to add to story", err);
+                          router.push(`/stories/${s.id}`);
+                        }
+                      }}
+                      className="flex items-center gap-3 w-full p-3 rounded hover:bg-accent"
+                    >
+                      <div className="w-10 h-10 bg-zinc-800 rounded" />
+                      <div className="text-sm text-left">
+                        <div className="font-medium">{s.title}</div>
+                        <div className="text-xs text-muted-foreground">{s.count ?? 0} items</div>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
               <SheetFooter className="mt-4">
                 <div />
@@ -463,13 +608,16 @@ function HeapInner() {
             className="hidden"
             onChange={(e) => onFiles(e.target.files)}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-sm text-muted-foreground text-center">
-              {isDragActive ? "Release to add GIFs" : "Drag and drop or click here to upload your animated GIFs"}
-            </p>
-          </div>
+          {/* Instruction banner — moved above the grid to avoid overlapping images */}
 
           
+
+          <div className="mb-4 flex justify-center">
+            <div className="bg-background/50 backdrop-blur-sm px-4 py-1 rounded text-sm text-muted-foreground flex items-center gap-2">
+              <Upload size={16} />
+              <span>{isDragActive ? "Release to add GIFs" : "Drag and drop or click here to upload animated GIFs"}</span>
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {gifs.length === 0 && (
@@ -479,54 +627,80 @@ function HeapInner() {
             )}
 
             {gifs.map((g) => (
-              <div
-                key={g.id}
-                onClick={(e) => {
-                  if (anySelected) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    toggleSelect(g.id);
-                  }
-                }}
-                className={`relative group bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm h-40 ${
-                  g.selected ? "ring-2 ring-primary/60" : ""
-                }`}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    toggleSelect(g.id);
-                  }}
-                  className={`absolute z-0 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
-                    g.selected || anySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  } transition-opacity pointer-events-auto`}
-                  aria-label="Select gif"
-                >
-                  {!g.selected && (
-                    <div className="relative w-7 h-7 flex items-center justify-center">
-                      <Circle size={18} className="text-white/70" />
-                      <Check size={14} className="absolute opacity-0 hover:opacity-100 transition-opacity text-white" />
-                    </div>
-                  )}
-                  {g.selected && (
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
-                      <CheckCircle size={14} />
-                    </span>
-                  )}
-                </button>
-                <img
-                  src={g.src}
-                  alt={g.name || "gif"}
-                  className="w-full h-full object-cover opacity-0 transition-opacity duration-500"
-                  onLoad={(e) => {
-                    const img = e.currentTarget;
-                    img.style.opacity = "1";
-                  }}
-                />
-              </div>
+              <MomentCard key={g.id} item={g} anySelected={anySelected} toggleSelect={toggleSelect} onOpen={(it) => setModalItem(it)} />
             ))}
           </div>
+          {modalItem && (
+            <div
+              className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center"
+              onClick={(e) => {
+                // prevent clicks on the overlay from reaching parent (which opens file picker)
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setModalItem(null);
+                }}
+                className="absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+              <div className="max-w-6xl w-full h-full flex items-center justify-center">
+                <div className="w-full h-full flex items-center justify-center relative">
+                  {/* Prev/Next controls */}
+                  {gifs.length > 1 && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          showPrev();
+                        }}
+                        aria-label="Previous"
+                        className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
+                      >
+                        <ArrowLeft size={20} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          showNext();
+                        }}
+                        aria-label="Next"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
+                      >
+                        <ArrowRight size={20} />
+                      </button>
+                    </>
+                  )}
+                  <div className="max-h-full max-w-full flex items-center justify-center">
+                    {/* Plain full-height preview for modal — avoid MomentCard to remove selection UI and click handlers */}
+                    <div className="flex items-center justify-center w-full">
+                      <img
+                        src={modalItem.src}
+                        alt={modalItem.name || "GIF preview"}
+                        className="h-screen max-w-full object-contain rounded"
+                        onClick={(e) => {
+                          // prevent clicks inside the preview from bubbling to parent upload handler
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </ContentLayout>
