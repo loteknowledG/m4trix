@@ -16,16 +16,6 @@ export default function PlaceholderContent() {
               height={500}
               priority
             />
-            <div className="absolute -bottom-8 right-0">
-              <Link
-                href="https://www.freepik.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground"
-              >
-                Designed by Freepik
-              </Link>
-            </div>
           </div>
         </div>
       </CardContent>

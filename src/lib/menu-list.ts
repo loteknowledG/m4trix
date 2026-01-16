@@ -5,6 +5,7 @@ import {
   Bookmark,
   SquarePen,
   LayoutGrid,
+  DatabaseBackup,
   LucideIcon
 } from "lucide-react";
 
@@ -33,8 +34,8 @@ export function getMenuList(pathname: string): Group[] {
       groupLabel: "",
       menus: [
         {
-          href: "/dashboard",
-          label: "Dashboard",
+          href: "/heap",
+          label: "Heap",
           icon: LayoutGrid,
           submenus: []
         }
@@ -68,6 +69,7 @@ export function getMenuList(pathname: string): Group[] {
           label: "Tags",
           icon: Tag
         }
+      
       ]
     },
     {
@@ -82,6 +84,12 @@ export function getMenuList(pathname: string): Group[] {
           href: "/account",
           label: "Account",
           icon: Settings
+        }
+        ,
+        {
+          href: "/backups",
+          label: "Backups",
+          icon: DatabaseBackup
         }
       ]
     }
