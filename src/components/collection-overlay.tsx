@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useMomentsContext } from "@/context/moments-collection";
 import { X, ArrowLeft, ArrowRight } from "lucide-react";
 
@@ -30,6 +31,15 @@ export default function CollectionOverlay() {
       } catch (e) {}
     };
   }, [ctx, isOpen, close, next, prev]);
+
+  // close overlay when the route changes to avoid leaving a full-screen
+  // overlay active after navigation (e.g., sidebar link clicks)
+  const pathname = usePathname();
+  useEffect(() => {
+    if (!ctx || !isOpen) return;
+    // close immediately on any pathname change
+    close();
+  }, [pathname]);
   if (!ctx || !isOpen || !currentId) return null;
   const item = collection.find((m: any) => m.id === currentId);
   if (!item) return null;

@@ -18,6 +18,24 @@ function createWindow() {
 
   win.loadURL(url);
   if (isDev) win.webContents.openDevTools({ mode: "detach" });
+
+  // If the renderer fails to load main-frame resources (404s for _next chunks),
+  // clear the session cache and reload to recover from stale assets during dev.
+  win.webContents.on("did-fail-load", async (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    try {
+      if (isMainFrame) {
+        console.warn("Main frame failed to load:", errorCode, errorDescription, validatedURL);
+        const ses = win.webContents.session;
+        try {
+          await ses.clearCache();
+        } catch (e) {}
+        // small delay to allow cache clear to settle
+        setTimeout(() => {
+          if (!win.isDestroyed()) win.reload();
+        }, 50);
+      }
+    } catch (e) {}
+  });
 }
 
 app.whenReady().then(createWindow);

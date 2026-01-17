@@ -33,6 +33,7 @@ export function Menu({ isOpen }: MenuProps) {
   >([]);
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [heapCount, setHeapCount] = useState<number>(0);
+  const [trashCount, setTrashCount] = useState<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -68,10 +69,20 @@ export function Menu({ isOpen }: MenuProps) {
           if (mounted) setHeapCount(0);
         }
       };
+        const loadTrash = async () => {
+          try {
+            const items = (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
+            if (mounted) setTrashCount(items.length || 0);
+          } catch (e) {
+            if (mounted) setTrashCount(0);
+          }
+        };
       loadHeap();
+        loadTrash();
     const handler = () => {
       load();
         loadHeap();
+        loadTrash();
     };
     window.addEventListener("stories-updated", handler);
       window.addEventListener("moments-updated", handler);
@@ -159,11 +170,16 @@ export function Menu({ isOpen }: MenuProps) {
                                 >
                                   {label}
                                 </p>
-                                {label === "Heap" && (
-                                  <span className={cn(isOpen === false ? "hidden" : "ml-2") }>
-                                    <CountBadge value={heapCount} className="text-sm text-muted-foreground" />
-                                  </span>
-                                )}
+                                  {label === "Heap" && (
+                                    <span className={cn(isOpen === false ? "hidden" : "ml-2") }>
+                                      <CountBadge value={heapCount} className="text-sm text-muted-foreground" />
+                                    </span>
+                                  )}
+                                  {label === "Trash" && (
+                                    <span className={cn(isOpen === false ? "hidden" : "ml-2") }>
+                                      <CountBadge value={trashCount} className="text-sm text-muted-foreground" />
+                                    </span>
+                                  )}
                               </Link>
                             </Button>
                           </TooltipTrigger>

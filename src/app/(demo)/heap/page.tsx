@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
+import ErrorBoundary from "@/components/error-boundary";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -26,14 +27,7 @@ import { get, set } from "idb-keyval";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
 import CollectionOverlay from "@/components/collection-overlay";
-import { Check, Circle, CheckCircle, X, MoreVertical, Trash2, SquarePen, Upload } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+import { Check, Circle, CheckCircle, X, Trash2, SquarePen, Upload } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -415,41 +409,42 @@ function HeapInner() {
       }
       navRight={
         anySelected ? (
-          <div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  aria-label="More actions"
-                >
-                  <MoreVertical size={16} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setStorySheetOpen(true);
-                  }}
-                >
-                  <SquarePen className="mr-2" />
-                  Move to Story
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setMoments((s) => s.filter((g) => !(selectedIds || []).includes(g.id)));
-                  }}
-                >
-                  <Trash2 className="mr-2" />
-                  Move to Trash
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setStorySheetOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-3 py-1 rounded bg-secondary text-secondary-foreground"
+            >
+              <SquarePen size={16} />
+              <span className="text-sm">Move to Story</span>
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                try {
+                  const ids = (selectedIds || []);
+                  if (!ids || ids.length === 0) return;
+                  const toMove = moments.filter((g) => ids.includes(g.id));
+                  // append to trash storage
+                  const existing = (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
+                  const newTrash = [...existing, ...toMove];
+                  await set("trash-moments", newTrash);
+                  // remove from heap
+                  setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
+                  try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newTrash.length } })); } catch (e) {}
+                } catch (err) {
+                  console.error("Failed to move to trash", err);
+                }
+              }}
+              className="inline-flex items-center gap-2 px-3 py-1 rounded bg-destructive text-destructive-foreground"
+            >
+              <Trash2 size={16} />
+              <span className="text-sm">Move to Trash</span>
+            </button>
           </div>
         ) : null
       }
@@ -642,7 +637,9 @@ function HeapInner() {
 export default function HeapPage() {
   return (
     <ToastProvider>
-      <HeapInner />
+      <ErrorBoundary>
+        <HeapInner />
+      </ErrorBoundary>
     </ToastProvider>
   );
 }

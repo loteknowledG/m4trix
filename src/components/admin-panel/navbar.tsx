@@ -3,13 +3,7 @@
 import useSelection from "@/hooks/use-selection";
 import { SheetMenu } from "@/components/admin-panel/sheet-menu";
 import { usePathname } from "next/navigation";
-import { EllipsisVertical, MoreHorizontal } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { LayoutGrid, Trash2 } from "lucide-react";
 
 interface NavbarProps {
   title: string;
@@ -58,21 +52,22 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
         </div>
         <div className="flex flex-1 items-center justify-end">
           {isStoryDetail && selectedCount > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700">
-                  <MoreHorizontal size={18} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="bottom" align="end">
-                <DropdownMenuItem onSelect={() => onAction("move-to-heap")}>
-                  Move to Heap
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onAction("move-to-trash")}>
-                  Move to Trash
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onAction("move-to-heap")}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded bg-secondary text-secondary-foreground"
+              >
+                <LayoutGrid size={16} />
+                <span className="text-sm">Move to Heap</span>
+              </button>
+              <button
+                onClick={() => onAction("move-to-trash")}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded bg-destructive text-destructive-foreground"
+              >
+                <Trash2 size={16} />
+                <span className="text-sm">Move to Trash</span>
+              </button>
+            </div>
           ) : (
             navRight
           )}

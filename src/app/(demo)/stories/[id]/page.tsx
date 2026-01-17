@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
+import ErrorBoundary from "@/components/error-boundary";
 import { Upload, ArrowLeft } from "lucide-react";
 import useSelection from "@/hooks/use-selection";
 import MomentCard from "@/components/moment-card";
@@ -195,7 +196,8 @@ export default function StoryByIdPage() {
         </button>
       )}
     >
-      <div className="py-4">
+      <ErrorBoundary>
+        <div className="py-4">
         <div className="mb-6">
           <input
             value={title}
@@ -230,7 +232,8 @@ export default function StoryByIdPage() {
             <CollectionOverlay />
           </MomentsProvider>
         )}
-      </div>
+        </div>
+      </ErrorBoundary>
     </ContentLayout>
   );
 }
