@@ -19,6 +19,7 @@ import {
 import { get } from "idb-keyval";
 import { CountingNumber } from "@/components/ui/counting-number";
 import { Badge } from "@/components/ui/badge";
+import CountBadge from "@/components/ui/count-badge";
 
 interface MenuProps {
   isOpen: boolean | undefined;
@@ -156,9 +157,7 @@ export function Menu({ isOpen }: MenuProps) {
                                 </p>
                                 {label === "Heap" && (
                                   <span className={cn(isOpen === false ? "hidden" : "ml-2") }>
-                                    <Badge shape="circle" variant="black">
-                                      <CountingNumber value={heapCount} className="text-sm text-muted-foreground" />
-                                    </Badge>
+                                    <CountBadge value={heapCount} className="text-sm text-muted-foreground" />
                                   </span>
                                 )}
                               </Link>
@@ -200,6 +199,7 @@ export function Menu({ isOpen }: MenuProps) {
                         }
                         isOpen={isOpen}
                         disableToggle={label === "Stories" && storiesList.length === 0}
+                        topCount={label === "Stories" ? storiesList.length : undefined}
                       />
                     </div>
                   )

@@ -17,6 +17,9 @@ export default function StoryByIdPage() {
   const [gifs, setGifs] = useState<GifItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     let mounted = true;
@@ -130,7 +133,19 @@ export default function StoryByIdPage() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {gifs.map((g) => (
-              <MomentCard key={g.id} item={g as any} anySelected={false} toggleSelect={() => {}} />
+              <MomentCard
+                key={g.id}
+                item={{ ...g, selected: selectedIds.has(g.id) } as any}
+                anySelected={selectedIds.size > 0}
+                toggleSelect={(id: string) => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                }}
+              />
             ))}
           </div>
         )}

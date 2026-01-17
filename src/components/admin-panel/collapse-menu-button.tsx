@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CountingNumber } from "@/components/ui/counting-number";
 import { Badge } from "@/components/ui/badge";
+import CountBadge from "@/components/ui/count-badge";
 import { DropdownMenuArrow } from "@radix-ui/react-dropdown-menu";
 import {
   Collapsible,
@@ -45,6 +46,7 @@ interface CollapseMenuButtonProps {
   isOpen: boolean | undefined;
   href?: string;
   disableToggle?: boolean;
+  topCount?: number;
 }
 
 export function CollapseMenuButton({
@@ -55,6 +57,7 @@ export function CollapseMenuButton({
   isOpen,
   href,
   disableToggle
+  , topCount
 }: CollapseMenuButtonProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -115,6 +118,12 @@ export function CollapseMenuButton({
                     <ChevronDown size={18} className="transition-transform duration-200" />
                   </div>
                 )}
+                {/* Top-level count badge (e.g., stories total) */}
+                {typeof topCount === "number" && (
+                  <div className={cn(isOpen ? "ml-2" : "ml-2 hidden")}> 
+                    <CountBadge value={topCount} />
+                  </div>
+                )}
               </div>
             </Link>
           ) : (
@@ -140,6 +149,11 @@ export function CollapseMenuButton({
                   )}
                 >
                   <ChevronDown size={18} className="transition-transform duration-200" />
+                </div>
+              )}
+              {typeof topCount === "number" && (
+                <div className={cn(isOpen ? "ml-2" : "ml-2 hidden")}>
+                  <CountBadge value={topCount} />
                 </div>
               )}
             </div>
@@ -179,9 +193,7 @@ export function CollapseMenuButton({
               </p>
               {typeof count === "number" && (
                 <span className={cn(isOpen ? "ml-2" : "ml-2 hidden")}>
-                  <Badge shape="circle" variant="black">
-                    <CountingNumber value={count} className="text-sm text-white" />
-                  </Badge>
+                  <CountBadge value={count} />
                 </span>
               )}
             </Link>
@@ -245,9 +257,7 @@ export function CollapseMenuButton({
               <div className="flex items-center justify-between w-full">
                 <p className="max-w-[150px] truncate">{label}</p>
                 {typeof count === "number" && (
-                  <Badge shape="circle" variant="black">
-                    <CountingNumber value={count} className="text-sm text-white" />
-                  </Badge>
+                  <CountBadge value={count} />
                 )}
               </div>
             </Link>

@@ -138,16 +138,43 @@ function HeapInner() {
   const router = useRouter();
   type Story = { id: string; title: string; count?: number };
   const [stories, setStories] = useState<Story[]>([]);
+  const [storyPreviews, setStoryPreviews] = useState<Record<string, string | null>>({});
   const loadStories = useCallback(async () => {
     try {
       const saved = (await get<Story[]>("stories")) || [];
       if (Array.isArray(saved)) setStories(saved);
+      try {
+        const previewEntries = await Promise.all(
+          (Array.isArray(saved) ? saved : []).map(async (s) => {
+            try {
+              const items = (await get<any>(`story:${s.id}`)) || [];
+              const first = Array.isArray(items) && items.length > 0 ? items[0] : (items && items.items && items.items[0]) || null;
+              const src = first ? (first.src || first) : null;
+              return [s.id, src] as const;
+            } catch (e) {
+              return [s.id, null] as const;
+            }
+          })
+        );
+        const map: Record<string, string | null> = {};
+        previewEntries.forEach(([id, src]) => (map[id] = src));
+        setStoryPreviews(map);
+      } catch (e) {
+        console.warn("Failed to load story previews", e);
+        setStoryPreviews({});
+      }
     } catch (e) {
       console.error("Failed to load stories", e);
     }
   }, []);
   useEffect(() => {
     loadStories();
+  }, [loadStories]);
+
+  useEffect(() => {
+    const handler = () => loadStories();
+    window.addEventListener("stories-updated", handler);
+    return () => window.removeEventListener("stories-updated", handler);
   }, [loadStories]);
 
   const [gifs, setGifs] = useState<GifItem[]>([]);
@@ -586,7 +613,14 @@ function HeapInner() {
                       }}
                       className="flex items-center gap-3 w-full p-3 rounded hover:bg-accent"
                     >
-                      <div className="w-10 h-10 bg-zinc-800 rounded" />
+                      <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                        {storyPreviews[s.id] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={storyPreviews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-zinc-700" />
+                        )}
+                      </div>
                       <div className="text-sm text-left">
                         <div className="font-medium">{s.title}</div>
                         <div className="text-xs text-muted-foreground">{s.count ?? 0} items</div>

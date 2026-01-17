@@ -7,6 +7,7 @@ import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { ArrowLeft } from "lucide-react";
 import { CountingNumber } from "@/components/ui/counting-number";
 import { Badge } from "@/components/ui/badge";
+import CountBadge from "@/components/ui/count-badge";
 
 type StoryMeta = { id: string; title?: string; count?: number };
 
@@ -80,11 +81,7 @@ export default function StoriesPage() {
                 </div>
                 <div className="p-4 flex items-center justify-between">
                   <div className="font-medium truncate">{s.title && s.title.trim() ? s.title : "Untitled"}</div>
-                  <div>
-                    <Badge shape="circle" variant="black">
-                      <CountingNumber value={s.count ?? 0} className="text-sm text-white" />
-                    </Badge>
-                  </div>
+                  <CountBadge value={s.count ?? 0} />
                 </div>
               </Link>
             ))}

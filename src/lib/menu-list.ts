@@ -6,6 +6,7 @@ import {
   SquarePen,
   LayoutGrid,
   DatabaseBackup,
+  Trash2,
   LucideIcon
 } from "lucide-react";
 
@@ -64,6 +65,12 @@ export function getMenuList(pathname: string): Group[] {
           href: "/tags",
           label: "Tags",
           icon: Tag
+        }
+        ,
+        {
+          href: "/trash",
+          label: "Trash",
+          icon: Trash2
         }
       
       ]
