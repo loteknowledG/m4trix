@@ -407,7 +407,7 @@ function HeapInner() {
   const { settings, setSettings } = sidebar;
   return (
     <ContentLayout
-      title="Heap"
+      title=""
       navLeft={
         anySelected ? (
           <div className="flex items-center gap-2">

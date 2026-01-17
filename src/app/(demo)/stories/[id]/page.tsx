@@ -55,6 +55,19 @@ export default function StoryByIdPage() {
     return () => { mounted = false };
   }, [id]);
 
+  useEffect(() => {
+    const prev = document.title;
+    if (!id) return () => {
+      document.title = prev ?? "matrix";
+    };
+
+    const base = "matrix - story";
+    document.title = title ? `${base} - ${title}` : base;
+    return () => {
+      document.title = prev ?? "matrix";
+    };
+  }, [id, title]);
+
   async function handleTitleBlur() {
     if (!id) return;
     try {

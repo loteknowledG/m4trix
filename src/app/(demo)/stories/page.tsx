@@ -51,6 +51,14 @@ export default function StoriesPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "matrix - stories";
+    return () => {
+      document.title = prev ?? "matrix";
+    };
+  }, []);
+
   return (
     <ContentLayout title="Stories" navLeft={null}>
       <div className="py-4">
