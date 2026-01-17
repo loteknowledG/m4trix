@@ -14,7 +14,7 @@ export default function BackupsPage() {
 
   const handleExport = useCallback(async () => {
     try {
-      const heap = (await get("heap-gifs")) || [];
+      const heap = (await get("heap-moments")) || (await get("heap-gifs")) || [];
       // include stories and per-story items
       const savedStories = (await get<{ id: string; title?: string; count?: number }[]>("stories")) || [];
       const storiesWithItems = await Promise.all(
@@ -37,7 +37,7 @@ export default function BackupsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `heap-gifs-backup-${Date.now()}.json`;
+      a.download = `moments-backup-${Date.now()}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -67,7 +67,7 @@ export default function BackupsPage() {
           }));
         } else if (parsed && typeof parsed === "object") {
           // structured backup: { heap: [...], stories: [{id,title,count,items: [...]}, ...] }
-          const heapArr = parsed.heap ?? parsed["heap-gifs"] ?? [];
+          const heapArr = parsed.moments ?? parsed.heap ?? parsed["heap-gifs"] ?? [];
           if (!Array.isArray(heapArr)) {
             setMessage("Invalid backup file");
             setTimeout(() => setMessage(null), 4000);
@@ -112,7 +112,7 @@ export default function BackupsPage() {
         }
 
         // restore heap items
-        await set("heap-gifs", validated);
+        await set("heap-moments", validated);
         // restore stories if present
         if (storiesPayload) {
           const meta = storiesPayload.map(({ id, title, count }) => ({ id, title, count }));
@@ -139,7 +139,7 @@ export default function BackupsPage() {
         }
         // notify app to refresh any in-memory state
         try {
-          window.dispatchEvent(new CustomEvent("heap-updated", { detail: { count: validated.length } }));
+          window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: validated.length } }));
         } catch (e) {
           // ignore in non-browser
         }
@@ -147,7 +147,7 @@ export default function BackupsPage() {
         try {
           window.location.reload();
         } catch (e) {}
-        setMessage(`Imported ${validated.length} GIFs`);
+        setMessage(`Imported ${validated.length} moments`);
         setTimeout(() => setMessage(null), 4000);
       } catch (err) {
         console.error(err);
@@ -170,7 +170,7 @@ export default function BackupsPage() {
         </Breadcrumb>
       ) : null}
       <h2 className="text-2xl font-bold mb-4">Backups</h2>
-      <p className="mb-4">Export or import your GIF backups as JSON.</p>
+      <p className="mb-4">Export or import your moment backups as JSON.</p>
       <div className="flex gap-3">
         <button
           onClick={handleExport}

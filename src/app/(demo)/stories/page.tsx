@@ -27,8 +27,8 @@ export default function StoriesPage() {
         // load preview (first item src) for each story
         const previewEntries = await Promise.all(
           saved.map(async (s) => {
-            try {
-              const items = (await get<any[]>(`story:${s.id}`)) || [];
+              try {
+              const items = (await get<any>(`story:${s.id}`)) || [];
               const first = Array.isArray(items) && items.length > 0 ? items[0] : (items && items.items && items.items[0]) || null;
               const src = first ? (first.src || first) : null;
               return [s.id, src] as const;

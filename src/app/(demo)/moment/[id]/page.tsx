@@ -23,8 +23,36 @@ export default function MomentPage() {
     }
     (async () => {
       try {
-        const saved = (await get<any[]>("heap-gifs")) || [];
-        const found = saved.find((s) => s.id === id) || null;
+        // support both new and old storage keys for compatibility
+        const saved = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
+        let found = saved.find((s) => s.id === id) || null;
+
+        // if not in heap, try searching stories for this moment id
+        if (!found) {
+          try {
+            const storiesMeta = (await get<any[]>("stories")) || [];
+            for (const meta of storiesMeta) {
+              const storyKey = `story:${meta.id}`;
+              const stored = (await get<any>(storyKey)) || [];
+              let items: any[] = [];
+              if (Array.isArray(stored)) items = stored;
+              else if (stored && Array.isArray(stored.items)) items = stored.items;
+              const f = items.find((s) => (s && (s.id || s) ) === id);
+              if (f) {
+                // normalize to object with id/src
+                if (typeof f === "string") {
+                  found = { id: f, src: f };
+                } else {
+                  found = { id: f.id || id, src: f.src || f, name: f.name };
+                }
+                break;
+              }
+            }
+          } catch (err) {
+            // ignore errors searching stories
+          }
+        }
+
         if (mounted) setItem(found);
       } catch (e) {
         console.error("Failed to load moment", e);

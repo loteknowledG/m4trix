@@ -20,10 +20,13 @@ import {
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { useCallback, useEffect, useRef, useState } from "react";
+import useSelection from "@/hooks/use-selection";
 import { usePathname, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
 import MomentCard from "@/components/moment-card";
-import { Check, Circle, CheckCircle, X, MoreVertical, Trash2, SquarePen, Upload, ArrowLeft, ArrowRight } from "lucide-react";
+import { MomentsProvider } from "@/context/moments-collection";
+import CollectionOverlay from "@/components/collection-overlay";
+import { Check, Circle, CheckCircle, X, MoreVertical, Trash2, SquarePen, Upload } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -110,7 +113,7 @@ function TextScramble({
   return <span className={className}>{display}</span>;
 }
 
-type GifItem = {
+type Moment = {
   id: string;
   src: string;
   name?: string;
@@ -131,7 +134,7 @@ function HeapInner() {
       const n = dupSetRef.current.size;
       dupSetRef.current.clear();
       dupTimerRef.current = null;
-      if (n > 0) toast.show(`${n} duplicate GIF${n > 1 ? "s" : ""} ignored`);
+      if (n > 0) toast.show(`${n} duplicate moment${n > 1 ? "s" : ""} ignored`);
     }, 250);
   }, [toast]);
 
@@ -177,15 +180,18 @@ function HeapInner() {
     return () => window.removeEventListener("stories-updated", handler);
   }, [loadStories]);
 
-  const [gifs, setGifs] = useState<GifItem[]>([]);
+  const [moments, setMoments] = useState<Moment[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [modalItem, setModalItem] = useState<GifItem | null>(null);
-  const anySelected = gifs.some((g) => !!g.selected);
+
+  const selectedIds = useSelection((s) => s.selections["heap"] || []);
+  const toggleSelectStore = useSelection((s) => s.toggle);
+  const clearSelectionStore = useSelection((s) => s.clear);
+  const anySelected = (selectedIds || []).length > 0;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const selectedCount = gifs.filter((g) => !!g.selected).length;
+  const selectedCount = (selectedIds || []).length;
   const clearSelection = useCallback(() => {
-    setGifs((s) => s.map((g) => ({ ...g, selected: false })));
-  }, []);
+    try { clearSelectionStore("heap"); } catch (e) {}
+  }, [clearSelectionStore]);
 
   useEffect(() => {
     const prev = document.title;
@@ -201,14 +207,14 @@ function HeapInner() {
 
   const loadSaved = useCallback(async () => {
     try {
-      const saved = (await get<GifItem[]>("heap-gifs")) || [];
+      const saved = (await get<Moment[]>("heap-moments")) || (await get<Moment[]>("heap-gifs")) || [];
       if (Array.isArray(saved)) {
-        setGifs(saved);
-        console.debug("Loaded saved gifs:", saved.length, saved);
+        setMoments(saved);
+        console.debug("Loaded saved moments:", saved.length, saved);
         setLoaded(true);
       }
     } catch (e) {
-      console.error("Failed to load saved gifs", e);
+      console.error("Failed to load saved moments", e);
     }
   }, []);
 
@@ -235,83 +241,35 @@ function HeapInner() {
     };
   }, [loadSaved]);
 
-  // navigation helpers for modal preview
-  const showPrev = useCallback(() => {
-    if (!modalItem) return;
-    const idx = gifs.findIndex((g) => g.id === modalItem.id);
-    if (idx === -1) return;
-    if (idx > 0) setModalItem(gifs[idx - 1]);
-    else if (gifs.length > 0) setModalItem(gifs[gifs.length - 1]); // wrap to last
-  }, [gifs, modalItem]);
+  
 
-  const showNext = useCallback(() => {
-    if (!modalItem) return;
-    const idx = gifs.findIndex((g) => g.id === modalItem.id);
-    if (idx === -1) return;
-    if (idx < gifs.length - 1) setModalItem(gifs[idx + 1]);
-    else if (gifs.length > 0) setModalItem(gifs[0]); // wrap to first
-  }, [gifs, modalItem]);
-
-  // close modal on Escape, navigate with ArrowLeft/ArrowRight, and lock scrolling while modal open
-  useEffect(() => {
-    if (!modalItem) return;
-    const prevOverflow = document.body.style.overflow || "";
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setModalItem(null);
-        return;
-      }
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        showPrev();
-        return;
-      }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        showNext();
-        return;
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      try {
-        document.body.style.overflow = prevOverflow;
-      } catch (err) {
-        // ignore in non-browser
-      }
-    };
-  }, [modalItem, showPrev, showNext]);
-
-  // persist gifs to IndexedDB whenever they change (only after initial load)
+  // persist moments to IndexedDB whenever they change (only after initial load)
   useEffect(() => {
     if (!loaded) return;
-    set("heap-gifs", gifs)
+    set("heap-moments", moments)
       .then(() => {
-        console.debug("Saved gifs to idb", gifs.length);
+        console.debug("Saved moments to idb", moments.length);
         try {
-          window.dispatchEvent(new CustomEvent("heap-updated", { detail: { count: gifs.length } }));
+          window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: moments.length } }));
         } catch (e) {
           // ignore in non-browser
         }
       })
-      .catch((e) => console.error("Failed to save gifs to idb", e));
-  }, [gifs, loaded]);
+      .catch((e) => console.error("Failed to save moments to idb", e));
+  }, [moments, loaded]);
 
-  const addGifFromFile = useCallback((file: File) => {
+  const addMomentFromFile = useCallback((file: File) => {
     // reject empty files
     if (!file || file.size === 0) return;
-    // only accept GIF files
-    const isGifMime = file.type === "image/gif";
-    const isGifExt = file.name?.toLowerCase().endsWith(".gif");
-    if (!isGifMime && !isGifExt) return;
+    // only accept GIF files (moments are animated GIFs)
+    const isMomentMime = file.type === "image/gif";
+    const isMomentExt = file.name?.toLowerCase().endsWith(".gif");
+    if (!isMomentMime && !isMomentExt) return;
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string | null;
       if (!result) return;
-      setGifs((s) => {
+      setMoments((s) => {
         // avoid duplicates by src
         if (s.some((x) => x.src === result)) {
           queueDuplicateToast(result);
@@ -323,15 +281,15 @@ function HeapInner() {
     reader.readAsDataURL(file);
   }, [toast]);
 
-  const addGifFromUrl = useCallback((url: string) => {
+  const addMomentFromUrl = useCallback((url: string) => {
     // simple validation
     if (!url) return;
     const u = url.trim();
-    // accept data gif or urls that look like gif
-    const isDataGif = u.startsWith("data:image/gif");
-    const isGifUrl = u.toLowerCase().split("?")[0].endsWith(".gif");
-    if (!isDataGif && !isGifUrl) return;
-    setGifs((s) => {
+    // accept data GIF or URLs that look like GIF (moments)
+    const isDataMoment = u.startsWith("data:image/gif");
+    const isMomentUrl = u.toLowerCase().split("?")[0].endsWith(".gif");
+    if (!isDataMoment && !isMomentUrl) return;
+    setMoments((s) => {
       if (s.some((x) => x.src === u)) {
         queueDuplicateToast(u);
         return s;
@@ -342,8 +300,8 @@ function HeapInner() {
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    Array.from(files).forEach((f) => addGifFromFile(f));
-  }, [addGifFromFile]);
+    Array.from(files).forEach((f) => addMomentFromFile(f));
+  }, [addMomentFromFile]);
 
   
 
@@ -358,9 +316,9 @@ function HeapInner() {
     // try URL from dataTransfer
     const url = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
     if (url) {
-      addGifFromUrl(url);
+      addMomentFromUrl(url);
     }
-  }, [onFiles, addGifFromUrl]);
+  }, [onFiles, addMomentFromUrl]);
 
   const handlePaste = useCallback((e: ClipboardEvent | React.ClipboardEvent) => {
     try {
@@ -373,22 +331,22 @@ function HeapInner() {
         for (const raw of Array.from(items)) {
           const it = raw as DataTransferItem;
           // file items (images)
-          if (it.kind === "file") {
+            if (it.kind === "file") {
             const file = it.getAsFile?.();
             if (file) {
-              addGifFromFile(file);
+              addMomentFromFile(file);
               handled = true;
             }
           } else if (it.type && it.type.indexOf("image/") === 0) {
             const blob = it.getAsFile?.();
             if (blob) {
-              addGifFromFile(blob);
+              addMomentFromFile(blob);
               handled = true;
             }
           } else if (it.type === "text/uri-list" || it.type === "text/plain") {
             const txt = clipboardData.getData(it.type as string);
             if (txt) {
-              addGifFromUrl(txt);
+              addMomentFromUrl(txt);
               handled = true;
             }
           }
@@ -397,7 +355,7 @@ function HeapInner() {
 
       if (!handled) {
         const txt = clipboardData.getData("text/plain") || clipboardData.getData("text/uri-list");
-        if (txt) addGifFromUrl(txt);
+        if (txt) addMomentFromUrl(txt);
       }
 
       // prevent default to avoid accidental navigation
@@ -405,7 +363,7 @@ function HeapInner() {
     } catch (err) {
       console.error("paste handling failed", err);
     }
-  }, [addGifFromFile, addGifFromUrl]);
+  }, [addMomentFromFile, addMomentFromUrl]);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -421,13 +379,13 @@ function HeapInner() {
     setIsDragActive(false);
   }, []);
 
-  const removeGif = useCallback((id: string) => {
-    setGifs((s) => s.filter((g) => g.id !== id));
+  const removeMoment = useCallback((id: string) => {
+    setMoments((s) => s.filter((g) => g.id !== id));
   }, []);
 
   const toggleSelect = useCallback((id: string) => {
-    setGifs((s) => s.map((g) => (g.id === id ? { ...g, selected: !g.selected } : g)));
-  }, []);
+    toggleSelectStore("heap", id);
+  }, [toggleSelectStore]);
 
   const sidebar = useStore(useSidebar, (x) => x);
   if (!sidebar) return null;
@@ -484,7 +442,7 @@ function HeapInner() {
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    setGifs((s) => s.filter((g) => !g.selected));
+                    setMoments((s) => s.filter((g) => !(selectedIds || []).includes(g.id)));
                   }}
                 >
                   <Trash2 className="mr-2" />
@@ -525,7 +483,7 @@ function HeapInner() {
                   onClick={async () => {
                     setStorySheetOpen(false);
                     try {
-                      const selected = gifs.filter((g) => !!g.selected);
+                      const selected = moments.filter((g) => (selectedIds || []).includes(g.id));
                       if (selected.length === 0) {
                         router.push("/stories");
                         return;
@@ -542,9 +500,9 @@ function HeapInner() {
                       }
                       await set("stories-active", id);
                         try {
-                          toast.show(`Moved ${selected.length} GIFs to new story`);
+                          toast.show(`Moved ${selected.length} moments to new story`);
                         } catch (e) {}
-                      setGifs((prev) => prev.filter((g) => !g.selected));
+                      setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                         router.push(`/stories/${id}`);
                     } catch (err) {
                       console.error("Failed to create story", err);
@@ -565,7 +523,7 @@ function HeapInner() {
                       onClick={async () => {
                         setStorySheetOpen(false);
                         try {
-                          const selected = gifs.filter((g) => !!g.selected);
+                          const selected = moments.filter((g) => (selectedIds || []).includes(g.id));
                           if (selected.length === 0) {
                             // nothing to move, just navigate
                             router.push(`/stories/${s.id}`);
@@ -601,10 +559,10 @@ function HeapInner() {
 
                           await set("stories-active", s.id);
                           try {
-                            toast.show(`Moved ${selected.length} GIFs to ${s.title || "story"}`);
+                            toast.show(`Moved ${selected.length} moments to ${s.title || "story"}`);
                           } catch (e) {}
-                          // remove moved gifs from heap
-                          setGifs((prev) => prev.filter((g) => !g.selected));
+                          // remove moved moments from heap
+                          setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                           router.push(`/stories/${s.id}`);
                         } catch (err) {
                           console.error("Failed to add to story", err);
@@ -649,92 +607,32 @@ function HeapInner() {
           <div className="mb-4 flex justify-center">
             <div className="bg-background/50 backdrop-blur-sm px-4 py-1 rounded text-sm text-muted-foreground flex items-center gap-2">
               <Upload size={16} />
-              <span>{isDragActive ? "Release to add GIFs" : "Drag and drop or click here to upload animated GIFs"}</span>
+              <span>{isDragActive ? "Release to add moments" : "Drag and drop or click here to upload moments"}</span>
             </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {gifs.length === 0 && (
+            {moments.length === 0 && (
               <div className="col-span-full text-center text-muted-foreground py-12">
-                No GIFs yet — drop files or click to add
-              </div>
-            )}
-
-            {gifs.map((g) => (
-              <MomentCard key={g.id} item={g} anySelected={anySelected} toggleSelect={toggleSelect} onOpen={(it) => setModalItem(it)} />
-            ))}
-          </div>
-          {modalItem && (
-            <div
-              className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center"
-              onClick={(e) => {
-                // prevent clicks on the overlay from reaching parent (which opens file picker)
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-              }}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setModalItem(null);
-                }}
-                className="absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-              <div className="max-w-6xl w-full h-full flex items-center justify-center">
-                <div className="w-full h-full flex items-center justify-center relative">
-                  {/* Prev/Next controls */}
-                  {gifs.length > 1 && (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          showPrev();
-                        }}
-                        aria-label="Previous"
-                        className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
-                      >
-                        <ArrowLeft size={20} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          showNext();
-                        }}
-                        aria-label="Next"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
-                      >
-                        <ArrowRight size={20} />
-                      </button>
-                    </>
-                  )}
-                  <div className="max-h-full max-w-full flex items-center justify-center">
-                    {/* Plain full-height preview for modal — avoid MomentCard to remove selection UI and click handlers */}
-                    <div className="flex items-center justify-center w-full">
-                      <img
-                        src={modalItem.src}
-                        alt={modalItem.name || "GIF preview"}
-                        className="h-screen max-w-full object-contain rounded"
-                        onClick={(e) => {
-                          // prevent clicks inside the preview from bubbling to parent upload handler
-                          e.stopPropagation();
-                          e.preventDefault();
-                        }}
-                      />
-                    </div>
-                  </div>
+                  No moments yet — drop files or click to add
                 </div>
-              </div>
+            )}
+          </div>
+          <MomentsProvider collection={moments}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
+              {moments.length === 0 && (
+                <div className="col-span-full text-center text-muted-foreground py-12">
+                  No moments yet — drop files or click to add
+                </div>
+              )}
+
+              {moments.map((g) => (
+                <MomentCard key={g.id} item={{ ...g, selected: (selectedIds || []).includes(g.id) }} anySelected={anySelected} toggleSelect={(tid) => toggleSelect(tid)} />
+              ))}
             </div>
-          )}
+            <CollectionOverlay />
+          </MomentsProvider>
+         
         </div>
       </div>
     </ContentLayout>

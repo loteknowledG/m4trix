@@ -60,9 +60,9 @@ export function Menu({ isOpen }: MenuProps) {
     };
     load();
       // also load heap count
-      const loadHeap = async () => {
+        const loadHeap = async () => {
         try {
-          const items = (await get<any[]>("heap-gifs")) || [];
+          const items = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
           if (mounted) setHeapCount(items.length || 0);
         } catch (e) {
           if (mounted) setHeapCount(0);
@@ -74,10 +74,14 @@ export function Menu({ isOpen }: MenuProps) {
         loadHeap();
     };
     window.addEventListener("stories-updated", handler);
+      window.addEventListener("moments-updated", handler);
+      // backward compat
       window.addEventListener("heap-updated", handler);
     return () => {
       mounted = false;
       window.removeEventListener("stories-updated", handler);
+        window.removeEventListener("moments-updated", handler);
+        // backward compat
         window.removeEventListener("heap-updated", handler);
     };
   }, []);
