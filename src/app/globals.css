@@ -89,3 +89,18 @@
         }
     }
 }
+
+@layer components {
+  .mc-shadow-hover:hover {
+    box-shadow: 8px 8px 32px rgba(0,0,0,0.22);
+  }
+  .dark .mc-shadow-hover:hover {
+    box-shadow: 10px 10px 40px rgba(0,0,0,0.45);
+  }
+  .mc-shadow-active:active {
+    box-shadow: 4px 4px 18px rgba(0,0,0,0.12);
+  }
+  .dark .mc-shadow-active:active {
+    box-shadow: 6px 6px 20px rgba(0,0,0,0.22);
+  }
+}

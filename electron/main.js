@@ -14,26 +14,47 @@ function createWindow() {
     },
   });
 
-  const url = isDev ? "http://localhost:3000" : "http://localhost:3000";
+  // prefer explicit APP_URL if provided, otherwise use PORT env or default to 3000
+  const initialPort = process.env.PORT || 3000;
+  const preferredUrl = process.env.APP_URL || `http://localhost:${initialPort}`;
+  let currentUrl = preferredUrl;
 
-  win.loadURL(url);
+  win.loadURL(currentUrl).catch((err) => {
+    console.warn("Initial loadURL failed:", err);
+  });
+
   if (isDev) win.webContents.openDevTools({ mode: "detach" });
 
   // If the renderer fails to load main-frame resources (404s for _next chunks),
-  // clear the session cache and reload to recover from stale assets during dev.
+  // clear the session cache and attempt to recover. If the dev server was
+  // started on a different common port (eg. 3001) try that as a fallback.
   win.webContents.on("did-fail-load", async (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     try {
-      if (isMainFrame) {
-        console.warn("Main frame failed to load:", errorCode, errorDescription, validatedURL);
-        const ses = win.webContents.session;
+      if (!isMainFrame) return;
+      console.warn("Main frame failed to load:", errorCode, errorDescription, validatedURL);
+      const ses = win.webContents.session;
+      try {
+        await ses.clearCache();
+      } catch (e) {}
+
+      // small delay to allow cache clear to settle
+      setTimeout(() => {
+        if (win.isDestroyed()) return;
         try {
-          await ses.clearCache();
+          // If currentUrl looks like localhost:3000, try 3001 as a fallback
+          if (currentUrl.includes("localhost") && currentUrl.includes(":3000")) {
+            const fallback = currentUrl.replace(":3000", ":3001");
+            console.warn(`Attempting fallback URL ${fallback}`);
+            currentUrl = fallback;
+            win.loadURL(currentUrl).catch((err) => {
+              console.warn("Fallback loadURL failed, reloading instead:", err);
+              if (!win.isDestroyed()) win.reload();
+            });
+            return;
+          }
         } catch (e) {}
-        // small delay to allow cache clear to settle
-        setTimeout(() => {
-          if (!win.isDestroyed()) win.reload();
-        }, 50);
-      }
+        if (!win.isDestroyed()) win.reload();
+      }, 50);
     } catch (e) {}
   });
 }

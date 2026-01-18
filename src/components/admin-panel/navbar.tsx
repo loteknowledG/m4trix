@@ -3,7 +3,7 @@
 import useSelection from "@/hooks/use-selection";
 import { SheetMenu } from "@/components/admin-panel/sheet-menu";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Trash2 } from "lucide-react";
+import { LayoutGrid, Trash2, SquarePen, X } from "lucide-react";
 
 interface NavbarProps {
   title: string;
@@ -25,6 +25,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   }
 
   const selectedCount = useSelection((s) => (scope ? (s.selections[scope]?.length || 0) : 0));
+  const clearSelection = useSelection((s) => s.clear);
 
   const displayTitle = isStoryDetail ? "story" : isStories ? "stories" : title;
 
@@ -37,9 +38,19 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   return (
     <header className="sticky top-0 z-10 w-full bg-background/95 shadow backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary">
       <div className="mx-4 sm:mx-8 flex h-14 items-center">
-        <div className="flex items-center space-x-4 lg:space-x-0 flex-1">
+          <div className="flex items-center space-x-4 lg:space-x-0 flex-1">
           <SheetMenu />
-          {leftSlot}
+          {isStoryDetail && selectedCount > 0 ? (
+            <button
+              onClick={() => { try { clearSelection(scope); } catch (e) {} }}
+              className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+              aria-label="Clear selection"
+            >
+              <X size={16} />
+            </button>
+          ) : (
+            leftSlot
+          )}
           <div className="ml-4 truncate">
             {isStoryDetail && selectedCount > 0 ? (
               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
@@ -59,6 +70,13 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
               >
                 <LayoutGrid size={16} />
                 <span className="text-sm">Move to Heap</span>
+              </button>
+              <button
+                onClick={() => onAction("move-to-chapter")}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded bg-secondary text-secondary-foreground"
+              >
+                <SquarePen size={16} />
+                <span className="text-sm">Move to Chapter</span>
               </button>
               <button
                 onClick={() => onAction("move-to-trash")}

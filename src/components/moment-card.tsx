@@ -82,7 +82,7 @@ export default function MomentCard({
   return (
     <div
       onClick={handleContainerClick}
-      className={`relative group bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm ${
+      className={`relative group bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${
         item.selected ? "ring-2 ring-primary/60" : ""
       } ${fullHeight ? "h-full" : "h-40"}`}
     >

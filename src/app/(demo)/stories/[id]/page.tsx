@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
@@ -25,6 +25,10 @@ export default function StoryByIdPage() {
   const selectedIds = useSelection((s) => (scope ? s.selections[scope] || [] : []));
   const toggleSelect = useSelection((s) => s.toggle);
   const clearSelection = useSelection((s) => s.clear);
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const scrollAnimRef = useRef<number | null>(null);
+  const scrollDirectionRef = useRef<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -144,6 +148,109 @@ export default function StoryByIdPage() {
     return () => window.removeEventListener("story-action", handler as EventListener);
   }, [selectedIds, moments, id, clearSelection, scope]);
 
+  const onDragStart = useCallback((e: React.DragEvent, idx: number) => {
+    dragIndexRef.current = idx;
+    try {
+      e.dataTransfer.setData("text/plain", String(idx));
+      e.dataTransfer.effectAllowed = "move";
+    } catch (err) {}
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setDragOverIndex(idx);
+    try {
+      e.dataTransfer.dropEffect = "move";
+    } catch (err) {}
+
+    // Only auto-scroll when a drag is active (dragIndexRef is set).
+    if (dragIndexRef.current === null) return;
+
+    // auto-scroll when pointer nears top/bottom of viewport
+    const margin = 80; // px from edge to start scrolling
+    const y = e.clientY;
+    const vh = window.innerHeight;
+    if (y < margin) {
+      scrollDirectionRef.current = -1;
+      startAutoScroll();
+    } else if (y > vh - margin) {
+      scrollDirectionRef.current = 1;
+      startAutoScroll();
+    } else {
+      scrollDirectionRef.current = 0;
+      stopAutoScroll();
+    }
+  }, []);
+
+  const onDrop = useCallback(
+    async (e: React.DragEvent, idx: number) => {
+      e.preventDefault();
+      const fromStr = (() => {
+        try {
+          return e.dataTransfer.getData("text/plain");
+        } catch (err) {
+          return String(dragIndexRef.current ?? "");
+        }
+      })();
+      const from = fromStr ? Number(fromStr) : null;
+      const to = idx;
+      setDragOverIndex(null);
+      dragIndexRef.current = null;
+      stopAutoScroll();
+      if (from === null || Number.isNaN(from) || from === to) return;
+
+      const next = [...moments];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+
+      setMoments(next);
+      try {
+        const storyKey = `story:${id}`;
+        // Persist the reordered array (store raw items)
+        await set(storyKey, next);
+        try {
+          window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+        } catch (e) {}
+      } catch (err) {
+        console.error("Failed to persist reordered story", err);
+      }
+    },
+    [moments, id]
+  );
+
+  function startAutoScroll() {
+    if (scrollAnimRef.current) return;
+    const step = () => {
+      const dir = scrollDirectionRef.current;
+      if (!dir) {
+        scrollAnimRef.current = null;
+        return;
+      }
+      try {
+        window.scrollBy({ top: dir * 12 });
+      } catch (e) {}
+      scrollAnimRef.current = requestAnimationFrame(step);
+    };
+    scrollAnimRef.current = requestAnimationFrame(step);
+  }
+
+  function stopAutoScroll() {
+    if (scrollAnimRef.current) {
+      cancelAnimationFrame(scrollAnimRef.current);
+      scrollAnimRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    const onDragEndWin = () => {
+      dragIndexRef.current = null;
+      setDragOverIndex(null);
+      stopAutoScroll();
+    };
+    window.addEventListener("dragend", onDragEndWin);
+    return () => window.removeEventListener("dragend", onDragEndWin);
+  }, []);
+
   useEffect(() => {
     const prev = document.title;
     if (!id) return () => {
@@ -220,13 +327,28 @@ export default function StoryByIdPage() {
         ) : (
           <MomentsProvider collection={moments}>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {moments.map((g) => (
-                <MomentCard
+              {moments.map((g, idx) => (
+                <div
                   key={g.id}
-                  item={{ ...g, selected: (selectedIds || []).includes(g.id) } as any}
-                  anySelected={(selectedIds || []).length > 0}
-                  toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                />
+                  draggable
+                  onDragStart={(e) => onDragStart(e, idx)}
+                  onDragEnd={() => {
+                    dragIndexRef.current = null;
+                    setDragOverIndex(null);
+                    stopAutoScroll();
+                  }}
+                  onDragOver={(e) => onDragOver(e, idx)}
+                  onDrop={(e) => onDrop(e, idx)}
+                  className={
+                    "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
+                  }
+                >
+                  <MomentCard
+                    item={{ ...g, selected: (selectedIds || []).includes(g.id) } as any}
+                    anySelected={(selectedIds || []).length > 0}
+                    toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                  />
+                </div>
               ))}
             </div>
             <CollectionOverlay />

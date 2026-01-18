@@ -15,6 +15,7 @@ export default function BackupsPage() {
   const handleExport = useCallback(async () => {
     try {
       const heap = (await get("heap-moments")) || (await get("heap-gifs")) || [];
+      const trash = (await get("trash-moments")) || (await get("trash-gifs")) || [];
       // include stories and per-story items
       const savedStories = (await get<{ id: string; title?: string; count?: number }[]>("stories")) || [];
       const storiesWithItems = await Promise.all(
@@ -30,6 +31,7 @@ export default function BackupsPage() {
 
       const payload = {
         heap,
+        trash,
         stories: storiesWithItems,
       };
       const dataStr = JSON.stringify(payload, null, 2);
@@ -87,6 +89,16 @@ export default function BackupsPage() {
               items: Array.isArray(s.items) ? s.items : [],
             }));
           }
+          // legacy or structured trash payloads
+          const trashArr = parsed.trash ?? parsed["trash-moments"] ?? parsed["trash-gifs"] ?? null;
+          let trashPayload: any[] | null = null;
+          if (Array.isArray(trashArr)) {
+            trashPayload = trashArr.map((p: any) => ({
+              id: p.id ?? `${Date.now()}-${Math.random()}`,
+              src: p.src ?? p.url,
+              name: p.name ?? p.title,
+            }));
+          }
         } else {
           setMessage("Invalid backup file");
           setTimeout(() => setMessage(null), 4000);
@@ -113,6 +125,14 @@ export default function BackupsPage() {
 
         // restore heap items
         await set("heap-moments", validated);
+        // restore trash items if present
+        if (trashPayload) {
+          try {
+            await set("trash-moments", trashPayload);
+          } catch (e) {
+            console.warn("Failed to restore trash items", e);
+          }
+        }
         // restore stories if present
         if (storiesPayload) {
           const meta = storiesPayload.map(({ id, title, count }) => ({ id, title, count }));
