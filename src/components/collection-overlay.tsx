@@ -21,6 +21,7 @@ export default function CollectionOverlay() {
   const [textWidth, setTextWidth] = useState(60);
   const [strokeWidth, setStrokeWidth] = useState(0);
   const [strokeColor, setStrokeColor] = useState("#000000");
+  const [fontColor, setFontColor] = useState("#ffffff");
   const [pixelWidth, setPixelWidth] = useState<number | null>(null);
   const pixelWidthRef = useRef<number | null>(null);
   
@@ -66,6 +67,7 @@ export default function CollectionOverlay() {
           setTextWidth(parsed.textWidth ?? 60);
           setStrokeWidth(parsed.strokeWidth ?? 0);
           setStrokeColor(parsed.strokeColor ?? "#000000");
+          setFontColor(parsed.fontColor ?? "#ffffff");
         } else {
           // legacy plain-string value
           setText(String(v));
@@ -75,6 +77,7 @@ export default function CollectionOverlay() {
           setTextWidth(60);
           setStrokeWidth(0);
           setStrokeColor("#000000");
+          setFontColor("#ffffff");
         }
       } catch (e) {
         // not JSON, treat as legacy string
@@ -85,6 +88,7 @@ export default function CollectionOverlay() {
         setTextWidth(60);
         setStrokeWidth(0);
         setStrokeColor("#000000");
+        setFontColor("#ffffff");
       }
     } catch (e) {
       setText("");
@@ -107,7 +111,8 @@ export default function CollectionOverlay() {
     size?: number,
     width?: number,
     sWidth?: number,
-    sColor?: string
+    sColor?: string,
+    fontColorParam?: string
   ) => {
     try {
       if (t) {
@@ -120,6 +125,7 @@ export default function CollectionOverlay() {
           textWidth: width ?? textWidth,
           strokeWidth: sWidth ?? strokeWidth,
           strokeColor: sColor ?? strokeColor,
+          fontColor: fontColorParam ?? fontColor,
         };
         localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
       } else {
@@ -133,6 +139,7 @@ export default function CollectionOverlay() {
     if (width) setTextWidth(width);
     if (sWidth != null) setStrokeWidth(sWidth);
     if (sColor) setStrokeColor(sColor);
+    if (fontColorParam) setFontColor(fontColorParam);
     setEditing(false);
   };
 
@@ -143,6 +150,7 @@ export default function CollectionOverlay() {
     setText("");
     setStrokeWidth(0);
     setStrokeColor("#000000");
+    setFontColor("#ffffff");
     setEditing(false);
   };
 
@@ -157,6 +165,7 @@ export default function CollectionOverlay() {
         textWidth,
         strokeWidth,
         strokeColor,
+        fontColor,
       };
       if (text) localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
     } catch (e) {}
@@ -338,6 +347,7 @@ export default function CollectionOverlay() {
                     wordBreak: "break-word",
                     width: pixelWidth ? `${pixelWidth}px` : undefined,
                     maxWidth: pixelWidth ? `${pixelWidth}px` : undefined,
+                    color: fontColor,
                     fontFamily: (
                       font === "serif" ? "Georgia, 'Times New Roman', Times, serif" :
                       font === "mono" ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace" :
@@ -464,12 +474,22 @@ export default function CollectionOverlay() {
                   />
                   <span className="text-sm text-white">Stroke color</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={fontColor}
+                    onChange={(e) => setFontColor(e.target.value)}
+                    className="w-10 h-10 p-0 border-0 bg-transparent"
+                    title="Font color"
+                  />
+                  <span className="text-sm text-white">Font color</span>
+                </div>
               </div>
 
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={() => {
-                    saveText(text, undefined, font, fontSize, textWidth, strokeWidth, strokeColor);
+                    saveText(text, undefined, font, fontSize, textWidth, strokeWidth, strokeColor, fontColor);
                     setEditing(false);
                   }}
                   className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm"
