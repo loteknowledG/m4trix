@@ -1,0 +1,22 @@
+graph TD
+  subgraph Desktop
+    Electron[Electron Host\n(electron/main.js)]
+  end
+  subgraph WebApp
+    Next[Next.js App\n(src/app)]
+    Static[Public Assets\n/public]
+  end
+  subgraph Registry
+    RegistryBuilder[Registry Builder\n(scripts/build-registry.ts)]
+    RegistryJSON[Registry JSON\n(public/registry/shadcn-sidebar.json)]
+  end
+  Git[Repository\n(package.json, components.json)]
+  Electron -->|loads URL (APP_URL / localhost)| Next
+  Next -->|serves| Static
+  RegistryBuilder -->|generates| RegistryJSON
+  RegistryJSON -->|consumed by| Next
+  Git --> Next
+  Git --> Electron
+  Git --> RegistryBuilder
+
+%% Caption: Runtime-level view showing Electron as a desktop host loading the Next.js web app, public assets, and a generated registry JSON.
