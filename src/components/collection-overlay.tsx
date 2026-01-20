@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMomentsContext } from "@/context/moments-collection";
-import { X, ArrowLeft, ArrowRight } from "lucide-react";
+import { X, ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 
 export default function CollectionOverlay() {
   const ctx = useMomentsContext();
@@ -19,57 +19,14 @@ export default function CollectionOverlay() {
   const [font, setFont] = useState("system");
   const [fontSize, setFontSize] = useState(40);
   const [textWidth, setTextWidth] = useState(60);
+  const [strokeWidth, setStrokeWidth] = useState(0);
+  const [strokeColor, setStrokeColor] = useState("#000000");
   const [pixelWidth, setPixelWidth] = useState<number | null>(null);
   const pixelWidthRef = useRef<number | null>(null);
   
   const posRef = useRef(pos);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
-
-  // load saved overlay text for the current item from localStorage
-  useEffect(() => {
-    if (!currentId) return;
-    try {
-      const v = localStorage.getItem(`overlay:text:${currentId}`) || "";
-      if (!v) {
-        setText("");
-        setPos({ x: 0.5, y: 0.5 });
-        return;
-      }
-      try {
-        const parsed = JSON.parse(v);
-        if (parsed && typeof parsed === "object" && "text" in parsed) {
-          setText(parsed.text || "");
-          setPos({ x: parsed.x ?? 0.5, y: parsed.y ?? 0.5 });
-          setFont(parsed.font ?? "system");
-          setFontSize(parsed.fontSize ?? 40);
-          setTextWidth(parsed.textWidth ?? 60);
-        } else {
-          // legacy plain-string value
-          setText(String(v));
-          setPos({ x: 0.5, y: 0.5 });
-          setFont("system");
-          setFontSize(40);
-          setTextWidth(60);
-        }
-      } catch (e) {
-        // not JSON, treat as legacy string
-        setText(String(v));
-        setPos({ x: 0.5, y: 0.5 });
-        setFont("system");
-        setFontSize(40);
-        setTextWidth(60);
-      }
-    } catch (e) {
-      setText("");
-      setPos({ x: 0.5, y: 0.5 });
-    }
-  }, [currentId]);
-
-  // keep a ref of the latest position so the drag end handler can persist
-  useEffect(() => {
-    posRef.current = pos;
-  }, [pos]);
 
   // compute pixel width from percent and container size so wrapping is stable
   const computePixelWidth = () => {
@@ -87,6 +44,55 @@ export default function CollectionOverlay() {
     }
   };
 
+  // load saved overlay text for the current item from localStorage
+  useEffect(() => {
+    if (!currentId) return;
+    try {
+      const v = localStorage.getItem(`overlay:text:${currentId}`) || "";
+      if (!v) {
+        setText("");
+        setPos({ x: 0.5, y: 0.5 });
+        setStrokeWidth(0);
+        setStrokeColor("#000000");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(v);
+        if (parsed && typeof parsed === "object" && "text" in parsed) {
+          setText(parsed.text || "");
+          setPos({ x: parsed.x ?? 0.5, y: parsed.y ?? 0.5 });
+          setFont(parsed.font ?? "system");
+          setFontSize(parsed.fontSize ?? 40);
+          setTextWidth(parsed.textWidth ?? 60);
+          setStrokeWidth(parsed.strokeWidth ?? 0);
+          setStrokeColor(parsed.strokeColor ?? "#000000");
+        } else {
+          // legacy plain-string value
+          setText(String(v));
+          setPos({ x: 0.5, y: 0.5 });
+          setFont("system");
+          setFontSize(40);
+          setTextWidth(60);
+          setStrokeWidth(0);
+          setStrokeColor("#000000");
+        }
+      } catch (e) {
+        // not JSON, treat as legacy string
+        setText(String(v));
+        setPos({ x: 0.5, y: 0.5 });
+        setFont("system");
+        setFontSize(40);
+        setTextWidth(60);
+        setStrokeWidth(0);
+        setStrokeColor("#000000");
+      }
+    } catch (e) {
+      setText("");
+      setPos({ x: 0.5, y: 0.5 });
+      setStrokeWidth(0);
+      setStrokeColor("#000000");
+    }
+  }, [currentId]);
   useEffect(() => {
     computePixelWidth();
     const onResize = () => computePixelWidth();
@@ -94,7 +100,15 @@ export default function CollectionOverlay() {
     return () => window.removeEventListener("resize", onResize);
   }, [textWidth]);
 
-  const saveText = (t: string, p?: { x: number; y: number }, f?: string, size?: number, width?: number) => {
+  const saveText = (
+    t: string,
+    p?: { x: number; y: number },
+    f?: string,
+    size?: number,
+    width?: number,
+    sWidth?: number,
+    sColor?: string
+  ) => {
     try {
       if (t) {
         const payload = {
@@ -104,6 +118,8 @@ export default function CollectionOverlay() {
           font: f ?? font,
           fontSize: size ?? fontSize,
           textWidth: width ?? textWidth,
+          strokeWidth: sWidth ?? strokeWidth,
+          strokeColor: sColor ?? strokeColor,
         };
         localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
       } else {
@@ -115,6 +131,8 @@ export default function CollectionOverlay() {
     if (f) setFont(f);
     if (size) setFontSize(size);
     if (width) setTextWidth(width);
+    if (sWidth != null) setStrokeWidth(sWidth);
+    if (sColor) setStrokeColor(sColor);
     setEditing(false);
   };
 
@@ -123,12 +141,23 @@ export default function CollectionOverlay() {
       localStorage.removeItem(`overlay:text:${currentId}`);
     } catch (e) {}
     setText("");
+    setStrokeWidth(0);
+    setStrokeColor("#000000");
     setEditing(false);
   };
 
   const savePosition = (p: { x: number; y: number }) => {
     try {
-      const payload = { text, x: p.x, y: p.y, font, fontSize, textWidth };
+      const payload = {
+        text,
+        x: p.x,
+        y: p.y,
+        font,
+        fontSize,
+        textWidth,
+        strokeWidth,
+        strokeColor,
+      };
       if (text) localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
     } catch (e) {}
     setPos(p);
@@ -211,16 +240,11 @@ export default function CollectionOverlay() {
   if (!ctx || !isOpen || !currentId) return null;
   const item = collection.find((m: any) => m.id === currentId);
   if (!item) return null;
-
   return (
     <div
       className="fixed inset-0 z-[1200] bg-black/90 flex items-center justify-center"
       onClick={(e) => {
-        // Do not close the overlay when the backdrop is clicked — only
-        // the close button should dismiss it. Prevent clicks from
-        // reaching underlying elements.
         e.stopPropagation();
-        e.preventDefault();
       }}
       onMouseDown={(e) => {
         e.stopPropagation();
@@ -236,6 +260,18 @@ export default function CollectionOverlay() {
         aria-label="Close"
       >
         <X size={18} />
+      </button>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          setEditing(true);
+        }}
+        className="absolute right-6 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+        aria-label="Edit overlay text"
+      >
+        <Pencil size={18} />
       </button>
 
       <div className="max-w-6xl w-full h-full flex items-center justify-center">
@@ -279,7 +315,7 @@ export default function CollectionOverlay() {
                 }}
               />
             </div>
-            {/* Text overlay (positioned and draggable) */}
+
             {text ? (
               <div
                 onMouseDown={(e) => onStartDrag(e)}
@@ -312,6 +348,7 @@ export default function CollectionOverlay() {
                     lineHeight: 1.1,
                     whiteSpace: "normal",
                     hyphens: "auto",
+                    ...(strokeWidth ? { WebkitTextStroke: `${strokeWidth}px ${strokeColor}`, textStroke: `${strokeWidth}px ${strokeColor}` } : {}),
                   }}
                 >
                   {text}
@@ -319,78 +356,10 @@ export default function CollectionOverlay() {
               </div>
             ) : null}
           </div>
-          {/* Editor controls */}
+
           <div className="absolute right-4 bottom-6 z-40 flex items-center gap-2">
             {editing ? (
-              <div className="flex items-center gap-2 bg-black/60 p-2 rounded">
-                <input
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  className="px-2 py-1 text-sm rounded bg-white/90 text-black"
-                  placeholder="Overlay text"
-                />
-                <select
-                  value={font}
-                  onChange={(e) => setFont(e.target.value)}
-                  className="px-2 py-1 text-sm rounded bg-white/90 text-black"
-                >
-                  <option value="system">System Sans</option>
-                  <option value="serif">Serif</option>
-                  <option value="mono">Monospace</option>
-                  <option value="cursive">Cursive</option>
-                </select>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-white/80">Size</label>
-                  <input
-                    type="range"
-                    min={16}
-                    max={96}
-                    value={fontSize}
-                    onChange={(e) => setFontSize(Number(e.target.value))}
-                    className="w-28"
-                  />
-                  <span className="text-sm text-white">{fontSize}px</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-white/80">Width</label>
-                  <input
-                    type="range"
-                    min={20}
-                    max={100}
-                    value={textWidth}
-                    onChange={(e) => setTextWidth(Number(e.target.value))}
-                    className="w-28"
-                  />
-                  <span className="text-sm text-white">{textWidth}%</span>
-                </div>
-                {/* font-weight removed */}
-                <button
-                  onClick={() => saveText(text, undefined, font, fontSize)}
-                  className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => { setEditing(false); }}
-                  className="px-3 py-1 rounded border text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => resetPosition()}
-                  className="px-3 py-1 rounded border text-sm"
-                >
-                  Reset Position
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="px-3 py-1 rounded bg-secondary text-secondary-foreground text-sm"
-                >
-                  Edit Text
-                </button>
+              <>
                 <button
                   onClick={() => clearText()}
                   className="px-3 py-1 rounded bg-destructive text-destructive-foreground text-sm"
@@ -403,8 +372,112 @@ export default function CollectionOverlay() {
                 >
                   Reset Position
                 </button>
+              </>
+            ) : null}
+          </div>
+
+          <div
+            className={`absolute right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-50 transform transition-transform duration-300 ease-in-out ${
+              editing ? "translate-x-0" : "translate-x-full"
+            }`}
+            role="dialog"
+            aria-hidden={!editing}
+          >
+            <div className="h-full flex flex-col p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium">Edit Overlay Text</h3>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+                  aria-label="Close editor"
+                >
+                  <X size={18} />
+                </button>
               </div>
-            )}
+
+              <div className="flex-1 overflow-auto space-y-3">
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
+                  placeholder="Overlay text"
+                />
+
+                <select
+                  value={font}
+                  onChange={(e) => setFont(e.target.value)}
+                  className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
+                >
+                  <option value="system">System Sans</option>
+                  <option value="serif">Serif</option>
+                  <option value="mono">Monospace</option>
+                  <option value="cursive">Cursive</option>
+                </select>
+
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs text-white/80">Size</label>
+                  <input
+                    type="range"
+                    min={16}
+                    max={96}
+                    value={fontSize}
+                    onChange={(e) => setFontSize(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <span className="text-sm text-white w-14 text-right">{fontSize}px</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs text-white/80">Width</label>
+                  <input
+                    type="range"
+                    min={20}
+                    max={100}
+                    value={textWidth}
+                    onChange={(e) => setTextWidth(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <span className="text-sm text-white w-14 text-right">{textWidth}%</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs text-white/80">Stroke</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    value={strokeWidth}
+                    onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <span className="text-sm text-white w-14 text-right">{strokeWidth}px</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={strokeColor}
+                    onChange={(e) => setStrokeColor(e.target.value)}
+                    className="w-10 h-10 p-0 border-0 bg-transparent"
+                    title="Stroke color"
+                  />
+                  <span className="text-sm text-white">Stroke color</span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => {
+                    saveText(text, undefined, font, fontSize, textWidth, strokeWidth, strokeColor);
+                    setEditing(false);
+                  }}
+                  className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

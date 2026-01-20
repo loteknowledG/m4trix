@@ -19,6 +19,7 @@
     "hooks": "@/hooks"
   },
   "registries": {
-    "@magicui": "https://magicui.design/r/{name}"
+    "@magicui": "https://magicui.design/r/{name}",
+    "@shadcn-editor": "https://shadcn-editor.vercel.app/r/{name}.json"
   }
 }
