@@ -351,6 +351,8 @@ export default function CollectionOverlay() {
                     fontFamily: (
                       font === "serif" ? "Georgia, 'Times New Roman', Times, serif" :
                       font === "mono" ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace" :
+                      font === "mrs" ? "'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive" :
+                      font === "satisfy" ? "'Satisfy', 'Segoe Script', 'Brush Script MT', cursive" :
                       font === "cursive" ? "'Brush Script MT', 'Segoe Script', cursive" :
                       "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"
                     ),
@@ -387,7 +389,7 @@ export default function CollectionOverlay() {
           </div>
 
           <div
-            className={`absolute right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-50 transform transition-transform duration-300 ease-in-out ${
+            className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-50 transform transition-transform duration-300 ease-in-out ${
               editing ? "translate-x-0" : "translate-x-full"
             }`}
             role="dialog"
@@ -422,6 +424,8 @@ export default function CollectionOverlay() {
                   <option value="serif">Serif</option>
                   <option value="mono">Monospace</option>
                   <option value="cursive">Cursive</option>
+                  <option value="mrs">Mrs Saint Delafield</option>
+                  <option value="satisfy">Satisfy</option>
                 </select>
 
                 <div className="flex items-center justify-between gap-2">

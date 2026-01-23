@@ -34,6 +34,33 @@ export default function BackupsPage() {
         trash,
         stories: storiesWithItems,
       };
+      // collect any per-item overlay text saved in localStorage
+      try {
+        const overlays: Record<string, any> = {};
+        const collectFor = (items: any[] | undefined) => {
+          if (!Array.isArray(items)) return;
+          for (const it of items) {
+            const id = it?.id;
+            if (!id) continue;
+            try {
+              const raw = localStorage.getItem(`overlay:text:${id}`);
+              if (raw) {
+                try {
+                  overlays[id] = JSON.parse(raw);
+                } catch (e) {
+                  overlays[id] = raw;
+                }
+              }
+            } catch (e) {}
+          }
+        };
+        collectFor(heap);
+        collectFor(trash);
+        for (const s of storiesWithItems) collectFor(s.items);
+        if (Object.keys(overlays).length > 0) (payload as any).overlays = overlays;
+      } catch (e) {
+        // continue without overlays on error
+      }
       const dataStr = JSON.stringify(payload, null, 2);
       const blob = new Blob([dataStr], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -60,6 +87,8 @@ export default function BackupsPage() {
         // Handle old flat-array backups (array of heap items)
         let validated: any[] = [];
         let storiesPayload: any[] | null = null;
+        let trashPayload: any[] | null = null;
+        let overlaysPayload: any | null = null;
 
         if (Array.isArray(parsed)) {
           validated = parsed.map((p: any) => ({
@@ -91,7 +120,6 @@ export default function BackupsPage() {
           }
           // legacy or structured trash payloads
           const trashArr = parsed.trash ?? parsed["trash-moments"] ?? parsed["trash-gifs"] ?? null;
-          let trashPayload: any[] | null = null;
           if (Array.isArray(trashArr)) {
             trashPayload = trashArr.map((p: any) => ({
               id: p.id ?? `${Date.now()}-${Math.random()}`,
@@ -99,6 +127,8 @@ export default function BackupsPage() {
               name: p.name ?? p.title,
             }));
           }
+          // if the backup contains overlay data, keep it for later restoration
+          overlaysPayload = parsed.overlays ?? parsed.overlay ?? null;
         } else {
           setMessage("Invalid backup file");
           setTimeout(() => setMessage(null), 4000);
@@ -125,6 +155,20 @@ export default function BackupsPage() {
 
         // restore heap items
         await set("heap-moments", validated);
+        // restore any overlays from the imported payload
+        try {
+          if (overlaysPayload && typeof overlaysPayload === "object") {
+            for (const [key, val] of Object.entries(overlaysPayload)) {
+              try {
+                await Promise.resolve(localStorage.setItem(`overlay:text:${key}`, JSON.stringify(val)));
+              } catch (e) {
+                console.warn("Failed to restore overlay for", key, e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to apply overlays from import", e);
+        }
         // restore trash items if present
         if (trashPayload) {
           try {

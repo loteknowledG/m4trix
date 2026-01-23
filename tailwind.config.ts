@@ -18,6 +18,10 @@ const config = {
       }
     },
     extend: {
+      fontFamily: {
+        mrs: ["'Mrs Saint Delafield'", "'Segoe Script'", "'Brush Script MT'", 'cursive'],
+        satisfy: ["'Satisfy'", "'Segoe Script'", "'Brush Script MT'", 'cursive'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
