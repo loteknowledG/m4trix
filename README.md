@@ -1,104 +1,72 @@
-# [shadcn/ui sidebar](https://shadcn-ui-sidebar.salimi.my) &middot; [![Author Salimi](https://img.shields.io/badge/Author-Salimi-%3C%3E)](https://www.salimi.my)
-
-A stunning and functional retractable sidebar for Next.js built on top of [shadcn/ui](https://ui.shadcn.com) complete with desktop and mobile responsiveness.
-
-## Features
-
-- Retractable mini and wide sidebar
-- Scrollable sidebar menu
-- Sheet menu for mobile
-- Grouped menu with labels
-- Collapsible submenu
-- Extracted menu items list
-
-## Tech/framework used
-
-- Next.js 14
-- Shadcn/ui
-- Tailwind CSS
-- TypeScript
-- Zustand
-
-## Installation
-
-### Custom registry
-
-If you are using @shadcn/ui 2.0.0 or later, you can install the component directly from the registry.
-
-```bash
-npx shadcn@latest add https://raw.githubusercontent.com/salimi-my/shadcn-ui-sidebar/refs/heads/master/public/registry/shadcn-sidebar.json
-
 or
-
 npx shadcn@latest add https://shadcn-ui-sidebar.salimi.my/registry/shadcn-sidebar.json
-```
 
-### Usage example for Nextjs
-```tsx
-//layout.tsx
-import AdminPanelLayout from "@/components/admin-panel/admin-panel-layout";
+# m4trix: Agent-Based Sitcom Playground
 
-export default async function Layout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return <AdminPanelLayout>{children}</AdminPanelLayout>;
-}
+## Project Overview
 
-//page.tsx
-import { ContentLayout } from "@/components/admin-panel/content-layout";
+m4trix is a Next.js application designed as a playground for experimenting with agent-based sitcom environments and entertainment systems. The architecture is local-first, prioritizing user privacy and offline capability. 
 
-export default function Page() {
-  return (
-    <ContentLayout title="Test">
-      <div>Test</div>
-    </ContentLayout>
-  );
-}
-```
+## Architecture Design
 
-## Starting the project locally
+- **Agent-Based Environment:**
+  - The core concept is to simulate sitcom-like interactions using autonomous agents, each with their own state and behaviors.
+  - Agents interact in a shared environment, creating emergent entertainment scenarios.
 
-1. Clone the repository
+- **Local-First Workflow:**
+  - All user data is stored locally using [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) via the [idb](https://github.com/jakearchibald/idb) library.
+  - Users can backup and restore their workflow as JSON files, ensuring privacy and control without requiring an account.
+  - The system is designed so anyone can use it immediately, with no cloud dependency for core features.
 
-   ```bash
-   git clone https://github.com/salimi-my/shadcn-ui-sidebar
-   ```
+- **Next.js Application:**
+  - Built with Next.js for fast, scalable, and modern web development.
+  - Hosted on Vercel for seamless deployment and global availability.
 
-2. Install dependencies
+## Key Features
 
-   ```bash
-   cd shadcn-ui-sidebar
-   npm install
-   ```
+- Agent-based sitcom simulation
+- Local-first data storage (IndexedDB + idb)
+- Private JSON backup/restore workflow
+- No account required; instant onboarding
+- Responsive UI with Tailwind CSS
+- Modular component architecture
 
-3. Run the development server
+## Tech Stack
 
-   ```bash
-   npm run dev
-   ```
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Zustand (state management)
+- idb (IndexedDB wrapper)
 
-## Demo
+## Demo & Source
 
-The app is hosted on Vercel. [Click here](https://shadcn-ui-sidebar.salimi.my) to visit.
-<br>
-Direct demo link: `https://shadcn-ui-sidebar.salimi.my`
+- **Live Demo:** [m4trix on Vercel](https://m4trix.vercel.app/stories)
+- **Source Code:** [GitHub Repository](https://github.com/loteknowledG/m4trix)
 
-## Screenshots
+## How It Works
 
-#### Light mode
+1. **Local Data Storage:**
+   - All user actions and agent states are saved in the browser using IndexedDB.
+   - Users can export their environment as a JSON file and restore it later or on another device.
 
-![Light mode](/screenshots/screenshot-1.png)
+2. **Agent Simulation:**
+   - Agents are modeled as independent entities with their own logic and state.
+   - The environment orchestrates interactions, allowing for emergent sitcom-like scenarios.
 
-#### Dark mode
+3. **Privacy-First:**
+   - No login or account is required.
+   - All workflows are private and portable.
 
-![Dark mode](/screenshots/screenshot-2.png)
+## Example Use Case
 
-#### Mini sidebar
+This project can be used as a reference for:
 
-![Mini sidebar](/screenshots/screenshot-3.png)
+- Designing agent-based systems
+- Implementing local-first web applications
+- Architecting privacy-focused entertainment platforms
 
-#### Sheet menu
 
-<img src="/screenshots/screenshot-4.png" width="300">
+---
+
+For more details, see the [GitHub repository](https://github.com/loteknowledG/m4trix) or try the [live demo](https://m4trix.vercel.app/stories).
