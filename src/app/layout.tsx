@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { headers } from "next/headers";
 
 import "./globals.css";
 
@@ -40,12 +41,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const isDev = process.env.NODE_ENV !== "production";
-
   const devCsp =
     "default-src 'self' http://localhost:3000; script-src 'self' http://localhost:3000 'unsafe-inline' 'unsafe-eval'; style-src 'self' http://localhost:3000 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:3000 ws://localhost:3000; object-src 'none'; base-uri 'self'";
 
   const prodCsp =
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'";
+
+  const reqHeaders = headers();
+  const nonce = reqHeaders.get("x-csp-nonce") ?? "";
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -53,10 +56,12 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Satisfy&display=swap" rel="stylesheet" />
-        <meta
-          httpEquiv="Content-Security-Policy"
-          content={isDev ? devCsp : prodCsp}
-        />
+        {nonce ? (
+          <script
+            nonce={nonce}
+            dangerouslySetInnerHTML={{ __html: `window.__CSP_NONCE = ${JSON.stringify(nonce)}` }}
+          />
+        ) : null}
       </head>
       <body className={GeistSans.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
