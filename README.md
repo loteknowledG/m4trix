@@ -40,6 +40,18 @@ m4trix is a Next.js application designed as a playground for experimenting with 
 - Zustand (state management)
 - idb (IndexedDB wrapper)
 
+## Electron App
+
+This repository includes an Electron wrapper so the Next.js app can run as a desktop application. The Electron source is in the `electron/` folder.
+
+Run in development:
+
+- `pnpm run electron:dev` — starts the Next.js dev server and launches Electron.
+
+Build and run production:
+
+- `pnpm run electron:prod` — builds the Next.js app and launches Electron.
+
 ## Demo & Source
 
 - **Live Demo:** [m4trix on Vercel](https://m4trix.vercel.app/stories)
