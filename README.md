@@ -51,9 +51,9 @@ m4trix is a Next.js application designed as a playground for experimenting with 
    - All user actions and agent states are saved in the browser using IndexedDB.
    - Users can export their environment as a JSON file and restore it later or on another device.
 
-2. **Agent Simulation:**
-   - Agents are modeled as independent entities with their own logic and state.
-   - The environment orchestrates interactions, allowing for emergent sitcom-like scenarios.
+2. **Agent Simulation:** *(WIP — not yet implemented)*
+  - Planned: Agents will be modeled as independent entities with their own logic and state.
+  - Planned: The environment will orchestrate interactions, allowing for emergent sitcom-like scenarios.
 
 3. **Privacy-First:**
    - No login or account is required.
