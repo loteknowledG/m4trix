@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   }
 };
 
+import crypto from "crypto";
+
 export default function RootLayout({
   children
 }: Readonly<{
@@ -41,14 +43,17 @@ export default function RootLayout({
 }>) {
   const isDev = process.env.NODE_ENV !== "production";
 
+  // Generate a nonce for each request
+  const nonce = crypto.randomBytes(16).toString("base64");
+
   const devCsp =
-    "default-src 'self' http://localhost:3000; script-src 'self' http://localhost:3000 'unsafe-inline' 'unsafe-eval'; style-src 'self' http://localhost:3000 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:3000 ws://localhost:3000; object-src 'none'; base-uri 'self'";
+    `default-src 'self' http://localhost:3000; script-src 'self' http://localhost:3000 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}'; style-src 'self' http://localhost:3000 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:3000 ws://localhost:3000; object-src 'none'; base-uri 'self'`;
 
   const prodCsp =
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'";
+    `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'`;
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning nonce={nonce}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -58,7 +63,7 @@ export default function RootLayout({
           content={isDev ? devCsp : prodCsp}
         />
       </head>
-      <body className={GeistSans.className}>
+      <body className={GeistSans.className} nonce={nonce}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
