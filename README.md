@@ -1,6 +1,3 @@
-or
-npx shadcn@latest add https://shadcn-ui-sidebar.salimi.my/registry/shadcn-sidebar.json
-
 # m4trix: Agent-Based Sitcom Playground
 
 ## Project Overview
@@ -17,6 +14,10 @@ m4trix is a Next.js application designed as a playground for experimenting with 
   - All user data is stored locally using [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) via the [idb](https://github.com/jakearchibald/idb) library.
   - Users can backup and restore their workflow as JSON files, ensuring privacy and control without requiring an account.
   - The system is designed so anyone can use it immediately, with no cloud dependency for core features.
+
+  - **State Management:**
+    - Persistent data that needs to be preserved for backup and restore (such as agent states and user-created content) is managed using IndexedDB.
+    - Transient UI state (such as selection, temporary toggles, and ephemeral interactions) is managed using Zustand, and does not need to be backed up.
 
 - **Next.js Application:**
   - Built with Next.js for fast, scalable, and modern web development.

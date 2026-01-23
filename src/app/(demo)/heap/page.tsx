@@ -255,9 +255,9 @@ function HeapInner() {
   const addMomentFromFile = useCallback((file: File) => {
     // reject empty files
     if (!file || file.size === 0) return;
-    // only accept GIF files (moments are animated GIFs)
-    const isMomentMime = file.type === "image/gif";
-    const isMomentExt = file.name?.toLowerCase().endsWith(".gif");
+    // accept GIF and JPG files
+    const isMomentMime = file.type === "image/gif" || file.type === "image/jpeg";
+    const isMomentExt = file.name?.toLowerCase().endsWith(".gif") || file.name?.toLowerCase().endsWith(".jpg") || file.name?.toLowerCase().endsWith(".jpeg");
     if (!isMomentMime && !isMomentExt) return;
     const reader = new FileReader();
     reader.onload = () => {
@@ -279,9 +279,9 @@ function HeapInner() {
     // simple validation
     if (!url) return;
     const u = url.trim();
-    // accept data GIF or URLs that look like GIF (moments)
-    const isDataMoment = u.startsWith("data:image/gif");
-    const isMomentUrl = u.toLowerCase().split("?")[0].endsWith(".gif");
+    // accept data GIF/JPG or URLs that look like GIF/JPG (moments)
+    const isDataMoment = u.startsWith("data:image/gif") || u.startsWith("data:image/jpeg");
+    const isMomentUrl = [".gif", ".jpg", ".jpeg"].some(ext => u.toLowerCase().split("?")[0].endsWith(ext));
     if (!isDataMoment && !isMomentUrl) return;
     setMoments((s) => {
       if (s.some((x) => x.src === u)) {
