@@ -2,6 +2,7 @@
   "name": "shadcn-sidebar",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.24.0",
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
