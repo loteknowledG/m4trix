@@ -291,13 +291,13 @@ export default function StoryByIdPage() {
   }
 
   return (
-    <ContentLayout
+      <ContentLayout
       title="Stories"
       navLeft={(
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push('/stories')}
           className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
-          aria-label="Back"
+          aria-label="Back to list"
         >
           <ArrowLeft size={16} />
         </button>

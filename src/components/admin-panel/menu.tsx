@@ -151,7 +151,7 @@ export function Menu({ isOpen }: MenuProps) {
                                   ? "secondary"
                                   : "ghost"
                               }
-                              className="w-full justify-start h-10 mb-1"
+                              className="w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
                               asChild
                             >
                               <Link href={href}>
@@ -233,7 +233,7 @@ export function Menu({ isOpen }: MenuProps) {
                   <Button
                     onClick={() => {}}
                     variant="outline"
-                    className="w-full justify-center h-10 mt-5"
+                    className="w-full justify-center h-10 mt-5 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
                   >
                     <span className={cn(isOpen === false ? "" : "mr-4")}>
                       <LogOut size={18} />

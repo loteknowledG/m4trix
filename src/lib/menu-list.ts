@@ -46,6 +46,11 @@ export function getMenuList(pathname: string): Group[] {
       groupLabel: "Contents",
       menus: [
         {
+          href: "/agents",
+          label: "Agents",
+          icon: Users
+        },
+        {
           href: "/stories",
           label: "Stories",
           icon: SquarePen,
@@ -56,13 +61,11 @@ export function getMenuList(pathname: string): Group[] {
             }
           ]
         },
-        
         {
           href: "/tags",
           label: "Tags",
           icon: Tag
-        }
-        ,
+        },
         {
           href: "/trash",
           label: "Trash",

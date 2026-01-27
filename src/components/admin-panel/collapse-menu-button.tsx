@@ -78,7 +78,7 @@ export function CollapseMenuButton({
       >
         <Button
           variant={active ? "secondary" : "ghost"}
-          className="w-full justify-start h-10"
+          className="w-full justify-start h-10 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
           asChild={!!href}
         >
           {href ? (
@@ -169,7 +169,7 @@ export function CollapseMenuButton({
                 ? "secondary"
                 : "ghost"
             }
-            className="w-full justify-start h-10 mb-1"
+            className="w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
             asChild
           >
             <Link
@@ -209,7 +209,7 @@ export function CollapseMenuButton({
             <DropdownMenuTrigger asChild>
               <Button
                 variant={active ? "secondary" : "ghost"}
-                className="w-full justify-start h-10 mb-1"
+                className="w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
                 onClick={(e) => {
                   if (href) {
                     e.preventDefault();
