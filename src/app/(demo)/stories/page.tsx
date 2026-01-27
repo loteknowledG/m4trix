@@ -68,17 +68,17 @@ export default function StoriesPage() {
         ) : stories.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">No stories yet. Create one from the heap.</div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {stories.map((s) => (
               <Link
                 key={s.id}
                 href={`/stories/${s.id}`}
                 className="block border rounded-lg overflow-hidden shadow-sm transition-transform duration-150 ease-out transform hover:-translate-y-1 hover:-translate-x-1 hover:shadow-lg active:translate-y-1 active:translate-x-1 active:shadow-sm mc-shadow-hover mc-shadow-active"
               >
-                <div className="h-40 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
+                <div className="bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
                   {previews[s.id] ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-full object-cover" />
+                    <img src={previews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-auto object-contain" />
                   ) : (
                     <div className="text-sm text-muted-foreground">No preview</div>
                   )}

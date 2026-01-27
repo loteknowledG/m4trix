@@ -84,7 +84,7 @@ export default function MomentCard({
       onClick={handleContainerClick}
       className={`relative group bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${
         item.selected ? "ring-2 ring-primary/60" : ""
-      } ${fullHeight ? "h-full" : "h-40"}`}
+      } ${fullHeight ? "h-full" : ""}`}
     >
       <button
         onClick={(e) => {
@@ -113,7 +113,7 @@ export default function MomentCard({
       <img
         src={item.src}
         alt={item.name || "moment"}
-        className={`w-full ${fullHeight ? "h-full" : "h-full"} object-cover opacity-0 transition-opacity duration-500`}
+        className={`w-full h-auto object-contain opacity-0 transition-opacity duration-500 bg-zinc-100 dark:bg-zinc-800`}
         onLoad={(e) => {
           const img = e.currentTarget as HTMLImageElement;
           img.style.opacity = "1";
