@@ -6,6 +6,7 @@ import { get, set } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
 import { Upload, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import useSelection from "@/hooks/use-selection";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
@@ -294,13 +295,15 @@ export default function StoryByIdPage() {
       <ContentLayout
       title="Stories"
       navLeft={(
-        <button
+        <Button
           onClick={() => router.push('/stories')}
-          className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+          className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
+          variant="outline"
+          size="icon"
           aria-label="Back to list"
         >
           <ArrowLeft size={16} />
-        </button>
+        </Button>
       )}
     >
       <ErrorBoundary>

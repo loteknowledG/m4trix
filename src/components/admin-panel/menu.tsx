@@ -151,7 +151,7 @@ export function Menu({ isOpen }: MenuProps) {
                                   ? "secondary"
                                   : "ghost"
                               }
-                              className="w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
+                              className="relative z-40 pointer-events-auto w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
                               asChild
                             >
                               <Link href={href}>
@@ -199,9 +199,13 @@ export function Menu({ isOpen }: MenuProps) {
                         icon={Icon}
                         label={label}
                         active={
-                          // For the Stories top-level, only mark active on exact /stories path
+                          // When collapsed, do NOT show Stories active if a specific story is selected
+                          // (either via dynamic route /stories/:id or query param). When expanded,
+                          // keep exact-match behavior for top-level.
                           label === "Stories"
-                            ? pathname === href
+                            ? isOpen === false
+                              ? pathname === href && !activeStoryId
+                              : pathname === href
                             : active === undefined
                             ? pathname.startsWith(href)
                             : active
@@ -211,8 +215,11 @@ export function Menu({ isOpen }: MenuProps) {
                             ? storiesList.map((s) => ({
                                 href: `/stories/${s.id}`,
                                 label: s.title && s.title.trim() ? s.title : "Untitled",
-                                // don't mark story submenus active when top-level /stories is selected
-                                active: pathname === "/stories" ? false : s.id === activeStoryId,
+                                // only mark a story submenu active when the current route/query indicates a story is open
+                                active:
+                                  (pathname?.startsWith("/stories/") || !!searchParams?.get("story"))
+                                    ? s.id === activeStoryId
+                                    : false,
                                 count: s.count ?? 0
                               }))
                             : submenus
@@ -226,34 +233,7 @@ export function Menu({ isOpen }: MenuProps) {
               )}
             </li>
           ))}
-          <li className="w-full grow flex items-end">
-            <TooltipProvider disableHoverableContent>
-              <Tooltip delayDuration={100}>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={() => {}}
-                    variant="outline"
-                    className="w-full justify-center h-10 mt-5 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
-                  >
-                    <span className={cn(isOpen === false ? "" : "mr-4")}>
-                      <LogOut size={18} />
-                    </span>
-                    <p
-                      className={cn(
-                        "whitespace-nowrap",
-                        isOpen === false ? "opacity-0 hidden" : "opacity-100"
-                      )}
-                    >
-                      Sign out
-                    </p>
-                  </Button>
-                </TooltipTrigger>
-                {isOpen === false && (
-                  <TooltipContent side="right">Sign out</TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          </li>
+          {/* Sign out removed */}
         </ul>
       </nav>
     </ScrollArea>

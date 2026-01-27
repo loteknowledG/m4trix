@@ -51,7 +51,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
           ) : (
             leftSlot
           )}
-          <div className="ml-4 truncate">
+          <div className="ml-8 truncate">
             {isStoryDetail && selectedCount > 0 ? (
               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
             ) : (
