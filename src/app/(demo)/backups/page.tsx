@@ -48,6 +48,7 @@ export default function BackupsPage() {
   const MAX_IMPORT_BYTES = 10 * 1024 * 1024; // 10 MB
 
   const handleExport = useCallback(async () => {
+    let previewSummary: any = null
     try {
       const heap = (await get("heap-moments")) || (await get("heap-gifs")) || [];
       const trash = (await get("trash-moments")) || (await get("trash-gifs")) || [];
@@ -69,7 +70,7 @@ export default function BackupsPage() {
         trash,
         stories: storiesWithItems,
       };
-      const previewSummary = {
+      previewSummary = {
         heapCount: Array.isArray(heap) ? heap.length : 0,
         trashCount: Array.isArray(trash) ? trash.length : 0,
         storiesCount: Array.isArray(savedStories) ? savedStories.length : 0,
@@ -167,9 +168,11 @@ export default function BackupsPage() {
     } catch (e) {
       console.error("Export failed", e);
       try {
-        const s = JSON.stringify(removeSrc(previewSummary), null, 2);
-        setExportedObj(removeSrc(previewSummary));
-        setExportedText(s);
+        if (previewSummary) {
+          const s = JSON.stringify(removeSrc(previewSummary), null, 2);
+          setExportedObj(removeSrc(previewSummary));
+          setExportedText(s);
+        }
       } catch (er) {}
       setMessage("Export failed");
       setTimeout(() => setMessage(null), 4000);
