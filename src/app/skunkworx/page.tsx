@@ -263,7 +263,6 @@ export function ChatbotDemo() {
 
   const stickyRef = useRef<HTMLDivElement | null>(null)
   const [stickyHeight, setStickyHeight] = useState(0)
-  const [autoScroll, setAutoScroll] = useState(true)
 
   const selectedModelData = models.find((m) => m.id === model)
 
@@ -371,25 +370,7 @@ export function ChatbotDemo() {
     return () => window.removeEventListener("resize", measure)
   }, [messages])
 
-  function AutoScroller({ enabled, messages }: { enabled: boolean; messages: MessageType[] }) {
-    const { scrollToBottom } = useStickToBottomContext()
-    const prevLenRef = useRef(messages.length)
-
-    useLayoutEffect(() => {
-      if (!enabled) {
-        prevLenRef.current = messages.length
-        return
-      }
-
-      if (messages.length !== prevLenRef.current) {
-        scrollToBottom()
-      }
-
-      prevLenRef.current = messages.length
-    }, [messages, enabled, scrollToBottom])
-
-    return null
-  }
+  // Auto-scrolling is always enabled; rely on StickToBottom default behavior.
 
   return (
     <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
@@ -434,7 +415,6 @@ export function ChatbotDemo() {
             </MessageBranch>
           ))}
         </ConversationContent>
-        <AutoScroller enabled={autoScroll} messages={messages} />
         <ConversationScrollButton />
       </Conversation>
       <div ref={stickyRef} className="sticky bottom-0 z-20 bg-zinc-900/95 backdrop-blur-sm shrink-0 space-y-4 pt-4">
@@ -457,12 +437,7 @@ export function ChatbotDemo() {
             </PromptInputBody>
             <PromptInputFooter>
               <PromptInputTools>
-                <PromptInputButton
-                  onClick={() => setAutoScroll(!autoScroll)}
-                  variant={autoScroll ? "default" : "ghost"}
-                >
-                  {autoScroll ? "Auto" : "Manual"}
-                </PromptInputButton>
+                {/* Autoscroll always enabled; toggle removed */}
                 <PromptInputActionMenu>
                   <PromptInputActionMenuTrigger />
                   <PromptInputActionMenuContent>
