@@ -51,6 +51,11 @@ export function getMenuList(pathname: string): Group[] {
           icon: Users
         },
         {
+          href: "/skunkworx",
+          label: "Skunkworx",
+          icon: Bookmark
+        },
+        {
           href: "/stories",
           label: "Stories",
           icon: SquarePen,

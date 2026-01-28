@@ -83,11 +83,15 @@
   }
 
   @layer base {
+    html, body, #__next {
+      height: 100%;
+    }
     * {
       @apply border-border;
     }
     body {
       @apply bg-background text-foreground;
+      min-height: 100%;
     }
     .font-mrs {
       font-family: 'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive;

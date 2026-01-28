@@ -63,7 +63,7 @@ export default async function RootLayout({
           />
         ) : null}
       </head>
-      <body className={GeistSans.className}>
+      <body className={`${GeistSans.className} h-screen overflow-hidden`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
