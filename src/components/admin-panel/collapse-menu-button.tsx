@@ -65,6 +65,7 @@ export function CollapseMenuButton({
   const isSubmenuActive = submenus.some((submenu) =>
     submenu.active === undefined ? submenu.href === pathname : submenu.active
   );
+  const collapsedActiveHighlight = isOpen === false && (active || isSubmenuActive);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(isSubmenuActive);
   return isOpen ? (
     <Collapsible
@@ -205,13 +206,14 @@ export function CollapseMenuButton({
         <Tooltip delayDuration={100}>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button
+                <Button
                 variant={active ? "secondary" : "ghost"}
                 className={cn(
                   "w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active",
-                  // when sidebar is collapsed and this is Stories, give stronger lift
-                  isStories && isOpen === false ? "hover:-translate-y-2 shadow-2xl" : "",
-                  active ? "bg-secondary/95 ring-1 ring-primary/60" : ""
+                  // when sidebar is collapsed and this top-level menu is active, give stronger lift (same as Stories)
+                  collapsedActiveHighlight || (isStories && isOpen === false) ? "hover:-translate-y-2 shadow-2xl" : "",
+                  // show the same active/bg ring when the menu is active OR when collapsed and a submenu is active
+                  (active || collapsedActiveHighlight) ? "bg-secondary/95 ring-1 ring-primary/60" : ""
                 )}
                 onClick={(e) => {
                   if (href) {
@@ -248,13 +250,13 @@ export function CollapseMenuButton({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <DropdownMenuContent
+        <DropdownMenuContent
         side="right"
         sideOffset={25}
         align="start"
         className={cn(
-          // when this is the Stories menu and sidebar is collapsed, present as a lifted card
-          isStories && isOpen === false
+          // when sidebar is collapsed and this top-level menu is active, present as a lifted card (same style used for Stories)
+          collapsedActiveHighlight || (isStories && isOpen === false)
             ? "rounded-lg bg-popover/95 p-2 shadow-2xl transform transition-all duration-200 -translate-y-2 -translate-x-1"
             : ""
         )}

@@ -1,6 +1,8 @@
 /* Import Mrs Saint Delafield from Google Fonts */
 
 /* If Google Fonts import is blocked, you can self-host a WOFF2 at /public/fonts/MrsSaintDelafield.woff2 */
+@import url('https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&display=swap');
+
 @font-face {
   font-family: 'Mrs Saint Delafield';
   src: url('/fonts/MrsSaintDelafield.woff2') format('woff2');
@@ -8,7 +10,6 @@
   font-style: normal;
   font-display: swap;
 }
-@import url('https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&display=swap');
 
 @tailwind base;
   @tailwind components;
