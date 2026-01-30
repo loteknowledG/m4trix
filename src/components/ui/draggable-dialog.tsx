@@ -21,10 +21,13 @@ export function DraggableDialog({ open, onOpenChange, title, children, className
 
   React.useEffect(() => {
     if (open && pos === null) {
-      const left = Math.max(48, window.innerWidth / 2 - 480 / 2)
-      const top = Math.max(48, window.innerHeight / 2 - 360 / 2)
+      const defaultWidth = 420 // match compact chat width from screenshot
+      const defaultHeight = Math.min(Math.floor(window.innerHeight * 0.8), 920) // taller, responsive height
+
+      const left = Math.max(48, window.innerWidth / 2 - defaultWidth / 2)
+      const top = Math.max(48, window.innerHeight / 2 - defaultHeight / 2)
       setPos({ left, top })
-      setSize({ width: Math.min(960, Math.floor(window.innerWidth * 0.9)), height: Math.max(240, Math.floor(window.innerHeight * 0.6)) })
+      setSize({ width: Math.min(defaultWidth, Math.floor(window.innerWidth * 0.95)), height: Math.max(240, defaultHeight) })
     }
   }, [open, pos])
 
@@ -96,7 +99,7 @@ export function DraggableDialog({ open, onOpenChange, title, children, className
           className={cn("fixed z-50 bg-background shadow-xl border p-0 overflow-hidden rounded-lg", className)}
           style={
             pos
-              ? { left: pos.left, top: pos.top, width: size?.width ?? 960, height: size?.height ?? Math.floor(window.innerHeight * 0.6) }
+              ? { left: pos.left, top: pos.top, width: size?.width ?? 420, height: size?.height ?? Math.floor(window.innerHeight * 0.8) }
               : { left: "50%", top: "50%", transform: "translate(-50%,-50%)" }
           }
         >
