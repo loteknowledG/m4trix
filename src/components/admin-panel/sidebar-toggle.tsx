@@ -9,8 +9,14 @@ interface SidebarToggleProps {
 }
 
 export function SidebarToggle({ isOpen, setIsOpen }: SidebarToggleProps) {
+  // Calculate left offset so the toggle sits just outside the sidebar
+  const left = isOpen === false ? `calc(90px - 16px)` : `calc(288px - 16px)`;
+
   return (
-    <div className="invisible lg:visible absolute bottom-20 -right-[16px] z-20">
+    <div
+      className="invisible lg:visible fixed bottom-20 z-50"
+      style={{ left }}
+    >
       <Button
         onClick={() => setIsOpen?.()}
         className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"

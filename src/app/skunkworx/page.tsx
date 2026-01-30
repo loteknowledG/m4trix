@@ -69,9 +69,11 @@ import {
 } from "@/components/ai/sources"
 import { Suggestion, Suggestions } from "@/components/ai/suggestion"
 import type { ToolUIPart } from "ai"
-import { CheckIcon, GlobeIcon, MicIcon } from "lucide-react"
+import { CheckIcon, GlobeIcon, MicIcon, MessageCircle } from "lucide-react"
 import { nanoid } from "nanoid"
 import { SetStateAction, useCallback, useLayoutEffect, useRef, useState } from "react"
+import DraggableDialog from "@/components/ui/draggable-dialog"
+import { Button } from "@/components/ui/button"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 import { toast } from "sonner"
 
@@ -371,8 +373,9 @@ export function ChatbotDemo() {
   }, [messages])
 
   // Auto-scrolling is always enabled; rely on StickToBottom default behavior.
+  // Auto-scrolling is always enabled; rely on StickToBottom default behavior.
 
-  return (
+  const chat = (
     <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
       <Conversation style={{ height: `calc(100% - ${stickyHeight}px)` }} className="min-h-0 border-b">
         <ConversationContent className="min-h-0">
@@ -515,6 +518,28 @@ export function ChatbotDemo() {
         </div>
       </div>
     </div>
+  )
+
+  const [modalOpen, setModalOpen] = useState(false)
+
+  return (
+    <>
+      {!modalOpen && chat}
+
+      <Button
+        className="fixed right-6 bottom-6 z-50 shadow-lg"
+        size="icon"
+        variant="default"
+        onClick={() => setModalOpen(true)}
+        aria-label="Open Chat"
+      >
+        <MessageCircle />
+      </Button>
+
+      <DraggableDialog open={modalOpen} onOpenChange={setModalOpen} title={"Skunkworx Chat"}>
+        {chat}
+      </DraggableDialog>
+    </>
   )
 }
 

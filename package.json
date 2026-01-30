@@ -37,6 +37,7 @@
     "geist": "^1.3.0",
     "idb-keyval": "^6.2.2",
     "immer": "^10.1.1",
+    "langchain": "^1.2.15",
     "lexical": "^0.39.0",
     "lucide-react": "^0.377.0",
     "motion": "^12.26.2",
