@@ -307,7 +307,7 @@ export default function StoryByIdPage() {
       )}
     >
       <ErrorBoundary>
-        <div className="overflow-auto" style={{ height: 'calc(100vh - 64px)' }}>
+        <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
           <div className="py-4">
         <div className="mb-6">
           <input

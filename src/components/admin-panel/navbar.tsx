@@ -4,6 +4,7 @@ import useSelection from "@/hooks/use-selection";
 import { SheetMenu } from "@/components/admin-panel/sheet-menu";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Trash2, SquarePen, X } from "lucide-react";
+import { useRef, useEffect } from "react";
 
 interface NavbarProps {
   title: string;
@@ -13,6 +14,7 @@ interface NavbarProps {
 
 export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   const pathname = usePathname();
+  const headerRef = useRef<HTMLElement | null>(null);
   const isStoryDetail = !!pathname && pathname.startsWith("/stories/");
   const isStories = !!title && title.toLowerCase() === "stories";
 
@@ -35,8 +37,20 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
     } catch (e) {}
   };
 
+  useEffect(() => {
+    const setVar = () => {
+      const h = headerRef.current?.offsetHeight ?? 56;
+      try {
+        document.documentElement.style.setProperty("--app-header-height", `${h}px`);
+      } catch (e) {}
+    };
+    setVar();
+    window.addEventListener("resize", setVar);
+    return () => window.removeEventListener("resize", setVar);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-10 w-full bg-background/95 shadow backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary">
+    <header ref={headerRef} className="sticky top-0 z-10 w-full bg-background/95 shadow backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary">
       <div className="mx-4 sm:mx-8 flex h-14 items-center">
           <div className="flex items-center space-x-4 lg:space-x-0 flex-1">
           <SheetMenu />
