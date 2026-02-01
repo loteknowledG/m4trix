@@ -143,16 +143,7 @@ export default function CollectionOverlay() {
     setEditing(false);
   };
 
-  const clearText = () => {
-    try {
-      localStorage.removeItem(`overlay:text:${currentId}`);
-    } catch (e) {}
-    setText("");
-    setStrokeWidth(0);
-    setStrokeColor("#000000");
-    setFontColor("#ffffff");
-    setEditing(false);
-  };
+  
 
   const savePosition = (p: { x: number; y: number }) => {
     try {
@@ -172,10 +163,7 @@ export default function CollectionOverlay() {
     setPos(p);
   };
 
-  const resetPosition = () => {
-    const p = { x: 0.5, y: 0.5 };
-    savePosition(p);
-  };
+  
 
   const onStartDrag = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
@@ -369,27 +357,10 @@ export default function CollectionOverlay() {
             ) : null}
           </div>
 
-          <div className="absolute right-4 bottom-6 z-40 flex items-center gap-2">
-            {editing ? (
-              <>
-                <button
-                  onClick={() => clearText()}
-                  className="px-3 py-1 rounded bg-destructive text-destructive-foreground text-sm"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={() => resetPosition()}
-                  className="px-3 py-1 rounded border text-sm"
-                >
-                  Reset Position
-                </button>
-              </>
-            ) : null}
-          </div>
+          {/* Editor action buttons removed per request */}
 
           <div
-            className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-50 transform transition-transform duration-300 ease-in-out ${
+            className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${
               editing ? "translate-x-0" : "translate-x-full"
             }`}
             role="dialog"

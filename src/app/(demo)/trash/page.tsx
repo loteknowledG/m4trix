@@ -90,7 +90,8 @@ export default function TrashPage() {
   return (
     <ContentLayout title="Trash" navLeft={null}>
       <ErrorBoundary>
-        <div className="py-4">
+        <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
+          <div className="py-4">
           {moments.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">No items in Trash.</div>
           ) : (
@@ -131,6 +132,7 @@ export default function TrashPage() {
               </div>
             </MomentsProvider>
           )}
+          </div>
         </div>
       </ErrorBoundary>
     </ContentLayout>

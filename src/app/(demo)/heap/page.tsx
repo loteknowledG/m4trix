@@ -449,7 +449,7 @@ function HeapInner() {
         ) : null
       }
     >
-      <div className="mt-6">
+      <div className="mt-6 overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
         <div
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -627,7 +627,7 @@ function HeapInner() {
             </div>
             <CollectionOverlay />
           </MomentsProvider>
-         
+
         </div>
       </div>
     </ContentLayout>

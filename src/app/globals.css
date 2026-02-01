@@ -46,6 +46,8 @@
       --ring: 240 10% 3.9%;
 
       --radius: 0.5rem;
+        /* default header height to reduce initial layout shift before JS measurement */
+        --app-header-height: 56px;
     }
 
     .dark {

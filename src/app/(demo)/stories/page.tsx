@@ -62,7 +62,8 @@ export default function StoriesPage() {
 
   return (
     <ContentLayout title="Stories" navLeft={null}>
-      <div className="py-4">
+      <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
+        <div className="py-4">
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading…</div>
         ) : stories.length === 0 ? (
@@ -91,6 +92,7 @@ export default function StoriesPage() {
             ))}
           </div>
         )}
+        </div>
       </div>
     </ContentLayout>
   );
