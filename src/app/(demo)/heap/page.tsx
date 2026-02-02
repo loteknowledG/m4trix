@@ -168,6 +168,99 @@ function HeapInner() {
     loadStories();
   }, [loadStories]);
 
+  const loadSaved = useCallback(async () => {
+    try {
+      const saved = (await get<Moment[]>("heap-moments")) || (await get<Moment[]>("heap-gifs")) || [];
+      if (Array.isArray(saved)) {
+        setMoments(saved);
+        console.debug("Loaded saved moments:", saved.length, saved);
+        setLoaded(true);
+      }
+    } catch (e) {
+      console.error("Failed to load saved moments", e);
+    }
+  }, []);
+
+  const addMomentFromFile = useCallback((file: File) => {
+    if (!file || file.size === 0) return;
+    const isMomentMime = file.type === "image/gif" || file.type === "image/jpeg";
+    const isMomentExt = file.name?.toLowerCase().endsWith(".gif") || file.name?.toLowerCase().endsWith(".jpg") || file.name?.toLowerCase().endsWith(".jpeg");
+    if (!isMomentMime && !isMomentExt) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string | null;
+      if (!result) return;
+      setMoments((s) => {
+        if (s.some((x) => x.src === result)) {
+          queueDuplicateToast(result);
+          return s;
+        }
+        return [{ id: `${Date.now()}-${Math.random()}`, src: result, name: file.name }, ...s];
+      });
+    };
+    reader.readAsDataURL(file);
+  }, [queueDuplicateToast]);
+
+  const addMomentFromUrl = useCallback((url: string) => {
+    if (!url) return;
+    const u = url.trim();
+    const isDataMoment = u.startsWith("data:image/gif") || u.startsWith("data:image/jpeg");
+    const isMomentUrl = [".gif", ".jpg", ".jpeg"].some(ext => u.toLowerCase().split("?")[0].endsWith(ext));
+    if (!isDataMoment && !isMomentUrl) return;
+    setMoments((s) => {
+      if (s.some((x) => x.src === u)) {
+        queueDuplicateToast(u);
+        return s;
+      }
+      return [{ id: `${Date.now()}-${Math.random()}`, src: u, name: u }, ...s];
+    });
+  }, [queueDuplicateToast]);
+
+  
+
+  const handlePaste = useCallback((e: ClipboardEvent | React.ClipboardEvent) => {
+    try {
+      const clipboardData = (e as any).clipboardData ?? (window as any).clipboardData;
+      if (!clipboardData) return;
+
+      const items = clipboardData.items as DataTransferItemList | null | undefined;
+      let handled = false;
+      if (items && items.length) {
+        for (const raw of Array.from(items)) {
+          const it = raw as DataTransferItem;
+          if (it.kind === "file") {
+            const file = it.getAsFile?.();
+            if (file) {
+              addMomentFromFile(file);
+              handled = true;
+            }
+          } else if (it.type && it.type.indexOf("image/") === 0) {
+            const blob = it.getAsFile?.();
+            if (blob) {
+              addMomentFromFile(blob);
+              handled = true;
+            }
+          } else if (it.type === "text/uri-list" || it.type === "text/plain") {
+            const txt = clipboardData.getData(it.type as string);
+            if (txt) {
+              addMomentFromUrl(txt);
+              handled = true;
+            }
+          }
+        }
+      }
+
+      if (!handled) {
+        const txt = clipboardData.getData("text/plain") || clipboardData.getData("text/uri-list");
+        if (txt) addMomentFromUrl(txt);
+      }
+
+      if ((e as any).preventDefault) (e as any).preventDefault();
+    } catch (err) {
+      console.error("paste handling failed", err);
+    }
+  }, [addMomentFromFile, addMomentFromUrl]);
+
   useEffect(() => {
     const onStoriesUpdated = () => loadStories();
     const onMomentsUpdated = () => loadSaved();
@@ -204,18 +297,6 @@ function HeapInner() {
 
   const pathname = usePathname();
 
-  const loadSaved = useCallback(async () => {
-    try {
-      const saved = (await get<Moment[]>("heap-moments")) || (await get<Moment[]>("heap-gifs")) || [];
-      if (Array.isArray(saved)) {
-        setMoments(saved);
-        console.debug("Loaded saved moments:", saved.length, saved);
-        setLoaded(true);
-      }
-    } catch (e) {
-      console.error("Failed to load saved moments", e);
-    }
-  }, []);
 
   // load on mount and when pathname changes (so navigating back reloads)
   useEffect(() => {
@@ -257,45 +338,7 @@ function HeapInner() {
       .catch((e) => console.error("Failed to save moments to idb", e));
   }, [moments, loaded]);
 
-  const addMomentFromFile = useCallback((file: File) => {
-    // reject empty files
-    if (!file || file.size === 0) return;
-    // accept GIF and JPG files
-    const isMomentMime = file.type === "image/gif" || file.type === "image/jpeg";
-    const isMomentExt = file.name?.toLowerCase().endsWith(".gif") || file.name?.toLowerCase().endsWith(".jpg") || file.name?.toLowerCase().endsWith(".jpeg");
-    if (!isMomentMime && !isMomentExt) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string | null;
-      if (!result) return;
-      setMoments((s) => {
-        // avoid duplicates by src
-        if (s.some((x) => x.src === result)) {
-          queueDuplicateToast(result);
-          return s;
-        }
-        return [{ id: `${Date.now()}-${Math.random()}`, src: result, name: file.name }, ...s];
-      });
-    };
-    reader.readAsDataURL(file);
-  }, [queueDuplicateToast]);
-
-  const addMomentFromUrl = useCallback((url: string) => {
-    // simple validation
-    if (!url) return;
-    const u = url.trim();
-    // accept data GIF/JPG or URLs that look like GIF/JPG (moments)
-    const isDataMoment = u.startsWith("data:image/gif") || u.startsWith("data:image/jpeg");
-    const isMomentUrl = [".gif", ".jpg", ".jpeg"].some(ext => u.toLowerCase().split("?")[0].endsWith(ext));
-    if (!isDataMoment && !isMomentUrl) return;
-    setMoments((s) => {
-      if (s.some((x) => x.src === u)) {
-        queueDuplicateToast(u);
-        return s;
-      }
-      return [{ id: `${Date.now()}-${Math.random()}`, src: u, name: u }, ...s];
-    });
-  }, [queueDuplicateToast]);
+  
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -319,50 +362,7 @@ function HeapInner() {
     }
   }, [onFiles, addMomentFromUrl]);
 
-  const handlePaste = useCallback((e: ClipboardEvent | React.ClipboardEvent) => {
-    try {
-      const clipboardData = (e as any).clipboardData ?? (window as any).clipboardData;
-      if (!clipboardData) return;
-
-      const items = clipboardData.items as DataTransferItemList | null | undefined;
-      let handled = false;
-      if (items && items.length) {
-        for (const raw of Array.from(items)) {
-          const it = raw as DataTransferItem;
-          // file items (images)
-            if (it.kind === "file") {
-            const file = it.getAsFile?.();
-            if (file) {
-              addMomentFromFile(file);
-              handled = true;
-            }
-          } else if (it.type && it.type.indexOf("image/") === 0) {
-            const blob = it.getAsFile?.();
-            if (blob) {
-              addMomentFromFile(blob);
-              handled = true;
-            }
-          } else if (it.type === "text/uri-list" || it.type === "text/plain") {
-            const txt = clipboardData.getData(it.type as string);
-            if (txt) {
-              addMomentFromUrl(txt);
-              handled = true;
-            }
-          }
-        }
-      }
-
-      if (!handled) {
-        const txt = clipboardData.getData("text/plain") || clipboardData.getData("text/uri-list");
-        if (txt) addMomentFromUrl(txt);
-      }
-
-      // prevent default to avoid accidental navigation
-      if ((e as any).preventDefault) (e as any).preventDefault();
-    } catch (err) {
-      console.error("paste handling failed", err);
-    }
-  }, [addMomentFromFile, addMomentFromUrl]);
+  
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

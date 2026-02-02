@@ -231,10 +231,17 @@ export default function CollectionOverlay() {
   // close overlay when the route changes to avoid leaving a full-screen
   // overlay active after navigation (e.g., sidebar link clicks)
   const pathname = usePathname();
+  const prevPathRef = useRef<string | null>(pathname);
   useEffect(() => {
-    if (!ctx || !isOpen) return;
-    // close immediately on any pathname change
-    close();
+    if (!ctx || !isOpen) {
+      prevPathRef.current = pathname;
+      return;
+    }
+    // only close when the pathname has actually changed (ignore initial mount)
+    if (prevPathRef.current && prevPathRef.current !== pathname) {
+      close();
+    }
+    prevPathRef.current = pathname;
   }, [ctx, isOpen, close, pathname]);
   if (!ctx || !isOpen || !currentId) return null;
   const item = collection.find((m: any) => m.id === currentId);
