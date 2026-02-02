@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import type { ComponentProps, ReactNode } from "react"
 import {
   Command,
@@ -79,7 +80,7 @@ export const ModelSelectorSeparator = (props: ModelSelectorSeparatorProps) => (
   <CommandSeparator {...props} />
 )
 
-export type ModelSelectorLogoProps = Omit<ComponentProps<"img">, "src" | "alt"> & {
+export type ModelSelectorLogoProps = Omit<ComponentProps<typeof Image>, "src" | "alt" | "width" | "height"> & {
   provider:
     | "moonshotai-cn"
     | "lucidquery"
@@ -141,7 +142,7 @@ export type ModelSelectorLogoProps = Omit<ComponentProps<"img">, "src" | "alt"> 
 }
 
 export const ModelSelectorLogo = ({ provider, className, ...props }: ModelSelectorLogoProps) => (
-  <img
+  <Image
     {...props}
     alt={`${provider} logo`}
     className={cn("size-3 dark:invert", className)}
@@ -156,7 +157,7 @@ export type ModelSelectorLogoGroupProps = ComponentProps<"div">
 export const ModelSelectorLogoGroup = ({ className, ...props }: ModelSelectorLogoGroupProps) => (
   <div
     className={cn(
-      "-space-x-1 flex shrink-0 items-center [&>img]:rounded-full [&>img]:bg-background [&>img]:p-px [&>img]:ring-1 dark:[&>img]:bg-foreground",
+      "-space-x-1 flex shrink-0 items-center [&>span]:rounded-full [&>span]:bg-background [&>span]:p-px [&>span]:ring-1 [&>span>img]:rounded-full dark:[&>span]:bg-foreground",
       className,
     )}
     {...props}

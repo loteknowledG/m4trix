@@ -180,7 +180,7 @@ export default function ReasoningDemo() {
         <ReasoningContent>
           Let me think through this step by step...
 
-          First, I need to consider the user's requirements. They want a solution that is both efficient and maintainable.
+          First, I need to consider the user&apos;s requirements. They want a solution that is both efficient and maintainable.
 
           Looking at the codebase, I can see several potential approaches:
           1. **Refactor the existing module** - This would minimize disruption

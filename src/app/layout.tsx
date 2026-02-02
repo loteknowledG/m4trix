@@ -1,10 +1,25 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { Mrs_Saint_Delafield, Satisfy } from "next/font/google";
 import { headers } from "next/headers";
 
 import "./globals.css";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
+
+const SignatureScript = Mrs_Saint_Delafield({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-mrs-saint-delafield",
+  display: "swap",
+});
+
+const SatisfyScript = Satisfy({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-satisfy",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -53,9 +68,6 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Satisfy&display=swap" rel="stylesheet" />
         {nonce ? (
           <script
             nonce={nonce}
@@ -63,7 +75,9 @@ export default async function RootLayout({
           />
         ) : null}
       </head>
-      <body className={`${GeistSans.className} h-screen overflow-hidden`}>
+      <body
+        className={`${GeistSans.className} ${SignatureScript.variable} ${SatisfyScript.variable} h-screen overflow-hidden`}
+      >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>

@@ -17,6 +17,8 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   const headerRef = useRef<HTMLElement | null>(null);
   const isStoryDetail = !!pathname && pathname.startsWith("/stories/");
   const isStories = !!title && title.toLowerCase() === "stories";
+  const isTags = !!title && title.toLowerCase() === "tags";
+  const isTrash = !!title && title.toLowerCase() === "trash";
 
   // derive scope for selection store when on a story detail
   let scope = "";
@@ -29,7 +31,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   const selectedCount = useSelection((s) => (scope ? (s.selections[scope]?.length || 0) : 0));
   const clearSelection = useSelection((s) => s.clear);
 
-  const displayTitle = isStoryDetail ? "story" : isStories ? "stories" : title;
+  const displayTitle = isStoryDetail ? "" : isStories ? "" : isTags ? "" : isTrash ? "" : title;
 
   const onAction = (action: string) => {
     try {
@@ -69,7 +71,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
             {isStoryDetail && selectedCount > 0 ? (
               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
             ) : (
-              <h2 className={isStories || isStoryDetail ? "text-sm font-medium lowercase truncate" : "text-lg font-medium truncate"}>
+              <h2 className={isStories || isStoryDetail || isTags || isTrash ? "text-sm font-medium lowercase truncate" : "text-lg font-medium truncate"}>
                 {displayTitle}
               </h2>
             )}

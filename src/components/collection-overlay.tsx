@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMomentsContext } from "@/context/moments-collection";
 import { X, ArrowLeft, ArrowRight, Pencil } from "lucide-react";
+
+const noop = () => {};
 
 export default function CollectionOverlay() {
   const ctx = useMomentsContext();
   const collection = ctx?.collection ?? [];
   const currentId = ctx?.currentId ?? null;
-  const close = ctx?.close ?? (() => {});
-  const next = ctx?.next ?? (() => {});
-  const prev = ctx?.prev ?? (() => {});
+  const close = ctx?.close ?? noop;
+  const next = ctx?.next ?? noop;
+  const prev = ctx?.prev ?? noop;
   const isOpen = ctx?.isOpen ?? false;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
@@ -30,7 +32,7 @@ export default function CollectionOverlay() {
   const draggingRef = useRef(false);
 
   // compute pixel width from percent and container size so wrapping is stable
-  const computePixelWidth = () => {
+  const computePixelWidth = useCallback(() => {
     try {
       if (!containerRef.current) return setPixelWidth(null);
       // if a drag has locked the width, respect the locked value
@@ -43,7 +45,7 @@ export default function CollectionOverlay() {
     } catch (e) {
       setPixelWidth(null);
     }
-  };
+  }, [textWidth]);
 
   // load saved overlay text for the current item from localStorage
   useEffect(() => {
@@ -102,7 +104,7 @@ export default function CollectionOverlay() {
     const onResize = () => computePixelWidth();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [textWidth]);
+  }, [computePixelWidth]);
 
   const saveText = (
     t: string,
@@ -233,7 +235,7 @@ export default function CollectionOverlay() {
     if (!ctx || !isOpen) return;
     // close immediately on any pathname change
     close();
-  }, [pathname]);
+  }, [ctx, isOpen, close, pathname]);
   if (!ctx || !isOpen || !currentId) return null;
   const item = collection.find((m: any) => m.id === currentId);
   if (!item) return null;
@@ -302,6 +304,7 @@ export default function CollectionOverlay() {
 
           <div ref={containerRef} className="max-h-full max-w-full flex items-center justify-center relative">
             <div className="flex items-center justify-center w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element -- overlay images may be blob/data URLs */}
               <img
                 src={item.src}
                 alt={item.name || "Moment preview"}

@@ -169,10 +169,15 @@ function HeapInner() {
   }, [loadStories]);
 
   useEffect(() => {
-    const handler = () => loadStories();
-    window.addEventListener("stories-updated", handler);
-    return () => window.removeEventListener("stories-updated", handler);
-  }, [loadStories]);
+    const onStoriesUpdated = () => loadStories();
+    const onMomentsUpdated = () => loadSaved();
+    window.addEventListener("stories-updated", onStoriesUpdated);
+    window.addEventListener("moments-updated", onMomentsUpdated);
+    return () => {
+      window.removeEventListener("stories-updated", onStoriesUpdated);
+      window.removeEventListener("moments-updated", onMomentsUpdated);
+    };
+  }, [loadStories, loadSaved]);
 
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -233,7 +238,7 @@ function HeapInner() {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("paste", onPasteWindow as EventListener);
     };
-  }, [loadSaved]);
+  }, [loadSaved, handlePaste]);
 
   
 
@@ -273,7 +278,7 @@ function HeapInner() {
       });
     };
     reader.readAsDataURL(file);
-  }, [toast]);
+  }, [queueDuplicateToast]);
 
   const addMomentFromUrl = useCallback((url: string) => {
     // simple validation
@@ -290,7 +295,7 @@ function HeapInner() {
       }
       return [{ id: `${Date.now()}-${Math.random()}`, src: u, name: u }, ...s];
     });
-  }, [toast]);
+  }, [queueDuplicateToast]);
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -403,9 +408,7 @@ function HeapInner() {
             </button>
             <span className="text-sm font-medium">{selectedCount} selected</span>
           </div>
-        ) : (
-          <div className="text-sm font-medium">heap</div>
-        )
+        ) : null
       }
       navRight={
         anySelected ? (
@@ -596,22 +599,11 @@ function HeapInner() {
             onChange={(e) => onFiles(e.target.files)}
           />
           {/* Instruction banner — moved above the grid to avoid overlapping images */}
-
-          
-
           <div className="mb-4 flex justify-center">
             <div className="bg-background/50 backdrop-blur-sm px-4 py-1 rounded text-sm text-muted-foreground flex items-center gap-2">
               <Upload size={16} />
               <span>{isDragActive ? "Release to add moments" : "Drag and drop or click here to upload moments"}</span>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {moments.length === 0 && (
-              <div className="col-span-full text-center text-muted-foreground py-12">
-                  No moments yet — drop files or click to add
-                </div>
-            )}
           </div>
           <MomentsProvider collection={moments}>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
@@ -620,7 +612,6 @@ function HeapInner() {
                   No moments yet — drop files or click to add
                 </div>
               )}
-
               {moments.map((g) => (
                 <MomentCard key={g.id} item={{ ...g, selected: (selectedIds || []).includes(g.id) }} anySelected={anySelected} toggleSelect={(tid) => toggleSelect(tid)} />
               ))}

@@ -177,7 +177,7 @@ export default function BackupsPage() {
       setMessage("Export failed");
       setTimeout(() => setMessage(null), 4000);
     }
-  }, []);
+  }, [MAX_EXPORT_BYTES]);
 
   const handleImport = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;

@@ -54,7 +54,7 @@ export default function MomentCard({
   useEffect(() => {
     if (!open) return;
     setOpen(false);
-  }, [pathname]);
+  }, [open, pathname]);
 
   const handleContainerClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     // prevent parent handlers (file upload) from triggering
@@ -146,6 +146,7 @@ export default function MomentCard({
             <div className="w-full h-full flex items-center justify-center relative">
               <div className="max-h-full max-w-full flex items-center justify-center">
                 <div className="flex items-center justify-center w-full">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- overlay images can be blob/data URLs */}
                   <img
                     src={item.src}
                     alt={item.name || "Moment preview"}

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
-import { Upload, ArrowLeft } from "lucide-react";
+import { Upload, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import useSelection from "@/hooks/use-selection";
 import MomentCard from "@/components/moment-card";
@@ -302,9 +302,18 @@ export default function StoryByIdPage() {
           size="icon"
           aria-label="Back to list"
         >
-          <ArrowLeft size={16} />
+          <ChevronLeft size={16} />
         </Button>
       )}
+        navRight={(
+          <Button
+            onClick={() => {}}
+            className="ml-2"
+            variant="outline"
+          >
+            Preview
+          </Button>
+        )}
     >
       <ErrorBoundary>
         <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
@@ -362,5 +371,5 @@ export default function StoryByIdPage() {
         </div>
       </ErrorBoundary>
     </ContentLayout>
-  );
-}
+    );
+  }

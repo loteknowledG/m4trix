@@ -3,7 +3,7 @@
 import type { FileUIPart, UIMessage } from "ai"
 import { ChevronLeftIcon, ChevronRightIcon, PaperclipIcon, XIcon } from "lucide-react"
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react"
-import { createContext, memo, useContext, useEffect, useState } from "react"
+import { createContext, memo, useContext, useEffect, useMemo, useState } from "react"
 import { Streamdown } from "streamdown"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group"
@@ -155,7 +155,7 @@ export type MessageBranchContentProps = HTMLAttributes<HTMLDivElement>
 
 export const MessageBranchContent = ({ children, ...props }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch()
-  const childrenArray = Array.isArray(children) ? children : [children]
+  const childrenArray = useMemo(() => (Array.isArray(children) ? children : [children]), [children])
 
   // Use useEffect to update branches when they change
   useEffect(() => {
@@ -288,6 +288,7 @@ export function MessageAttachment({ data, className, onRemove, ...props }: Messa
     <div className={cn("group relative size-24 overflow-hidden rounded-lg", className)} {...props}>
       {isImage ? (
         <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- message attachments can be blob URLs that next/image cannot render */}
           <img
             alt={filename || "attachment"}
             className="size-full object-cover"

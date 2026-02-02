@@ -177,8 +177,10 @@ export const AttachmentPreview = ({ fallbackIcon, className, ...props }: Attachm
 
   const renderImage = (url: string, filename: string | undefined, isGrid: boolean) =>
     isGrid ? (
+      // eslint-disable-next-line @next/next/no-img-element -- attachment previews rely on blob/data URLs from the client
       <img alt={filename || "Image"} className="size-full object-cover" height={96} src={url} width={96} />
     ) : (
+      // eslint-disable-next-line @next/next/no-img-element -- attachment previews rely on blob/data URLs from the client
       <img alt={filename || "Image"} className="size-full rounded object-cover" height={20} src={url} width={20} />
     )
 

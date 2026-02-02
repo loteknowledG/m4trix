@@ -1,5 +1,4 @@
 import {
-  Tag,
   Users,
   Settings,
   Bookmark,
@@ -65,11 +64,6 @@ export function getMenuList(pathname: string): Group[] {
               label: "All Stories"
             }
           ]
-        },
-        {
-          href: "/tags",
-          label: "Tags",
-          icon: Tag
         },
         {
           href: "/trash",
