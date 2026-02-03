@@ -289,7 +289,7 @@ function HeapInner() {
     });
   }, [queueDuplicateToast, isImageLikeUrl]);
 
-  
+
 
   const handlePaste = useCallback((e: ClipboardEvent | React.ClipboardEvent) => {
     try {
@@ -367,7 +367,7 @@ function HeapInner() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedCount = (selectedIds || []).length;
   const clearSelection = useCallback(() => {
-    try { clearSelectionStore("heap"); } catch (e) {}
+    try { clearSelectionStore("heap"); } catch (e) { }
   }, [clearSelectionStore]);
 
   // When the Google Photos import sheet opens, focus the album URL input
@@ -389,7 +389,7 @@ function HeapInner() {
       document.title = prev ?? "matrix";
     };
   }, []);
-  
+
   const [isDragActive, setIsDragActive] = useState(false);
 
   const pathname = usePathname();
@@ -418,7 +418,7 @@ function HeapInner() {
     };
   }, [loadSaved, handlePaste]);
 
-  
+
 
   // persist moments to IndexedDB whenever they change (only after initial load)
   useEffect(() => {
@@ -436,14 +436,14 @@ function HeapInner() {
       .catch((e) => console.error("Failed to save moments to idb", e));
   }, [moments, loaded]);
 
-  
+
 
   const onFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     Array.from(files).forEach((f) => addMomentFromFile(f));
   }, [addMomentFromFile]);
 
-  
+
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -460,7 +460,7 @@ function HeapInner() {
     }
   }, [onFiles, addMomentFromUrl]);
 
-  
+
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -536,7 +536,7 @@ function HeapInner() {
                   await set("trash-moments", newTrash);
                   // remove from heap
                   setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
-                  try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newTrash.length } })); } catch (e) {}
+                  try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newTrash.length } })); } catch (e) { }
                 } catch (err) {
                   console.error("Failed to move to trash", err);
                 }
@@ -559,11 +559,10 @@ function HeapInner() {
           onClick={() => fileInputRef.current?.click()}
           onPaste={handlePaste}
           tabIndex={0}
-          className={`relative min-h-[60vh] rounded-lg p-4 transition-colors ${
-            isDragActive
+          className={`relative min-h-[60vh] rounded-lg p-4 transition-colors ${isDragActive
               ? "border-4 border-primary/60 bg-primary/5"
               : "border-2 border-dashed border-border/60 bg-transparent"
-          }`}
+            }`}
         >
           <Sheet open={storySheetOpen} onOpenChange={setStorySheetOpen}>
             <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
@@ -595,11 +594,11 @@ function HeapInner() {
                         // no-op in non-browser environments
                       }
                       await set("stories-active", id);
-                        try {
-                          toast.show(`Moved ${selected.length} moments to new story`);
-                        } catch (e) {}
+                      try {
+                        toast.show(`Moved ${selected.length} moments to new story`);
+                      } catch (e) { }
                       setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
-                        router.push(`/stories/${id}`);
+                      router.push(`/stories/${id}`);
                     } catch (err) {
                       console.error("Failed to create story", err);
                       router.push("/stories");
@@ -656,7 +655,7 @@ function HeapInner() {
                           await set("stories-active", s.id);
                           try {
                             toast.show(`Moved ${selected.length} moments to ${s.title || "story"}`);
-                          } catch (e) {}
+                          } catch (e) { }
                           // remove moved moments from heap
                           setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                           router.push(`/stories/${s.id}`);
@@ -725,9 +724,9 @@ function HeapInner() {
                             arr = Array.isArray(json.urls) ? json.urls : [];
                           }
                           console.log("[heap] album fetch result (enter)");
-                          try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch {}
+                          try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch { }
                           const urls = normalizeUrls(arr);
-                          try { console.log("[heap] normalized", { sample: urls.slice(0,5), total: urls.length }); } catch {}
+                          try { console.log("[heap] normalized", { sample: urls.slice(0, 5), total: urls.length }); } catch { }
                           let added = 0;
                           for (const u of urls) {
                             const s = proxifyUrl(fixGoogleUrl(String(u || "")));
@@ -736,7 +735,7 @@ function HeapInner() {
                               added++;
                             }
                           }
-                          try { toast.show(`Imported ${added} images from album`); } catch (e) {}
+                          try { toast.show(`Imported ${added} images from album`); } catch (e) { }
                           setImportSheetOpen(false);
                           setImportUrl("");
                         } catch (err: any) {
@@ -773,9 +772,9 @@ function HeapInner() {
                           arr = Array.isArray(json.urls) ? json.urls : [];
                         }
                         console.log("[heap] album fetch result (button)");
-                        try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch {}
+                        try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch { }
                         const urls = normalizeUrls(arr);
-                        try { console.log("[heap] normalized", { sample: urls.slice(0,5), total: urls.length }); } catch {}
+                        try { console.log("[heap] normalized", { sample: urls.slice(0, 5), total: urls.length }); } catch { }
                         let added = 0;
                         for (const u of urls) {
                           const s = proxifyUrl(fixGoogleUrl(String(u || "")));
@@ -784,7 +783,7 @@ function HeapInner() {
                             added++;
                           }
                         }
-                        try { toast.show(`Imported ${added} images from album`); } catch (e) {}
+                        try { toast.show(`Imported ${added} images from album`); } catch (e) { }
                         setImportSheetOpen(false);
                         setImportUrl("");
                       } catch (err: any) {
