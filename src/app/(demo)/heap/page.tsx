@@ -117,6 +117,79 @@ type Moment = {
 function HeapInner() {
   const toast = useToast();
   const [storySheetOpen, setStorySheetOpen] = useState(false);
+  const isImageLikeUrl = useCallback((u: string) => {
+    if (!u) return false;
+    const clean = u.trim();
+    const base = clean.split("?")[0];
+    const hasExt = [".gif", ".jpg", ".jpeg", ".png", ".webp"].some(ext => base.toLowerCase().endsWith(ext));
+    const isGoogleContent = /googleusercontent\.com/.test(clean);
+    return hasExt || isGoogleContent;
+  }, []);
+  const fixGoogleUrl = useCallback((u: string) => {
+    try {
+      const s = String(u || "");
+      if (!s) return s;
+      if (/googleusercontent\.com\//.test(s)) {
+        // If there's no explicit size directive, add one for display
+        // Google Photos base URLs often require a trailing size param; '=s0' yields original size
+        if (!/[?&]w=\d+/.test(s) && !/=[ws]\d+/.test(s)) {
+          return s + "=s0";
+        }
+      }
+      return s;
+    } catch {
+      return u;
+    }
+  }, []);
+  const proxifyUrl = useCallback((u: string) => {
+    try {
+      const s = String(u || "");
+      if (/googleusercontent\.com\//.test(s)) {
+        const esc = encodeURIComponent(s);
+        return `/api/img?u=${esc}`;
+      }
+      return s;
+    } catch {
+      return u;
+    }
+  }, []);
+  const normalizeUrls = useCallback((items: any): string[] => {
+    if (!items) return [];
+    const arr = Array.isArray(items) ? items : (items?.items && Array.isArray(items.items) ? items.items : (items?.urls && Array.isArray(items.urls) ? items.urls : []));
+    const out: string[] = [];
+    for (const it of arr) {
+      if (!it) continue;
+      if (typeof it === 'string') { out.push(it); continue; }
+      if (typeof it === 'object') {
+        const downloadUrl = typeof (it as any).downloadUrl === 'string' ? (it as any).downloadUrl : undefined;
+        const baseUrl = typeof (it as any).baseUrl === 'string' ? (it as any).baseUrl : undefined;
+        const urlArray = Array.isArray((it as any).url) ? (it as any).url : undefined;
+        if (downloadUrl && /^https?:\/\//.test(downloadUrl)) { out.push(downloadUrl); continue; }
+        if (baseUrl && /^https?:\/\//.test(baseUrl)) { out.push(baseUrl); continue; }
+        if (urlArray && urlArray.length) {
+          const first = urlArray.find((u: any) => typeof u === 'string' && /^https?:\/\//.test(u)) || urlArray[0];
+          if (typeof first === 'string') { out.push(first); continue; }
+        }
+        const candidates = [
+          (it as any).src, (it as any).imageUrl, (it as any).href, (it as any).link,
+          (it as any).photo?.url, (it as any).media?.url, (it as any).image?.url,
+        ];
+        const found = candidates.find((u) => typeof u === 'string' && /^https?:\/\//.test(u));
+        if (found) { out.push(found); continue; }
+        for (const k of Object.keys(it)) {
+          const v: any = (it as any)[k];
+          if (typeof v === 'string' && /^https?:\/\//.test(v)) { out.push(v); break; }
+          if (v && typeof v === 'object' && typeof v.url === 'string' && /^https?:\/\//.test(v.url)) { out.push(v.url); break; }
+        }
+      }
+    }
+    return out;
+  }, []);
+  const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   // aggregate duplicate notifications so multiple duplicates show as one toast
   const dupSetRef = useRef<Set<string>>(new Set());
@@ -204,8 +277,8 @@ function HeapInner() {
   const addMomentFromUrl = useCallback((url: string) => {
     if (!url) return;
     const u = url.trim();
-    const isDataMoment = u.startsWith("data:image/gif") || u.startsWith("data:image/jpeg");
-    const isMomentUrl = [".gif", ".jpg", ".jpeg"].some(ext => u.toLowerCase().split("?")[0].endsWith(ext));
+    const isDataMoment = u.startsWith("data:image/");
+    const isMomentUrl = isImageLikeUrl(u);
     if (!isDataMoment && !isMomentUrl) return;
     setMoments((s) => {
       if (s.some((x) => x.src === u)) {
@@ -214,12 +287,19 @@ function HeapInner() {
       }
       return [{ id: `${Date.now()}-${Math.random()}`, src: u, name: u }, ...s];
     });
-  }, [queueDuplicateToast]);
+  }, [queueDuplicateToast, isImageLikeUrl]);
 
   
 
   const handlePaste = useCallback((e: ClipboardEvent | React.ClipboardEvent) => {
     try {
+      // If the paste target is an input/textarea or contentEditable, allow native paste
+      const t = (e as any).target || (e as any).srcElement;
+      if (t) {
+        const tag = (t.tagName || "").toLowerCase();
+        const isEditable = tag === "input" || tag === "textarea" || !!t.isContentEditable;
+        if (isEditable) return;
+      }
       const clipboardData = (e as any).clipboardData ?? (window as any).clipboardData;
       if (!clipboardData) return;
 
@@ -263,7 +343,12 @@ function HeapInner() {
 
   useEffect(() => {
     const onStoriesUpdated = () => loadStories();
-    const onMomentsUpdated = () => loadSaved();
+    const onMomentsUpdated = (e: any) => {
+      // Ignore our own save notifications to avoid echo loops
+      const source = e?.detail?.source;
+      if (source === "heap") return;
+      loadSaved();
+    };
     window.addEventListener("stories-updated", onStoriesUpdated);
     window.addEventListener("moments-updated", onMomentsUpdated);
     return () => {
@@ -284,6 +369,18 @@ function HeapInner() {
   const clearSelection = useCallback(() => {
     try { clearSelectionStore("heap"); } catch (e) {}
   }, [clearSelectionStore]);
+
+  // When the Google Photos import sheet opens, focus the album URL input
+  useEffect(() => {
+    if (!importSheetOpen) return;
+    const id = window.setTimeout(() => {
+      if (importInputRef.current) {
+        importInputRef.current.focus();
+        importInputRef.current.select?.();
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [importSheetOpen]);
 
   useEffect(() => {
     const prev = document.title;
@@ -330,7 +427,8 @@ function HeapInner() {
       .then(() => {
         console.debug("Saved moments to idb", moments.length);
         try {
-          window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: moments.length } }));
+          // Tag the event with source so the heap listener can ignore itself
+          window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: moments.length, source: "heap" } }));
         } catch (e) {
           // ignore in non-browser
         }
@@ -590,6 +688,125 @@ function HeapInner() {
               </SheetFooter>
             </SheetContent>
           </Sheet>
+          <Sheet open={importSheetOpen} onOpenChange={setImportSheetOpen}>
+            <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
+              <SheetHeader>
+                <div className="flex items-center justify-between">
+                  <SheetTitle>Import from Google Photos</SheetTitle>
+                  <SheetClose />
+                </div>
+                <SheetDescription className="text-sm">Paste a Google Photos album share URL to import images into the heap.</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-3">
+                <input
+                  ref={importInputRef}
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !importLoading && importUrl) {
+                      e.preventDefault();
+                      // trigger the same handler as the Import button
+                      (async () => {
+                        try {
+                          setImportLoading(true);
+                          setImportError(null);
+                          let arr: any[] = [];
+                          const w = typeof window !== "undefined" ? (window as any) : undefined;
+                          if (w && w.electronAPI && typeof w.electronAPI.fetchAlbum === "function") {
+                            arr = await w.electronAPI.fetchAlbum(importUrl);
+                          } else {
+                            const res = await fetch("/api/google-photos", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ albumUrl: importUrl }),
+                            });
+                            const json = await res.json();
+                            if (!res.ok) throw new Error(json?.error || "Failed to fetch album");
+                            arr = Array.isArray(json.urls) ? json.urls : [];
+                          }
+                          console.log("[heap] album fetch result (enter)");
+                          try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch {}
+                          const urls = normalizeUrls(arr);
+                          try { console.log("[heap] normalized", { sample: urls.slice(0,5), total: urls.length }); } catch {}
+                          let added = 0;
+                          for (const u of urls) {
+                            const s = proxifyUrl(fixGoogleUrl(String(u || "")));
+                            if (isImageLikeUrl(s)) {
+                              addMomentFromUrl(s);
+                              added++;
+                            }
+                          }
+                          try { toast.show(`Imported ${added} images from album`); } catch (e) {}
+                          setImportSheetOpen(false);
+                          setImportUrl("");
+                        } catch (err: any) {
+                          console.error("[heap] album fetch failed (enter)", err);
+                          setImportError(String(err?.message ?? err));
+                        } finally {
+                          setImportLoading(false);
+                        }
+                      })();
+                    }
+                  }}
+                  placeholder="https://photos.app.goo.gl/...."
+                  className="w-full p-2 border rounded bg-background text-sm"
+                />
+                {importError && <div className="text-sm text-destructive">{importError}</div>}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        setImportLoading(true);
+                        setImportError(null);
+                        let arr: any[] = [];
+                        const w = typeof window !== "undefined" ? (window as any) : undefined;
+                        if (w && w.electronAPI && typeof w.electronAPI.fetchAlbum === "function") {
+                          arr = await w.electronAPI.fetchAlbum(importUrl);
+                        } else {
+                          const res = await fetch("/api/google-photos", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ albumUrl: importUrl }),
+                          });
+                          const json = await res.json();
+                          if (!res.ok) throw new Error(json?.error || "Failed to fetch album");
+                          arr = Array.isArray(json.urls) ? json.urls : [];
+                        }
+                        console.log("[heap] album fetch result (button)");
+                        try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch {}
+                        const urls = normalizeUrls(arr);
+                        try { console.log("[heap] normalized", { sample: urls.slice(0,5), total: urls.length }); } catch {}
+                        let added = 0;
+                        for (const u of urls) {
+                          const s = proxifyUrl(fixGoogleUrl(String(u || "")));
+                          if (isImageLikeUrl(s)) {
+                            addMomentFromUrl(s);
+                            added++;
+                          }
+                        }
+                        try { toast.show(`Imported ${added} images from album`); } catch (e) {}
+                        setImportSheetOpen(false);
+                        setImportUrl("");
+                      } catch (err: any) {
+                        console.error("[heap] album fetch failed (button)", err);
+                        setImportError(String(err?.message ?? err));
+                      } finally {
+                        setImportLoading(false);
+                      }
+                    }}
+                    disabled={importLoading || !importUrl}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded bg-primary text-primary-foreground"
+                  >
+                    {importLoading ? "Importing..." : "Import"}
+                  </button>
+                  <button onClick={() => { setImportSheetOpen(false); setImportUrl(""); }} className="px-3 py-1 rounded border">Cancel</button>
+                </div>
+              </div>
+              <SheetFooter className="mt-4">
+                <div />
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
           <input
             ref={fileInputRef}
             type="file"
@@ -603,6 +820,12 @@ function HeapInner() {
             <div className="bg-background/50 backdrop-blur-sm px-4 py-1 rounded text-sm text-muted-foreground flex items-center gap-2">
               <Upload size={16} />
               <span>{isDragActive ? "Release to add moments" : "Drag and drop or click here to upload moments"}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); setImportSheetOpen(true); }}
+                className="ml-3 inline-flex items-center gap-2 px-2 py-1 rounded border text-sm"
+              >
+                Import from Google Photos
+              </button>
             </div>
           </div>
           <MomentsProvider collection={moments}>

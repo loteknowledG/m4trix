@@ -1,5 +1,43 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const { createRequire } = require("module");
+function normalizeUrls(items) {
+  if (!items) return [];
+  const arr = Array.isArray(items) ? items : (items.items && Array.isArray(items.items) ? items.items : (items.urls && Array.isArray(items.urls) ? items.urls : []));
+  const out = [];
+  for (const it of arr) {
+    if (!it) continue;
+    if (typeof it === 'string') {
+      out.push(it);
+      continue;
+    }
+    if (typeof it === 'object') {
+      const downloadUrl = typeof it.downloadUrl === 'string' ? it.downloadUrl : undefined;
+      const baseUrl = typeof it.baseUrl === 'string' ? it.baseUrl : undefined;
+      const urlArr = Array.isArray(it.url) ? it.url : undefined;
+      if (downloadUrl && /^https?:\/\//.test(downloadUrl)) { out.push(downloadUrl); continue; }
+      if (baseUrl && /^https?:\/\//.test(baseUrl)) { out.push(baseUrl); continue; }
+      if (urlArr && urlArr.length) {
+        const first = urlArr.find(u => typeof u === 'string' && /^https?:\/\//.test(u)) || urlArr[0];
+        if (typeof first === 'string') { out.push(first); continue; }
+      }
+      const candidates = [
+        it.src, it.imageUrl, it.href, it.link,
+        (it.photo && it.photo.url), (it.media && it.media.url), (it.image && it.image.url)
+      ];
+      const found = candidates.find(u => typeof u === 'string' && /^https?:\/\//.test(u));
+      if (found) { out.push(found); continue; }
+      // shallow scan of string-valued props
+      for (const k of Object.keys(it)) {
+        const v = it[k];
+        if (typeof v === 'string' && /^https?:\/\//.test(v)) { out.push(v); break; }
+        if (v && typeof v === 'object' && typeof v.url === 'string' && /^https?:\/\//.test(v.url)) { out.push(v.url); break; }
+      }
+    }
+  }
+  return out;
+}
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -67,4 +105,73 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+// Google Photos album fetch IPC — runs in main (Node) to avoid CORS and bundling issues
+let gpFetcher = null;
+async function getGooglePhotosFetcher() {
+  if (gpFetcher) return gpFetcher;
+  try {
+    // Try CommonJS first
+    const cjs = require("google-photos-album-image-url-fetch");
+    gpFetcher = cjs?.default || (typeof cjs === "function" ? cjs : null) ||
+      cjs?.fetchAlbum || cjs?.fetchAlbumImageUrls || cjs?.getAlbumImageUrls || cjs?.getImageUrls || cjs?.getUrls || cjs?.fetchImageUrls;
+    if (!gpFetcher && cjs && typeof cjs === 'object') {
+      const anyFn = Object.values(cjs).find(v => typeof v === 'function');
+      if (anyFn) gpFetcher = anyFn;
+    }
+  } catch (e) {
+    // Fallback to dynamic import (ESM)
+    try {
+      const esm = await import("google-photos-album-image-url-fetch");
+      gpFetcher = esm?.default || (typeof esm === "function" ? esm : null) ||
+        esm?.fetchAlbum || esm?.fetchAlbumImageUrls || esm?.getAlbumImageUrls || esm?.getImageUrls || esm?.getUrls || esm?.fetchImageUrls;
+      if (!gpFetcher && esm && typeof esm === 'object') {
+        const anyFn = Object.values(esm).find(v => typeof v === 'function');
+        if (anyFn) gpFetcher = anyFn;
+      }
+    } catch (e2) {
+      gpFetcher = null;
+    }
+  }
+  // If still not found, attempt to resolve from app root using createRequire
+  if (!gpFetcher) {
+    try {
+      const appPath = app.getAppPath();
+      const reqFromApp = createRequire(path.join(appPath, "package.json"));
+      const mod = reqFromApp("google-photos-album-image-url-fetch");
+      gpFetcher = mod?.default || (typeof mod === "function" ? mod : null) ||
+        mod?.fetchAlbum || mod?.fetchAlbumImageUrls || mod?.getAlbumImageUrls || mod?.getImageUrls || mod?.getUrls || mod?.fetchImageUrls ||
+        (mod && typeof mod === 'object' ? Object.values(mod).find(v => typeof v === 'function') : undefined);
+    } catch {}
+  }
+  // Last-resort: scan pnpm virtual store for the package
+  if (!gpFetcher) {
+    try {
+      const appPath = app.getAppPath();
+      const pnpmDir = path.join(appPath, "node_modules", ".pnpm");
+      if (fs.existsSync(pnpmDir)) {
+        const entries = fs.readdirSync(pnpmDir);
+        const hit = entries.find((n) => n.startsWith("google-photos-album-image-url-fetch@"));
+        if (hit) {
+          const pkgRoot = path.join(pnpmDir, hit, "node_modules", "google-photos-album-image-url-fetch");
+          const reqLocal = createRequire(path.join(pkgRoot, "package.json"));
+          const mod = reqLocal("google-photos-album-image-url-fetch");
+          gpFetcher = mod?.default || (typeof mod === "function" ? mod : null) ||
+            mod?.fetchAlbum || mod?.fetchAlbumImageUrls || mod?.getAlbumImageUrls || mod?.getImageUrls || mod?.getUrls || mod?.fetchImageUrls ||
+            (mod && typeof mod === 'object' ? Object.values(mod).find(v => typeof v === 'function') : undefined);
+        }
+      }
+    } catch {}
+  }
+  return gpFetcher;
+}
+
+ipcMain.handle("gp-fetch-album", async (_evt, albumUrl) => {
+  const fn = await getGooglePhotosFetcher();
+  if (!fn) throw new Error("google-photos-album-image-url-fetch not available in main");
+  const raw = await fn(albumUrl);
+  const urls = normalizeUrls(raw);
+  try { console.log("[electron-main] gp-fetch-album result", { total: urls.length, sample: urls.slice(0,5) }); } catch {}
+  return urls;
 });

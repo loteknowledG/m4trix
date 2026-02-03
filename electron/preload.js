@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld("electron", {
   on: (channel, cb) => ipcRenderer.on(channel, (e, ...args) => cb(...args)),
 });
 
+// Focused, typed API for app features
+contextBridge.exposeInMainWorld("electronAPI", {
+  fetchAlbum: (url) => ipcRenderer.invoke("gp-fetch-album", url),
+});
+
 // Detect failures to load client chunks or Next static assets (common in dev when
 // the dev server rebuilds and the renderer still references old chunk filenames).
 // When detected, reload the window to recover from stale assets.

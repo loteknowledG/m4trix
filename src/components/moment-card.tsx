@@ -113,10 +113,19 @@ export default function MomentCard({
       <img
         src={item.src}
         alt={item.name || "moment"}
+        referrerPolicy="no-referrer"
         className={`w-full h-auto object-contain opacity-0 transition-opacity duration-500 bg-zinc-100 dark:bg-zinc-800`}
         onLoad={(e) => {
           const img = e.currentTarget as HTMLImageElement;
           img.style.opacity = "1";
+        }}
+        onError={(e) => {
+          try {
+            const img = e.currentTarget as HTMLImageElement;
+            console.warn("[moment] image failed to load", { src: img.src });
+            // show broken image placeholder instead of invisible element
+            img.style.opacity = "1";
+          } catch {}
         }}
       />
       {open && (
