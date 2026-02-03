@@ -27,6 +27,7 @@ export function Editor({
   editorSerializedState,
   onChange,
   onSerializedChange,
+    import { logger } from "@/lib/logger";
 }: {
   editorState?: EditorState
   editorSerializedState?: SerializedEditorState
@@ -35,7 +36,7 @@ export function Editor({
 }) {
   return (
     <div className="bg-background overflow-hidden rounded-lg border shadow">
-      <LexicalComposer
+        logger.error(error)
         initialConfig={{
           ...editorConfig,
           ...(editorState ? { editorState } : {}),

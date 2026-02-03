@@ -349,7 +349,7 @@ export default function AttachmentsDemo() {
         </div>
         <Attachments variant="grid" className="ml-0 justify-start">
           {imageAttachments.map((attachment) => (
-            <Attachment key={attachment.id} data={attachment} onRemove={() => console.log("Remove", attachment.id)}>
+            <Attachment key={attachment.id} data={attachment} onRemove={() => {}}>
               <AttachmentPreview />
               <AttachmentRemove />
             </Attachment>
@@ -365,7 +365,7 @@ export default function AttachmentsDemo() {
         </div>
         <Attachments variant="inline" className="justify-start">
           {[...imageAttachments.slice(0, 1), ...mixedAttachments].map((attachment) => (
-            <Attachment key={attachment.id} data={attachment} onRemove={() => console.log("Remove", attachment.id)}>
+            <Attachment key={attachment.id} data={attachment} onRemove={() => {}}>
               <AttachmentPreview />
               <AttachmentInfo />
               <AttachmentRemove />
@@ -382,7 +382,7 @@ export default function AttachmentsDemo() {
         </div>
         <Attachments variant="list">
           {[imageAttachments[0], ...mixedAttachments.slice(0, 2)].map((attachment) => (
-            <Attachment key={attachment.id} data={attachment} onRemove={() => console.log("Remove", attachment.id)}>
+            <Attachment key={attachment.id} data={attachment} onRemove={() => {}}>
               <AttachmentPreview />
               <AttachmentInfo showMediaType />
               <AttachmentRemove />

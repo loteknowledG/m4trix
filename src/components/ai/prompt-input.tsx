@@ -65,6 +65,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { logger } from "@/lib/logger"
 
 // ============================================================================
 // Provider Context & Types
@@ -1086,7 +1087,7 @@ export const PromptInputSpeechButton = ({
       }
 
       speechRecognition.onerror = event => {
-        console.error("Speech recognition error:", event.error)
+        logger.error("Speech recognition error:", event.error)
         setIsListening(false)
       }
 
@@ -1274,7 +1275,7 @@ export default function PromptInputDemo() {
       <PromptInput
         multiple
         onSubmit={message => {
-          console.log("Submitting message:", message)
+          // debug: submitting message
         }}
       >
         <PromptInputAttachments>{attachment => <PromptInputAttachment data={attachment} />}</PromptInputAttachments>

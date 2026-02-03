@@ -8,6 +8,7 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 import JsonTree from "@/components/ui/json-tree";
+import { logger } from "@/lib/logger";
 
 
 function removeSrc(obj: any): any {
@@ -166,7 +167,7 @@ export default function BackupsPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error("Export failed", e);
+      logger.error("Export failed", e);
       try {
         if (previewSummary) {
           const s = JSON.stringify(removeSrc(previewSummary), null, 2);
@@ -249,7 +250,7 @@ export default function BackupsPage() {
         try {
           await clear();
         } catch (e) {
-          console.warn("Failed to clear IndexedDB before import", e);
+          logger.warn("Failed to clear IndexedDB before import", e);
         }
         // immediately clear story metadata/submenus and notify UI so submenus disappear before restore
         try {
@@ -261,7 +262,7 @@ export default function BackupsPage() {
             /* ignore in non-browser */
           }
         } catch (e) {
-          console.warn("Failed to reset stories keys after import", e);
+          logger.warn("Failed to reset stories keys after import", e);
         }
 
         // restore heap items
@@ -273,19 +274,19 @@ export default function BackupsPage() {
               try {
                 await Promise.resolve(localStorage.setItem(`overlay:text:${key}`, JSON.stringify(val)));
               } catch (e) {
-                console.warn("Failed to restore overlay for", key, e);
+                logger.warn("Failed to restore overlay for", key, e);
               }
             }
           }
         } catch (e) {
-          console.warn("Failed to apply overlays from import", e);
+          logger.warn("Failed to apply overlays from import", e);
         }
         // restore trash items if present
         if (trashPayload) {
           try {
             await set("trash-moments", trashPayload);
           } catch (e) {
-            console.warn("Failed to restore trash items", e);
+            logger.warn("Failed to restore trash items", e);
           }
         }
         // restore stories if present
@@ -299,7 +300,7 @@ export default function BackupsPage() {
                 try {
                   await set(`story:${s.id}`, s.items || []);
                 } catch (e) {
-                  console.warn("Failed to write story items", s.id, e);
+                  logger.warn("Failed to write story items", s.id, e);
                 }
               })
             );
@@ -309,7 +310,7 @@ export default function BackupsPage() {
               /* ignore in non-browser */
             }
           } catch (e) {
-            console.warn("Failed to restore stories metadata", e);
+            logger.warn("Failed to restore stories metadata", e);
           }
         }
         // notify app to refresh any in-memory state
@@ -322,7 +323,7 @@ export default function BackupsPage() {
         setMessage(`Imported ${validated.length} moments`);
         setTimeout(() => setMessage(null), 4000);
       } catch (err) {
-        console.error(err);
+        logger.error(err);
         setMessage("Import failed");
         try {
           setImportedText(sanitizeAndStringify(String(reader.result || "")));

@@ -61,7 +61,9 @@ export default function SuggestionDemo() {
         {suggestions.map(suggestion => (
           <Suggestion
             key={suggestion}
-            onClick={s => console.log("Selected:", s)}
+            onClick={s => {
+              // handle suggestion selection here; avoid noisy console logs in production
+            }}
             suggestion={suggestion}
           />
         ))}

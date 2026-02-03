@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { get, set } from "idb-keyval";
+import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
+import JustifiedMasonry from "@/components/ui/justified-masonry";
 
 type Moment = { id: string; src: string; name?: string };
 
@@ -19,7 +21,7 @@ export default function TrashPage() {
       if (Array.isArray(saved)) setMoments(saved.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name })));
       else setMoments([]);
     } catch (e) {
-      console.error("Failed to load trash", e);
+      logger.error("Failed to load trash", e);
       setMoments([]);
     }
   };
@@ -52,7 +54,7 @@ export default function TrashPage() {
         window.dispatchEvent(new Event("moments-updated"));
       } catch (e) {}
     } catch (e) {
-      console.error("Failed to restore selected moments", e);
+      logger.error("Failed to restore selected moments", e);
     }
   };
 
@@ -70,7 +72,7 @@ export default function TrashPage() {
         window.dispatchEvent(new Event("moments-updated"));
       } catch (e) {}
     } catch (e) {
-      console.error("Failed to delete selected moments", e);
+      logger.error("Failed to delete selected moments", e);
     }
   };
 
@@ -120,16 +122,19 @@ export default function TrashPage() {
                   </>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {moments.map((m) => (
+              <JustifiedMasonry
+                items={moments}
+                targetRowHeight={220}
+                itemSpacing={16}
+                rowSpacing={16}
+                renderItem={(item) => (
                   <MomentCard
-                    key={m.id}
-                    item={{ ...m, selected: !!selected[m.id] } as any}
+                    item={{ ...item, selected: !!selected[item.id] } as any}
                     anySelected={anySelected}
                     toggleSelect={toggleSelect}
                   />
-                ))}
-              </div>
+                )}
+              />
             </MomentsProvider>
           )}
           </div>

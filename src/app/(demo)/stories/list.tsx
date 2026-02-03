@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { get } from "idb-keyval";
+import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 
 type Story = { id: string; title?: string; count?: number };
@@ -17,7 +18,7 @@ export default function StoriesList() {
         const saved = (await get<Story[]>("stories")) || [];
         if (mounted) setStories(saved);
       } catch (err) {
-        console.error("Failed to load stories", err);
+        logger.error("Failed to load stories", err);
       } finally {
         if (mounted) setLoading(false);
       }

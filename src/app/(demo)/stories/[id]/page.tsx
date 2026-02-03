@@ -11,6 +11,8 @@ import useSelection from "@/hooks/use-selection";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
 import CollectionOverlay from "@/components/collection-overlay";
+import JustifiedMasonry from "@/components/ui/justified-masonry";
+import { logger } from "@/lib/logger";
 
 type Moment = { id: string; src: string; name?: string };
 
@@ -60,7 +62,7 @@ export default function StoryByIdPage() {
         }
         setTitle(t);
       } catch (err) {
-        console.error("Failed to load story items", err);
+        logger.error("Failed to load story items", err);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -139,7 +141,7 @@ export default function StoryByIdPage() {
           } catch (e) { }
         }
       } catch (e) {
-        console.error("Failed to perform story action", e);
+        logger.error("Failed to perform story action", e);
       } finally {
         // clear selection
         try { clearSelection(scope); } catch (e) { }
@@ -213,7 +215,7 @@ export default function StoryByIdPage() {
           window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
         } catch (e) { }
       } catch (err) {
-        console.error("Failed to persist reordered story", err);
+        logger.error("Failed to persist reordered story", err);
       }
     },
     [moments, id]
@@ -287,7 +289,7 @@ export default function StoryByIdPage() {
       }
       window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
     } catch (e) {
-      console.error("Failed to save story title", e);
+      logger.error("Failed to save story title", e);
     }
   }
 
@@ -339,31 +341,49 @@ export default function StoryByIdPage() {
               </div>
             ) : (
               <MomentsProvider collection={moments}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {moments.map((g, idx) => (
-                    <div
-                      key={g.id}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, idx)}
-                      onDragEnd={() => {
-                        dragIndexRef.current = null;
-                        setDragOverIndex(null);
-                        stopAutoScroll();
-                      }}
-                      onDragOver={(e) => onDragOver(e, idx)}
-                      onDrop={(e) => onDrop(e, idx)}
-                      className={
-                        "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
-                      }
-                    >
-                      <MomentCard
-                        item={{ ...g, selected: (selectedIds || []).includes(g.id) } as any}
-                        anySelected={(selectedIds || []).length > 0}
-                        toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                      />
+                {moments.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Upload size={16} />
+                      <div className="font-medium">No story selected</div>
                     </div>
-                  ))}
-                </div>
+                    <div className="text-sm">Create a new story from the heap to move moments here.</div>
+                  </div>
+                ) : (
+                  <JustifiedMasonry
+                    items={moments}
+                    targetRowHeight={220}
+                    itemSpacing={16}
+                    rowSpacing={16}
+                    renderItem={(item, style) => {
+                      const idx = moments.findIndex((m) => m.id === item.id);
+                      return (
+                        <div
+                          key={item.id}
+                          style={style}
+                          draggable
+                          onDragStart={(e) => onDragStart(e, idx)}
+                          onDragEnd={() => {
+                            dragIndexRef.current = null;
+                            setDragOverIndex(null);
+                            stopAutoScroll();
+                          }}
+                          onDragOver={(e) => onDragOver(e, idx)}
+                          onDrop={(e) => onDrop(e, idx)}
+                          className={
+                            "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
+                          }
+                        >
+                          <MomentCard
+                            item={{ ...item, selected: (selectedIds || []).includes(item.id) } as any}
+                            anySelected={(selectedIds || []).length > 0}
+                            toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                          />
+                        </div>
+                      );
+                    }}
+                  />
+                )}
                 <CollectionOverlay />
               </MomentsProvider>
             )}

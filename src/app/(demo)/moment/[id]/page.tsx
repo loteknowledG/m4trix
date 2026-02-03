@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
+import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { ArrowLeft } from "lucide-react";
 import MomentCard from "@/components/moment-card";
@@ -55,7 +56,7 @@ export default function MomentPage() {
 
         if (mounted) setItem(found);
       } catch (e) {
-        console.error("Failed to load moment", e);
+        logger.error("Failed to load moment", e);
       } finally {
         if (mounted) setLoading(false);
       }

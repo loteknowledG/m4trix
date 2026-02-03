@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMomentsContext } from "@/context/moments-collection";
+import { normalizeMomentSrc } from "@/lib/moments";
 import { X, ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 
 const noop = () => {};
@@ -313,7 +314,7 @@ export default function CollectionOverlay() {
             <div className="flex items-center justify-center w-full">
               {/* eslint-disable-next-line @next/next/no-img-element -- overlay images may be blob/data URLs */}
               <img
-                src={item.src}
+                src={normalizeMomentSrc(item.src)}
                 alt={item.name || "Moment preview"}
                 className="h-screen max-w-full object-contain rounded"
                 onClick={(e) => {

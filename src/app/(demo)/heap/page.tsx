@@ -24,9 +24,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import useSelection from "@/hooks/use-selection";
 import { usePathname, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
+import { logger } from "@/lib/logger";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
 import CollectionOverlay from "@/components/collection-overlay";
+import JustifiedMasonry from "@/components/ui/justified-masonry";
 import { Check, Circle, CheckCircle, X, Trash2, SquarePen, Upload } from "lucide-react";
 import {
   Sheet,
@@ -234,7 +236,7 @@ function HeapInner() {
         setStoryPreviews({});
       }
     } catch (e) {
-      console.error("Failed to load stories", e);
+      logger.warn("Failed to load stories", e);
     }
   }, []);
   useEffect(() => {
@@ -246,11 +248,10 @@ function HeapInner() {
       const saved = (await get<Moment[]>("heap-moments")) || (await get<Moment[]>("heap-gifs")) || [];
       if (Array.isArray(saved)) {
         setMoments(saved);
-        console.debug("Loaded saved moments:", saved.length, saved);
         setLoaded(true);
       }
     } catch (e) {
-      console.error("Failed to load saved moments", e);
+      logger.error("Failed to load saved moments", e);
     }
   }, []);
 
@@ -337,7 +338,7 @@ function HeapInner() {
 
       if ((e as any).preventDefault) (e as any).preventDefault();
     } catch (err) {
-      console.error("paste handling failed", err);
+      logger.error("paste handling failed", err);
     }
   }, [addMomentFromFile, addMomentFromUrl]);
 
@@ -425,7 +426,6 @@ function HeapInner() {
     if (!loaded) return;
     set("heap-moments", moments)
       .then(() => {
-        console.debug("Saved moments to idb", moments.length);
         try {
           // Tag the event with source so the heap listener can ignore itself
           window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: moments.length, source: "heap" } }));
@@ -433,7 +433,7 @@ function HeapInner() {
           // ignore in non-browser
         }
       })
-      .catch((e) => console.error("Failed to save moments to idb", e));
+      .catch((e) => logger.error("Failed to save moments to idb", e));
   }, [moments, loaded]);
 
 
@@ -538,7 +538,7 @@ function HeapInner() {
                   setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
                   try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newTrash.length } })); } catch (e) { }
                 } catch (err) {
-                  console.error("Failed to move to trash", err);
+                  logger.error("Failed to move to trash", err);
                 }
               }}
               className="inline-flex items-center gap-2 px-3 py-1 rounded bg-destructive text-destructive-foreground"
@@ -600,7 +600,7 @@ function HeapInner() {
                       setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                       router.push(`/stories/${id}`);
                     } catch (err) {
-                      console.error("Failed to create story", err);
+                      logger.error("Failed to create story", err);
                       router.push("/stories");
                     }
                   }}
@@ -660,7 +660,7 @@ function HeapInner() {
                           setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                           router.push(`/stories/${s.id}`);
                         } catch (err) {
-                          console.error("Failed to add to story", err);
+                          logger.error("Failed to add to story", err);
                           router.push(`/stories/${s.id}`);
                         }
                       }}
@@ -723,10 +723,9 @@ function HeapInner() {
                             if (!res.ok) throw new Error(json?.error || "Failed to fetch album");
                             arr = Array.isArray(json.urls) ? json.urls : [];
                           }
-                          console.log("[heap] album fetch result (enter)");
-                          try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch { }
+                          // debug: album fetch result (enter)
                           const urls = normalizeUrls(arr);
-                          try { console.log("[heap] normalized", { sample: urls.slice(0, 5), total: urls.length }); } catch { }
+                          // debug: normalized urls (enter)
                           let added = 0;
                           for (const u of urls) {
                             const s = proxifyUrl(fixGoogleUrl(String(u || "")));
@@ -739,7 +738,7 @@ function HeapInner() {
                           setImportSheetOpen(false);
                           setImportUrl("");
                         } catch (err: any) {
-                          console.error("[heap] album fetch failed (enter)", err);
+                          logger.error("[heap] album fetch failed (enter)", err);
                           setImportError(String(err?.message ?? err));
                         } finally {
                           setImportLoading(false);
@@ -771,10 +770,9 @@ function HeapInner() {
                           if (!res.ok) throw new Error(json?.error || "Failed to fetch album");
                           arr = Array.isArray(json.urls) ? json.urls : [];
                         }
-                        console.log("[heap] album fetch result (button)");
-                        try { console.log({ sample: (arr || []).slice(0, 5), total: Array.isArray(arr) ? arr.length : 0 }); } catch { }
+                        // debug: album fetch result (button)
                         const urls = normalizeUrls(arr);
-                        try { console.log("[heap] normalized", { sample: urls.slice(0, 5), total: urls.length }); } catch { }
+                        // debug: normalized urls (button)
                         let added = 0;
                         for (const u of urls) {
                           const s = proxifyUrl(fixGoogleUrl(String(u || "")));
@@ -787,7 +785,7 @@ function HeapInner() {
                         setImportSheetOpen(false);
                         setImportUrl("");
                       } catch (err: any) {
-                        console.error("[heap] album fetch failed (button)", err);
+                        logger.error("[heap] album fetch failed (button)", err);
                         setImportError(String(err?.message ?? err));
                       } finally {
                         setImportLoading(false);
@@ -828,16 +826,25 @@ function HeapInner() {
             </div>
           </div>
           <MomentsProvider collection={moments}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
-              {moments.length === 0 && (
-                <div className="col-span-full text-center text-muted-foreground py-12">
-                  No moments yet — drop files or click to add
-                </div>
-              )}
-              {moments.map((g) => (
-                <MomentCard key={g.id} item={{ ...g, selected: (selectedIds || []).includes(g.id) }} anySelected={anySelected} toggleSelect={(tid) => toggleSelect(tid)} />
-              ))}
-            </div>
+            {moments.length === 0 ? (
+              <div className="text-center text-muted-foreground py-12">
+                No moments yet 	 drop files or click to add
+              </div>
+            ) : (
+              <JustifiedMasonry
+                items={moments}
+                targetRowHeight={220}
+                itemSpacing={16}
+                rowSpacing={16}
+                renderItem={(item) => (
+                  <MomentCard
+                    item={{ ...item, selected: (selectedIds || []).includes(item.id) } as any}
+                    anySelected={anySelected}
+                    toggleSelect={(tid) => toggleSelect(tid)}
+                  />
+                )}
+              />
+            )}
             <CollectionOverlay />
           </MomentsProvider>
 

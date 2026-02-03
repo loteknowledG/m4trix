@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { logger } from "@/lib/logger";
 
 type State = { hasError: boolean; error?: Error | null; info?: React.ErrorInfo | null };
 
@@ -16,7 +17,7 @@ export default class ErrorBoundary extends React.Component<React.PropsWithChildr
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // log to console and leave state for rendering
-    console.error("ErrorBoundary caught:", error, info);
+    logger.error("ErrorBoundary caught:", error, info);
     this.setState({ hasError: true, error, info });
   }
 

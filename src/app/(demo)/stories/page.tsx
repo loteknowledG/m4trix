@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { get } from "idb-keyval";
+import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { ArrowLeft } from "lucide-react";
 import { CountingNumber } from "@/components/ui/counting-number";
@@ -42,7 +43,7 @@ export default function StoriesPage() {
         previewEntries.forEach(([id, src]) => (map[id] = src));
         setPreviews(map);
       } catch (err) {
-        console.error("Failed to load stories", err);
+        logger.error("Failed to load stories", err);
       } finally {
         if (mounted) setLoading(false);
       }

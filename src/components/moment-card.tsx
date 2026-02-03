@@ -2,8 +2,10 @@
 
 import { Circle, Check, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { normalizeMomentSrc } from "@/lib/moments";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { logger } from "@/lib/logger";
 import { useMomentsContext } from "@/context/moments-collection";
 
 type Moment = {
@@ -111,7 +113,7 @@ export default function MomentCard({
       </button>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={item.src}
+        src={normalizeMomentSrc(item.src)}
         alt={item.name || "moment"}
         referrerPolicy="no-referrer"
         className={`w-full h-auto object-contain opacity-0 transition-opacity duration-500 bg-zinc-100 dark:bg-zinc-800`}
@@ -122,7 +124,7 @@ export default function MomentCard({
         onError={(e) => {
           try {
             const img = e.currentTarget as HTMLImageElement;
-            console.warn("[moment] image failed to load", { src: img.src });
+            logger.warn("[moment] image failed to load", { src: img.src });
             // show broken image placeholder instead of invisible element
             img.style.opacity = "1";
           } catch {}
@@ -156,8 +158,8 @@ export default function MomentCard({
               <div className="max-h-full max-w-full flex items-center justify-center">
                 <div className="flex items-center justify-center w-full">
                   {/* eslint-disable-next-line @next/next/no-img-element -- overlay images can be blob/data URLs */}
-                  <img
-                    src={item.src}
+                    <img
+                      src={normalizeMomentSrc(item.src)}
                     alt={item.name || "Moment preview"}
                     className="h-screen max-w-full object-contain rounded"
                     onClick={(e) => {

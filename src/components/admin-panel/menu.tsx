@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 import { getMenuList } from "@/lib/menu-list";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -56,7 +57,7 @@ export function Menu({ isOpen }: MenuProps) {
           }
         }
       } catch (err) {
-        console.error("Failed to load stories for menu", err);
+        logger.error("Failed to load stories for menu", err);
       }
     };
     load();
