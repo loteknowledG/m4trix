@@ -586,7 +586,7 @@ function HeapInner() {
                       const id = `${Date.now()}-${Math.random()}`;
                       await set(`story:${id}`, selected);
                       const saved = (await get("stories")) || [];
-                      const meta = { id, title: "New story", count: selected.length };
+                      const meta = { id, count: selected.length };
                       await set("stories", [meta, ...saved]);
                       try {
                         window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
