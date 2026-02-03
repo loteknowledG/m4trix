@@ -42,7 +42,7 @@ export default function StoryByIdPage() {
         const stored = (await get<any>(`story:${id}`)) || null;
         if (!mounted) return;
         if (Array.isArray(stored)) {
-          setMoments(stored.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name }))); 
+          setMoments(stored.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name })));
         } else if (stored && Array.isArray(stored.items)) {
           setMoments(stored.items.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name })));
         } else {
@@ -80,7 +80,7 @@ export default function StoryByIdPage() {
       try {
         if (action === "move-to-heap") {
           const heap = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
-            const moving = moments.filter((g) => ids.includes(g.id));
+          const moving = moments.filter((g) => ids.includes(g.id));
           const newHeap = [...heap, ...moving];
           await set("heap-moments", newHeap);
           // remove from story
@@ -104,10 +104,10 @@ export default function StoryByIdPage() {
             if (idx > -1) {
               saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
               await set("stories", saved);
-              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) {}
+              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { }
             }
-          } catch (e) {}
-          try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newHeap.length } })); } catch (e) {}
+          } catch (e) { }
+          try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newHeap.length } })); } catch (e) { }
         }
 
         if (action === "move-to-trash") {
@@ -134,15 +134,15 @@ export default function StoryByIdPage() {
             if (idx > -1) {
               saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
               await set("stories", saved);
-              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) {}
+              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { }
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       } catch (e) {
         console.error("Failed to perform story action", e);
       } finally {
         // clear selection
-        try { clearSelection(scope); } catch (e) {}
+        try { clearSelection(scope); } catch (e) { }
       }
     };
     window.addEventListener("story-action", handler as EventListener);
@@ -154,7 +154,7 @@ export default function StoryByIdPage() {
     try {
       e.dataTransfer.setData("text/plain", String(idx));
       e.dataTransfer.effectAllowed = "move";
-    } catch (err) {}
+    } catch (err) { }
   }, []);
 
   const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
@@ -162,7 +162,7 @@ export default function StoryByIdPage() {
     setDragOverIndex(idx);
     try {
       e.dataTransfer.dropEffect = "move";
-    } catch (err) {}
+    } catch (err) { }
 
     // Only auto-scroll when a drag is active (dragIndexRef is set).
     if (dragIndexRef.current === null) return;
@@ -211,7 +211,7 @@ export default function StoryByIdPage() {
         await set(storyKey, next);
         try {
           window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-        } catch (e) {}
+        } catch (e) { }
       } catch (err) {
         console.error("Failed to persist reordered story", err);
       }
@@ -229,7 +229,7 @@ export default function StoryByIdPage() {
       }
       try {
         window.scrollBy({ top: dir * 12 });
-      } catch (e) {}
+      } catch (e) { }
       scrollAnimRef.current = requestAnimationFrame(step);
     };
     scrollAnimRef.current = requestAnimationFrame(step);
@@ -292,7 +292,7 @@ export default function StoryByIdPage() {
   }
 
   return (
-      <ContentLayout
+    <ContentLayout
       title="Stories"
       navLeft={(
         <Button
@@ -305,71 +305,71 @@ export default function StoryByIdPage() {
           <ChevronLeft size={16} />
         </Button>
       )}
-        navRight={(
-          <Button
-            onClick={() => {}}
-            className="ml-2"
-            variant="outline"
-          >
-            Preview
-          </Button>
-        )}
+      navRight={(
+        <Button
+          onClick={() => { }}
+          className="ml-2"
+          variant="outline"
+        >
+          Preview
+        </Button>
+      )}
     >
       <ErrorBoundary>
         <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
           <div className="py-4">
-        <div className="mb-6">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={handleTitleBlur}
-            placeholder="Add a title"
-            className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
-          />
-        </div>
-        {loading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : moments.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Upload size={16} />
-              <div className="font-medium">No story selected</div>
+            <div className="mb-6">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={handleTitleBlur}
+                placeholder="Add a title"
+                className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
+              />
             </div>
-            <div className="text-sm">Create a new story from the heap to move moments here.</div>
-          </div>
-        ) : (
-          <MomentsProvider collection={moments}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {moments.map((g, idx) => (
-                <div
-                  key={g.id}
-                  draggable
-                  onDragStart={(e) => onDragStart(e, idx)}
-                  onDragEnd={() => {
-                    dragIndexRef.current = null;
-                    setDragOverIndex(null);
-                    stopAutoScroll();
-                  }}
-                  onDragOver={(e) => onDragOver(e, idx)}
-                  onDrop={(e) => onDrop(e, idx)}
-                  className={
-                    "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
-                  }
-                >
-                  <MomentCard
-                    item={{ ...g, selected: (selectedIds || []).includes(g.id) } as any}
-                    anySelected={(selectedIds || []).length > 0}
-                    toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                  />
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading…</div>
+            ) : moments.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Upload size={16} />
+                  <div className="font-medium">No story selected</div>
                 </div>
-              ))}
-            </div>
-            <CollectionOverlay />
-          </MomentsProvider>
-        )}
+                <div className="text-sm">Create a new story from the heap to move moments here.</div>
+              </div>
+            ) : (
+              <MomentsProvider collection={moments}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {moments.map((g, idx) => (
+                    <div
+                      key={g.id}
+                      draggable
+                      onDragStart={(e) => onDragStart(e, idx)}
+                      onDragEnd={() => {
+                        dragIndexRef.current = null;
+                        setDragOverIndex(null);
+                        stopAutoScroll();
+                      }}
+                      onDragOver={(e) => onDragOver(e, idx)}
+                      onDrop={(e) => onDrop(e, idx)}
+                      className={
+                        "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
+                      }
+                    >
+                      <MomentCard
+                        item={{ ...g, selected: (selectedIds || []).includes(g.id) } as any}
+                        anySelected={(selectedIds || []).length > 0}
+                        toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <CollectionOverlay />
+              </MomentsProvider>
+            )}
           </div>
         </div>
       </ErrorBoundary>
     </ContentLayout>
-    );
-  }
+  );
+}

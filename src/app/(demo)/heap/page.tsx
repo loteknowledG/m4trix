@@ -560,8 +560,8 @@ function HeapInner() {
           onPaste={handlePaste}
           tabIndex={0}
           className={`relative min-h-[60vh] rounded-lg p-4 transition-colors ${isDragActive
-              ? "border-4 border-primary/60 bg-primary/5"
-              : "border-2 border-dashed border-border/60 bg-transparent"
+            ? "border-4 border-primary/60 bg-primary/5"
+            : "border-2 border-dashed border-border/60 bg-transparent"
             }`}
         >
           <Sheet open={storySheetOpen} onOpenChange={setStorySheetOpen}>

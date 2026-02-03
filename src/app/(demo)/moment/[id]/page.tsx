@@ -37,7 +37,7 @@ export default function MomentPage() {
               let items: any[] = [];
               if (Array.isArray(stored)) items = stored;
               else if (stored && Array.isArray(stored.items)) items = stored.items;
-              const f = items.find((s) => (s && (s.id || s) ) === id);
+              const f = items.find((s) => (s && (s.id || s)) === id);
               if (f) {
                 // normalize to object with id/src
                 if (typeof f === "string") {
@@ -81,7 +81,7 @@ export default function MomentPage() {
           <div className="max-w-6xl w-full h-full flex items-center justify-center">
             <div className="w-full h-full flex items-center justify-center">
               <div className="max-h-full max-w-full flex items-center justify-center">
-                <MomentCard item={item} anySelected={false} toggleSelect={() => {}} fullHeight />
+                <MomentCard item={item} anySelected={false} toggleSelect={() => { }} fullHeight />
               </div>
             </div>
           </div>

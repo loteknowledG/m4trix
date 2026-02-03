@@ -92,7 +92,7 @@ export default function BackupsPage() {
                   overlays[id] = raw;
                 }
               }
-            } catch (e) {}
+            } catch (e) { }
           }
         };
         collectFor(heap);
@@ -173,7 +173,7 @@ export default function BackupsPage() {
           setExportedObj(removeSrc(previewSummary));
           setExportedText(s);
         }
-      } catch (er) {}
+      } catch (er) { }
       setMessage("Export failed");
       setTimeout(() => setMessage(null), 4000);
     }
@@ -192,7 +192,7 @@ export default function BackupsPage() {
         } catch (e) {
           try {
             setImportedText(sanitizeAndStringify(String(reader.result || "")));
-          } catch (ee) {}
+          } catch (ee) { }
         }
 
         // Handle old flat-array backups (array of heap items)
@@ -326,7 +326,7 @@ export default function BackupsPage() {
         setMessage("Import failed");
         try {
           setImportedText(sanitizeAndStringify(String(reader.result || "")));
-        } catch (e) {}
+        } catch (e) { }
         setTimeout(() => setMessage(null), 4000);
       }
     };
