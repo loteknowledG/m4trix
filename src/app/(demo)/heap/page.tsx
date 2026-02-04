@@ -536,7 +536,18 @@ function HeapInner() {
                   await set("trash-moments", newTrash);
                   // remove from heap
                   setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
-                  try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newTrash.length } })); } catch (e) { }
+                  // notify other views (like Trash) without forcing heap to reload its own state
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("moments-updated", {
+                        detail: { count: newTrash.length, source: "heap" },
+                      })
+                    );
+                  } catch (e) {}
+                  // clear local selection now that items are moved
+                  try {
+                    clearSelection();
+                  } catch (e) {}
                 } catch (err) {
                   logger.error("Failed to move to trash", err);
                 }

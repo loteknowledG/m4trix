@@ -3,6 +3,7 @@
 import { Circle, Check, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { normalizeMomentSrc } from "@/lib/moments";
+import { ShineBorder } from "@/components/ui/shine-border";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { logger } from "@/lib/logger";
@@ -88,6 +89,14 @@ export default function MomentCard({
         item.selected ? "ring-2 ring-primary/60" : ""
       } ${fullHeight ? "h-full" : ""}`}
     >
+      {item.selected && (
+        <ShineBorder
+          borderWidth={4}
+          duration={8}
+          shineColor={["#22c55e", "#ec4899", "#a855f7"]}
+          className="z-10"
+        />
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();

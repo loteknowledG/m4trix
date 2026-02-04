@@ -81,6 +81,7 @@
     }
   .theme {
         --animate-rippling: rippling var(--duration) ease-out;
+        --animate-shine: shine var(--duration) infinite linear;
     }
   }
 
@@ -120,6 +121,30 @@
     opacity: 0;
         }
     }
+  @keyframes shine {
+  0% {
+    background-position: 0% 0%;
+    }
+  50% {
+    background-position: 100% 100%;
+    }
+  to {
+    background-position: 0% 0%;
+    }
+  }
+}
+
+/* Local shine animation for ShineBorder (independent of Tailwind) */
+@keyframes mc-shine {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
 }
 
 @layer components {
