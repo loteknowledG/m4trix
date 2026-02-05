@@ -3,6 +3,9 @@ import type { NextRequest } from "next/server"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+// Hardcoded OpenCode chat completions endpoint.
+const ZEN_CHAT_URL = "https://opencode.ai/zen/v1/chat/completions"
+
 // Basic agent identifiers used by the demo UI.
 // You can freely change or extend this list as you evolve your system.
 type AgentId = "researcher" | "critic" | "summarizer"
@@ -39,6 +42,17 @@ export type AgentsRequest = {
    * When provided and Zen is configured, overrides ZEN_MODEL.
    */
   model?: string
+  /**
+   * Optional agents configuration provided by the client.
+   * When present, overrides the default DEMO_AGENTS for this call.
+   */
+  agents?: Agent[]
+  /**
+   * Optional backstory / persona for the prompter (the user).
+   * When provided, it is included in the system prompt so agents
+   * can tailor their responses to that background.
+   */
+  prompterBackstory?: string
 }
 
 export type AgentsResponse = {
@@ -75,9 +89,21 @@ const DEMO_AGENTS: Agent[] = [
 async function callProvider(
   prompt: string,
   agent: Agent,
-  options: { url: string; apiKey: string; model: string; providerName: string },
+  options: {
+    url: string
+    apiKey: string
+    model: string
+    providerName: string
+    prompterBackstory?: string
+  },
 ): Promise<string> {
-  const { url, apiKey, model, providerName } = options
+  const { url, apiKey, model, providerName, prompterBackstory } = options
+
+  const systemPromptBase = `You are ${agent.name}. ${agent.description}`.trim()
+
+  const systemPrompt = prompterBackstory
+    ? `${systemPromptBase} The user has the following background and context: ${prompterBackstory}. Respond concisely as this agent only.`
+    : `${systemPromptBase} Respond concisely as this agent only.`
 
   const response = await fetch(url, {
     method: "POST",
@@ -90,7 +116,7 @@ async function callProvider(
       messages: [
         {
           role: "system",
-          content: `You are ${agent.name}. ${agent.description} Respond concisely as this agent only.`,
+          content: systemPrompt,
         },
         {
           role: "user",
@@ -162,61 +188,32 @@ async function callProvider(
   return content.trim()
 }
 
-async function callOpenAIForAgent(
+async function callOpenCodeForAgent(
   prompt: string,
   agent: Agent,
   modelOverride?: string,
+  prompterBackstory?: string,
+  zenApiKeyOverride?: string,
 ): Promise<string> {
-  // Prefer OpenCode Zen; on Zen rate-limit (429) and if OpenAI is
-  // configured, fall back to OpenAI so the UI can still run live.
-  const zenApiUrl = process.env.ZEN_API_URL
-  const zenApiKey = process.env.ZEN_API_KEY
+  const zenApiKey = zenApiKeyOverride || process.env.ZEN_API_KEY
   const zenModelFromEnv = process.env.ZEN_MODEL
-  const openaiApiKey = process.env.OPENAI_API_KEY
 
   const zenModelToUse = modelOverride || zenModelFromEnv
 
-  const zenConfigured = Boolean(zenApiUrl && zenApiKey && zenModelToUse)
+  const zenConfigured = Boolean(ZEN_CHAT_URL && zenApiKey && zenModelToUse)
 
-  if (!zenConfigured && !openaiApiKey) {
+  if (!zenConfigured) {
     throw new Error(
-      "No API key configured: set either ZEN_API_KEY/ ZEN_API_URL / ZEN_MODEL or OPENAI_API_KEY.",
+      "No OpenCode configuration: set ZEN_API_KEY or provide a per-session zenApiKey, plus ZEN_MODEL or a model override.",
     )
   }
 
-  // Try Zen first if configured.
-  if (zenConfigured) {
-    try {
-      return await callProvider(prompt, agent, {
-        url: zenApiUrl!,
-        apiKey: zenApiKey!,
-        model: zenModelToUse!,
-        providerName: "Zen",
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      const isRateLimit = message.includes("429") || /Rate limit/i.test(message)
-      const isServerError = /error\s+5\d{2}/i.test(message)
-      const shouldFallback = isRateLimit || isServerError
-
-      if (!openaiApiKey || !shouldFallback) {
-        throw error
-      }
-
-      console.warn("Zen unavailable, falling back to OpenAI", message)
-      // fall through to OpenAI call below
-    }
-  }
-
-  if (!openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured")
-  }
-
   return await callProvider(prompt, agent, {
-    url: "https://api.openai.com/v1/chat/completions",
-    apiKey: openaiApiKey,
-    model: "gpt-4o-mini",
-    providerName: "OpenAI",
+    url: ZEN_CHAT_URL,
+    apiKey: zenApiKey!,
+    model: zenModelToUse!,
+    providerName: "Zen",
+    prompterBackstory,
   })
 }
 
@@ -262,7 +259,10 @@ function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
 
 async function buildModelTranscript(
   prompt: string,
+  agents: Agent[],
   modelOverride?: string,
+  prompterBackstory?: string,
+  zenApiKeyOverride?: string,
 ): Promise<OrchestratedMessage[]> {
   const baseId = Date.now().toString(36)
 
@@ -278,8 +278,14 @@ async function buildModelTranscript(
   // You can change this to any supported model, e.g. "gpt-4.1".
   // Call OpenAI once per agent, in parallel, and map
   const agentReplies = await Promise.all(
-    DEMO_AGENTS.map(async (agent) => {
-      const text = await callOpenAIForAgent(prompt, agent, modelOverride)
+    agents.map(async (agent) => {
+      const text = await callOpenCodeForAgent(
+        prompt,
+        agent,
+        modelOverride,
+        prompterBackstory,
+        zenApiKeyOverride,
+      )
       return { agent, text }
     }),
   )
@@ -308,22 +314,49 @@ export async function POST(req: NextRequest) {
 
     const prompt = body.prompt.trim()
     const modelOverride = typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined
+    const prompterBackstory =
+      typeof body.prompterBackstory === "string" && body.prompterBackstory.trim()
+        ? body.prompterBackstory.trim()
+        : undefined
+    const zenApiKeyOverride =
+      typeof (body as any).zenApiKey === "string" && (body as any).zenApiKey.trim()
+        ? (body as any).zenApiKey.trim()
+        : undefined
+    const incomingAgents = Array.isArray((body as any).agents) ? (body as any).agents : undefined
+    const effectiveAgents: Agent[] =
+      incomingAgents && incomingAgents.length
+        ? incomingAgents.map((agent: any) => ({
+            id: agent.id as AgentId,
+            name: typeof agent.name === "string" ? agent.name : "",
+            description: typeof agent.description === "string" ? agent.description : "",
+          }))
+        : DEMO_AGENTS
 
-    const hasApiKey = Boolean(process.env.OPENAI_API_KEY)
+    const zenModelFromEnv = process.env.ZEN_MODEL
+    const hasZenConfig = Boolean(
+      (zenApiKeyOverride || process.env.ZEN_API_KEY) &&
+        (modelOverride || zenModelFromEnv),
+    )
 
     let messages: OrchestratedMessage[]
     let mode: AgentsResponse["mode"] = "demo"
     let error: string | undefined
 
-    if (!hasApiKey) {
+    if (!hasZenConfig) {
       messages = buildDemoTranscript(prompt)
     } else {
       try {
-        messages = await buildModelTranscript(prompt, modelOverride)
+        messages = await buildModelTranscript(
+          prompt,
+          effectiveAgents,
+          modelOverride,
+          prompterBackstory,
+          zenApiKeyOverride,
+        )
         mode = "live"
       } catch (e) {
         const err = e instanceof Error ? e.message : String(e)
-        console.error("/api/agents OpenAI error", err)
+        console.error("/api/agents OpenCode error", err)
         error = err
         // Fall back to deterministic demo transcript so the
         // UI still works instead of surfacing a server error.
@@ -332,7 +365,7 @@ export async function POST(req: NextRequest) {
     }
 
     const payload: AgentsResponse = {
-      agents: DEMO_AGENTS,
+      agents: effectiveAgents,
       messages,
       mode,
       ...(error ? { error } : {}),

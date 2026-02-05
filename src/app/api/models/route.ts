@@ -3,16 +3,14 @@ import type { NextRequest } from "next/server"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-// Simple proxy to list models available to your Zen API key.
+// Hardcoded OpenCode endpoints.
+const ZEN_CHAT_URL = "https://opencode.ai/zen/v1/chat/completions"
+const ZEN_MODELS_URL = "https://opencode.ai/zen/v1/models"
+
+// Simple proxy to list models available to your Zen/OpenCode API key.
 //
-// It uses the following env vars:
-// - ZEN_API_KEY      (required)
-// - ZEN_API_URL      (used to infer the base URL if ZEN_MODELS_URL is not set)
-// - ZEN_MODELS_URL   (optional explicit models endpoint, e.g. "https://opencode.ai/zen/v1/models")
-//
-// If ZEN_MODELS_URL is not set, we derive it from ZEN_API_URL by stripping the
-// trailing path and appending "/models". You can override this by setting
-// ZEN_MODELS_URL explicitly in .env.local if Zen uses a different endpoint.
+// Uses the hardcoded OpenCode models endpoint above. You can still
+// override this by changing ZEN_MODELS_URL here if needed.
 
 function deriveModelsUrlFromChatUrl(chatUrl: string | undefined): string | null {
   if (!chatUrl) return null
@@ -32,23 +30,17 @@ function deriveModelsUrlFromChatUrl(chatUrl: string | undefined): string | null 
   }
 }
 
-export async function GET(_req: NextRequest) {
-  const zenApiKey = process.env.ZEN_API_KEY
-  const zenApiUrl = process.env.ZEN_API_URL
-  const explicitModelsUrl = process.env.ZEN_MODELS_URL
+export async function GET(req: NextRequest) {
+  const overrideKey = req.headers.get("x-zen-api-key")?.trim() || null
+  const zenApiKey = overrideKey || process.env.ZEN_API_KEY
 
   if (!zenApiKey) {
-    return new Response("ZEN_API_KEY is not configured", { status: 400 })
-  }
-
-  const modelsUrl = explicitModelsUrl || deriveModelsUrlFromChatUrl(zenApiUrl)
-
-  if (!modelsUrl) {
     return new Response(
-      "No models URL configured. Set ZEN_MODELS_URL or a valid ZEN_API_URL.",
+      "ZEN_API_KEY is not configured and no per-request key was provided",
       { status: 400 },
     )
   }
+  const modelsUrl = ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL)
 
   try {
     const response = await fetch(modelsUrl, {

@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useMemo, useRef, useState } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai/conversation"
 import { Message, MessageContent } from "@/components/ai/message"
 import { Badge } from "@/components/ui/badge"
@@ -41,20 +41,20 @@ type AgentsResponse = {
 const AGENTS: Agent[] = [
   {
     id: "researcher",
-    name: "Researcher",
-    description: "Finds facts, breaks down the problem, and proposes options.",
+    name: "",
+    description: "",
     badgeVariant: "default",
   },
   {
     id: "critic",
-    name: "Critic",
-    description: "Challenges assumptions, looks for risks and edge cases.",
+    name: "",
+    description: "",
     badgeVariant: "secondary",
   },
   {
     id: "summarizer",
-    name: "Summarizer",
-    description: "Condenses the discussion into a concise plan.",
+    name: "",
+    description: "",
     badgeVariant: "outline",
   },
 ]
@@ -98,7 +98,30 @@ export default function AgentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState("")
   const [model, setModel] = useState<string>(MODEL_OPTIONS[0]?.id ?? "minimax-m2.1-free")
+  const [prompterBackstory, setPrompterBackstory] = useState("")
+  const [zenApiKey, setZenApiKey] = useState("")
+  const [isConnected, setIsConnected] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
   const timeoutsRef = useRef<number[]>([])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const stored = window.sessionStorage.getItem("ZEN_API_KEY_SESSION")
+    if (stored) {
+      setZenApiKey(stored)
+      setIsConnected(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (zenApiKey) {
+      window.sessionStorage.setItem("ZEN_API_KEY_SESSION", zenApiKey)
+    } else {
+      window.sessionStorage.removeItem("ZEN_API_KEY_SESSION")
+    }
+  }, [zenApiKey])
 
   const agentsById = useMemo(() => {
     return agents.reduce<Record<AgentId, Agent>>((acc, agent) => {
@@ -121,6 +144,49 @@ export default function AgentsPage() {
     }
   }
 
+  const updateAgent = (id: AgentId, updates: Partial<Pick<Agent, "name" | "description">>) => {
+    setAgents((prev) =>
+      prev.map((agent) => (agent.id === id ? { ...agent, ...updates } : agent)),
+    )
+  }
+
+  const connectWithKey = async (event?: FormEvent<HTMLFormElement>) => {
+    if (event) {
+      event.preventDefault()
+    }
+
+    setConnectionError(null)
+
+    const key = zenApiKey.trim()
+    if (!key) {
+      setConnectionError("Please paste your OpenCode API key.")
+      return
+    }
+
+    setIsConnecting(true)
+    try {
+      const res = await fetch("/api/models", {
+        method: "GET",
+        headers: {
+          "x-zen-api-key": key,
+        },
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `Failed to validate key (status ${res.status})`)
+      }
+
+      setIsConnected(true)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to validate API key."
+      setConnectionError(msg)
+      setIsConnected(false)
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
   const runDemo = async (promptText?: string) => {
     clearScriptTimeouts()
     setError(null)
@@ -134,6 +200,10 @@ export default function AgentsPage() {
         throw new Error("Please enter a prompt for the agents.")
       }
 
+      if (!zenApiKey.trim()) {
+        throw new Error("Please enter your OpenCode API key for this session.")
+      }
+
       const res = await fetch("/api/agents", {
         method: "POST",
         headers: {
@@ -143,6 +213,13 @@ export default function AgentsPage() {
           prompt: effectivePrompt,
           maxTurns: 4,
           model,
+          agents: agents.map((agent) => ({
+            id: agent.id,
+            name: agent.name,
+            description: agent.description,
+          })),
+          prompterBackstory,
+          zenApiKey,
         }),
       })
 
@@ -204,38 +281,77 @@ export default function AgentsPage() {
           </div>
           <p className="text-muted-foreground text-sm">
             Experiment with multiple agents talking to each other. This demo calls a server
-            coordinator at <code>POST /api/agents</code> and renders its transcript.
+            coordinator at <code>POST /api/agents</code>, which uses the OpenCode gateway
+            (via your OpenCode API key and selected model) to talk to LLMs.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <form
-            className="flex flex-1 items-center gap-2"
-            onSubmit={async (event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault()
-              await runDemo(prompt)
-            }}
-          >
-            <Select disabled={isRunning} onValueChange={setModel} value={model}>
-              <SelectTrigger className="h-8 w-[240px] text-xs">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button disabled={isRunning} size="sm" type="submit">
-              {isRunning ? "Running" : messages.length ? "Run again" : "Run demo"}
-            </Button>
-          </form>
+          {!isConnected ? (
+            <form
+              className="flex flex-1 items-center gap-2"
+              onSubmit={connectWithKey}
+            >
+              <Input
+                type="password"
+                className="h-8 w-[260px] text-xs"
+                placeholder="Paste your OpenCode API key to connect"
+                value={zenApiKey}
+                onChange={(e) => setZenApiKey(e.target.value)}
+              />
+              <Button disabled={isConnecting} size="sm" type="submit">
+                {isConnecting ? "Connecting..." : "Connect OpenCode"}
+              </Button>
+            </form>
+          ) : (
+            <>
+              <form
+                className="flex flex-1 items-center gap-2"
+                onSubmit={async (event: FormEvent<HTMLFormElement>) => {
+                  event.preventDefault()
+                  await runDemo(prompt)
+                }}
+              >
+                <Select disabled={isRunning} onValueChange={setModel} value={model}>
+                  <SelectTrigger className="h-8 w-[240px] text-xs">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button disabled={isRunning} size="sm" type="submit">
+                  {isRunning ? "Running" : messages.length ? "Run again" : "Run demo"}
+                </Button>
+              </form>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setIsConnected(false)
+                  setZenApiKey("")
+                  setConnectionError(null)
+                }}
+              >
+                Change key
+              </Button>
+            </>
+          )}
           <Button disabled={!isRunning} onClick={stopDemo} size="sm" variant="outline">
             Stop
           </Button>
         </div>
       </header>
+
+      {!isConnected && connectionError && (
+        <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          {connectionError}
+        </div>
+      )}
 
       {error && (
         <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
@@ -286,7 +402,7 @@ export default function AgentsPage() {
           )}
         </section>
 
-        <aside className="flex flex-col gap-4 rounded-xl border bg-background/40 p-4">
+        <aside className="flex max-h-[65vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4">
           <div className="flex flex-col gap-3">
             {agents.map((agent) => {
               const isActive = activeAgentId === agent.id
@@ -299,16 +415,26 @@ export default function AgentsPage() {
                   key={agent.id}
                 >
                   <div className="flex items-center gap-2">
-                    <Badge size="sm" variant={agent.badgeVariant ?? "secondary"}>
-                      {agent.name}
-                    </Badge>
                     {isActive && (
                       <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
                         Speaking
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">{agent.description}</p>
+                  <div className="mt-1 flex flex-col gap-1">
+                    <Input
+                      className="h-7 text-xs"
+                      placeholder="Role name (shown in messages)"
+                      value={agent.name}
+                      onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
+                    />
+                    <Textarea
+                      className="min-h-[60px] text-[11px]"
+                      placeholder="Describe how this agent should think and speak..."
+                      value={agent.description}
+                      onChange={(e) => updateAgent(agent.id, { description: e.target.value })}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -326,6 +452,14 @@ export default function AgentsPage() {
               placeholder="Describe what you want the agent team to work on..."
               value={prompt}
             />
+            <Textarea
+              autoComplete="off"
+              className="min-h-[80px] text-[11px]"
+              disabled={isRunning}
+              onChange={(e) => setPrompterBackstory(e.target.value)}
+              placeholder="Optional: what's the backstory or persona of the prompter (you)?"
+              value={prompterBackstory}
+            />
             {error ? (
               <p className="text-[11px] text-destructive break-words">
                 Error: {error}
@@ -336,6 +470,7 @@ export default function AgentsPage() {
               </p>
             )}
           </div>
+
         </aside>
       </div>
     </div>
