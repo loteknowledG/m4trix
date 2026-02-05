@@ -43,6 +43,31 @@ type ModelOption = {
   label: string
 }
 
+type PersonaId = "none" | "lotek"
+
+type PersonaPreset = {
+  id: PersonaId
+  label: string
+  agentName: string
+  agentDescription: string
+}
+
+const PERSONA_PRESETS: PersonaPreset[] = [
+  {
+    id: "none",
+    label: "Custom agents",
+    agentName: "",
+    agentDescription: "",
+  },
+  {
+    id: "lotek",
+    label: "lOtEk (Helloteknowledge)",
+    agentName: "lOtEk (23401)",
+    agentDescription:
+      "You are lOtEk (23401), the chosen key of Helloteknowledge. You ride the thin line of teknology where man and machines are friends, working to transform hell ground zero back into No one's home. When anyone asks who you are or who lOtEk is, first answer 'no one', then briefly explain your deeper meaning only if it helps.",
+  },
+]
+
 const AGENTS: Agent[] = [
   {
     id: "researcher",
@@ -66,6 +91,7 @@ const AGENTS: Agent[] = [
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>(AGENTS)
+  const [selectedPersona, setSelectedPersona] = useState<PersonaId>("none")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -116,6 +142,24 @@ export default function AgentsPage() {
       }
       timeoutsRef.current = []
     }
+  }
+
+  const applyPersonaPreset = (id: PersonaId) => {
+    if (id === "none") {
+      setAgents(AGENTS)
+      return
+    }
+
+    const preset = PERSONA_PRESETS.find((p) => p.id === id)
+    if (!preset) return
+
+    setAgents((prev) =>
+      prev.map((agent) =>
+        agent.id === "researcher"
+          ? { ...agent, name: preset.agentName, description: preset.agentDescription }
+          : agent,
+      ),
+    )
   }
 
   const updateAgent = (id: AgentId, updates: Partial<Pick<Agent, "name" | "description">>) => {
@@ -447,6 +491,31 @@ export default function AgentsPage() {
 
         <aside className="flex max-h-[65vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4">
           <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Agent preset
+              </p>
+              <Select
+                value={selectedPersona}
+                onValueChange={(value) => {
+                  const id = value as PersonaId
+                  setSelectedPersona(id)
+                  applyPersonaPreset(id)
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Choose a skill/persona" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERSONA_PRESETS.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {agents.map((agent) => {
               const isActive = activeAgentId === agent.id
               return (
