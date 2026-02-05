@@ -38,6 +38,11 @@ type AgentsResponse = {
   error?: string
 }
 
+type ModelOption = {
+  id: string
+  label: string
+}
+
 const AGENTS: Agent[] = [
   {
     id: "researcher",
@@ -59,45 +64,14 @@ const AGENTS: Agent[] = [
   },
 ]
 
-const MODEL_OPTIONS = [
-  { id: "claude-opus-4-5", label: "claude-opus-4-5" },
-  { id: "claude-opus-4-1", label: "claude-opus-4-1" },
-  { id: "claude-sonnet-4", label: "claude-sonnet-4" },
-  { id: "claude-sonnet-4-5", label: "claude-sonnet-4-5" },
-  { id: "claude-3-5-haiku", label: "claude-3-5-haiku" },
-  { id: "claude-haiku-4-5", label: "claude-haiku-4-5" },
-  { id: "gemini-3-pro", label: "gemini-3-pro" },
-  { id: "gemini-3-flash", label: "gemini-3-flash" },
-  { id: "gpt-5.2", label: "gpt-5.2" },
-  { id: "gpt-5.2-codex", label: "gpt-5.2-codex" },
-  { id: "gpt-5.1", label: "gpt-5.1" },
-  { id: "gpt-5.1-codex-max", label: "gpt-5.1-codex-max" },
-  { id: "gpt-5.1-codex", label: "gpt-5.1-codex" },
-  { id: "gpt-5.1-codex-mini", label: "gpt-5.1-codex-mini" },
-  { id: "gpt-5", label: "gpt-5" },
-  { id: "gpt-5-codex", label: "gpt-5-codex" },
-  { id: "gpt-5-nano", label: "gpt-5-nano" },
-  { id: "qwen3-coder", label: "qwen3-coder" },
-  { id: "glm-4.7", label: "glm-4.7" },
-  { id: "glm-4.6", label: "glm-4.6" },
-  { id: "minimax-m2.1", label: "minimax-m2.1" },
-  { id: "minimax-m2.1-free", label: "minimax-m2.1-free" },
-  { id: "kimi-k2.5", label: "kimi-k2.5" },
-  { id: "kimi-k2.5-free", label: "kimi-k2.5-free" },
-  { id: "kimi-k2", label: "kimi-k2" },
-  { id: "kimi-k2-thinking", label: "kimi-k2-thinking" },
-  { id: "trinity-large-preview-free", label: "trinity-large-preview-free" },
-  { id: "glm-4.7-free", label: "glm-4.7-free" },
-  { id: "big-pickle", label: "big-pickle" },
-]
-
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>(AGENTS)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState("")
-  const [model, setModel] = useState<string>(MODEL_OPTIONS[0]?.id ?? "minimax-m2.1-free")
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
+  const [model, setModel] = useState<string>("")
   const [prompterBackstory, setPrompterBackstory] = useState("")
   const [zenApiKey, setZenApiKey] = useState("")
   const [isConnected, setIsConnected] = useState(false)
@@ -150,6 +124,21 @@ export default function AgentsPage() {
     )
   }
 
+  const streamMessageText = async (messageId: string, fullText: string) => {
+    const words = fullText.split(" ")
+    let current = ""
+
+    for (let i = 0; i < words.length; i++) {
+      current += (i > 0 ? " " : "") + words[i]
+
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === messageId ? { ...msg, text: current } : msg)),
+      )
+
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 60 + 20))
+    }
+  }
+
   const connectWithKey = async (event?: FormEvent<HTMLFormElement>) => {
     if (event) {
       event.preventDefault()
@@ -177,6 +166,38 @@ export default function AgentsPage() {
         throw new Error(text || `Failed to validate key (status ${res.status})`)
       }
 
+      const payload = (await res.json().catch(() => null)) as any
+      const rawModels: any[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.models)
+            ? payload.models
+            : []
+
+      const options: ModelOption[] = rawModels
+        .map((m: any) => {
+          const id =
+            (typeof m?.id === "string" && m.id) ||
+            (typeof m?.model_id === "string" && m.model_id) ||
+            (typeof m?.name === "string" && m.name)
+
+          if (!id) return null
+
+          const label =
+            (typeof m?.display_name === "string" && m.display_name) ||
+            (typeof m?.name === "string" && m.name) ||
+            id
+
+          return { id, label }
+        })
+        .filter((m: ModelOption | null): m is ModelOption => Boolean(m))
+
+      setModelOptions(options)
+      if (options.length && !model) {
+        setModel(options[0]!.id)
+      }
+
       setIsConnected(true)
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to validate API key."
@@ -198,6 +219,10 @@ export default function AgentsPage() {
 
       if (!effectivePrompt) {
         throw new Error("Please enter a prompt for the agents.")
+      }
+
+      if (!model.trim()) {
+        throw new Error("Please select a model for the agents.")
       }
 
       if (!zenApiKey.trim()) {
@@ -254,7 +279,15 @@ export default function AgentsPage() {
         }
       })
 
-      setMessages(mapped)
+      const userMessages = mapped.filter((m) => m.from === "user")
+      const agentMessages = mapped.filter((m) => m.from !== "user")
+
+      setMessages(userMessages)
+
+      for (const agentMessage of agentMessages) {
+        setMessages((prev) => [...prev, { ...agentMessage, text: "" }])
+        await streamMessageText(agentMessage.id, agentMessage.text)
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong"
       setError(msg)
@@ -311,16 +344,26 @@ export default function AgentsPage() {
                   await runDemo(prompt)
                 }}
               >
-                <Select disabled={isRunning} onValueChange={setModel} value={model}>
+                <Select
+                  disabled={isRunning || !modelOptions.length}
+                  onValueChange={setModel}
+                  value={model}
+                >
                   <SelectTrigger className="h-8 w-[240px] text-xs">
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MODEL_OPTIONS.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.label}
+                    {modelOptions.length ? (
+                      modelOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__no-models__" disabled>
+                        No models available for this key
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
                 <Button disabled={isRunning} size="sm" type="submit">
