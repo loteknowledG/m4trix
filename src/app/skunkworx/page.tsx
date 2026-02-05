@@ -5,101 +5,17 @@
  * @credit {"name": "Vercel", "url": "https://ai-sdk.dev/elements", "license": {"name": "Apache License 2.0", "url": "https://www.apache.org/licenses/LICENSE-2.0"}}
  * @description React AI chatbot component showcasing a complete chat interface with messages, model selection, and prompt input
  */
-import {
-  Attachment,
-  AttachmentPreview,
-  AttachmentRemove,
-  Attachments,
-} from "@/components/ai/attachments"
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@/components/ai/conversation"
-import {
-  Message,
-  MessageBranch,
-  MessageBranchContent,
-  MessageBranchNext,
-  MessageBranchPage,
-  MessageBranchPrevious,
-  MessageBranchSelector,
-  MessageContent,
-  MessageResponse,
-} from "@/components/ai/message"
-import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogo,
-  ModelSelectorLogoGroup,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-} from "@/components/ai/model-selector"
-import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
-  PromptInputBody,
-  PromptInputButton,
-  PromptInputFooter,
-  PromptInputHeader,
-  type PromptInputMessage,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-  usePromptInputAttachments,
-} from "@/components/ai/prompt-input"
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@/components/ai/reasoning"
-import {
-  Source,
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from "@/components/ai/sources"
-import { Suggestion, Suggestions } from "@/components/ai/suggestion"
-import type { ToolUIPart } from "ai"
-import { CheckIcon, GlobeIcon, MicIcon, MessageCircle } from "lucide-react"
+import { ChatWindow, type ChatWindowMessage, type ChatWindowModel } from "@/components/ai/chat-window"
+import { type PromptInputMessage } from "@/components/ai/prompt-input"
+import { MessageCircle } from "lucide-react"
 import { nanoid } from "nanoid"
-import { SetStateAction, useCallback, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import DraggableDialog from "@/components/ui/draggable-dialog"
 import { Button } from "@/components/ui/button"
 import { useStickToBottomContext } from "use-stick-to-bottom"
 import { toast } from "sonner"
 
-interface MessageType {
-  key: string
-  from: "user" | "assistant"
-  sources?: { href: string; title: string }[]
-  versions: {
-    id: string
-    content: string
-  }[]
-  reasoning?: {
-    content: string
-    duration: number
-  }
-  tools?: {
-    name: string
-    description: string
-    status: ToolUIPart["state"]
-    parameters: Record<string, unknown>
-    result: string | undefined
-    error: string | undefined
-  }[]
-}
-
-const initialMessages: MessageType[] = [
+const initialMessages: ChatWindowMessage[] = [
   {
     key: nanoid(),
     from: "user",
@@ -173,7 +89,7 @@ Both hooks help with performance optimization, but they serve different purposes
   },
 ]
 
-const models = [
+const models: ChatWindowModel[] = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
@@ -230,29 +146,6 @@ const mockResponses = [
   "That's definitely worth exploring. From what I can see, the best way to handle this is to consider both the theoretical aspects and practical implementation details.",
 ]
 
-const PromptInputAttachmentsDisplay = () => {
-  const attachments = usePromptInputAttachments()
-
-  if (attachments.files.length === 0) {
-    return null
-  }
-
-  return (
-    <Attachments variant="inline">
-      {attachments.files.map((attachment) => (
-        <Attachment
-          data={attachment}
-          key={attachment.id}
-          onRemove={() => attachments.remove(attachment.id)}
-        >
-          <AttachmentPreview />
-          <AttachmentRemove />
-        </Attachment>
-      ))}
-    </Attachments>
-  )
-}
-
 export function ChatbotDemo() {
   const [model, setModel] = useState<string>(models[0].id)
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false)
@@ -260,7 +153,7 @@ export function ChatbotDemo() {
   const [useWebSearch, setUseWebSearch] = useState<boolean>(false)
   const [useMicrophone, setUseMicrophone] = useState<boolean>(false)
   const [status, setStatus] = useState<"submitted" | "streaming" | "ready" | "error">("ready")
-  const [messages, setMessages] = useState<MessageType[]>(initialMessages)
+  const [messages, setMessages] = useState<ChatWindowMessage[]>(initialMessages)
   const [_streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
 
   const stickyRef = useRef<HTMLDivElement | null>(null)
@@ -301,7 +194,7 @@ export function ChatbotDemo() {
 
   const addUserMessage = useCallback(
     (content: string) => {
-      const userMessage: MessageType = {
+      const userMessage: ChatWindowMessage = {
         key: `user-${Date.now()}`,
         from: "user",
         versions: [
@@ -318,7 +211,7 @@ export function ChatbotDemo() {
         const assistantMessageId = `assistant-${Date.now()}`
         const randomResponse = mockResponses[Math.floor(Math.random() * mockResponses.length)]
 
-        const assistantMessage: MessageType = {
+        const assistantMessage: ChatWindowMessage = {
           key: `assistant-${Date.now()}`,
           from: "assistant",
           versions: [
@@ -376,148 +269,27 @@ export function ChatbotDemo() {
   // Auto-scrolling is always enabled; rely on StickToBottom default behavior.
 
   const chat = (
-    <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
-      <Conversation style={{ height: `calc(100% - ${stickyHeight}px)` }} className="min-h-0 border-b">
-        <ConversationContent className="min-h-0">
-          {messages.map(({ versions, ...message }) => (
-            <MessageBranch defaultBranch={0} key={message.key}>
-              <MessageBranchContent>
-                {versions.map((version) => (
-                  <Message from={message.from} key={`${message.key}-${version.id}`}>
-                    <div>
-                      {message.sources?.length && (
-                        <Sources>
-                          <SourcesTrigger count={message.sources.length} />
-                          <SourcesContent>
-                            {message.sources.map((source) => (
-                              <Source href={source.href} key={source.href} title={source.title} />
-                            ))}
-                          </SourcesContent>
-                        </Sources>
-                      )}
-                      {message.reasoning && (
-                        <Reasoning duration={message.reasoning.duration}>
-                          <ReasoningTrigger />
-                          <ReasoningContent>{message.reasoning.content}</ReasoningContent>
-                        </Reasoning>
-                      )}
-                      <MessageContent>
-                        <MessageResponse>{version.content}</MessageResponse>
-                      </MessageContent>
-                    </div>
-                  </Message>
-                ))}
-              </MessageBranchContent>
-              {versions.length > 1 && (
-                <MessageBranchSelector from={message.from}>
-                  <MessageBranchPrevious />
-                  <MessageBranchPage />
-                  <MessageBranchNext />
-                </MessageBranchSelector>
-              )}
-            </MessageBranch>
-          ))}
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
-      <div ref={stickyRef} className="sticky bottom-0 z-20 bg-zinc-900/95 backdrop-blur-sm shrink-0 space-y-4 pt-4">
-        <Suggestions className="px-4">
-          {suggestions.map((suggestion) => (
-            <Suggestion
-              key={suggestion}
-              onClick={() => handleSuggestionClick(suggestion)}
-              suggestion={suggestion}
-            />
-          ))}
-        </Suggestions>
-        <div className="w-full px-4 pb-4">
-          <PromptInput globalDrop multiple onSubmit={handleSubmit}>
-            <PromptInputHeader>
-              <PromptInputAttachmentsDisplay />
-            </PromptInputHeader>
-            <PromptInputBody>
-              <PromptInputTextarea onChange={(event: { target: { value: SetStateAction<string> } }) => setText(event.target.value)} value={text} />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <PromptInputTools>
-                {/* Autoscroll always enabled; toggle removed */}
-                <PromptInputActionMenu>
-                  <PromptInputActionMenuTrigger />
-                  <PromptInputActionMenuContent>
-                    <PromptInputActionAddAttachments />
-                  </PromptInputActionMenuContent>
-                </PromptInputActionMenu>
-                <PromptInputButton
-                  onClick={() => setUseMicrophone(!useMicrophone)}
-                  variant={useMicrophone ? "default" : "ghost"}
-                >
-                  <MicIcon size={16} />
-                  <span className="sr-only">Microphone</span>
-                </PromptInputButton>
-                <PromptInputButton
-                  onClick={() => setUseWebSearch(!useWebSearch)}
-                  variant={useWebSearch ? "default" : "ghost"}
-                >
-                  <GlobeIcon size={16} />
-                  <span>Search</span>
-                </PromptInputButton>
-                <ModelSelector onOpenChange={setModelSelectorOpen} open={modelSelectorOpen}>
-                  <ModelSelectorTrigger asChild>
-                    <PromptInputButton>
-                      {selectedModelData?.chefSlug && (
-                        <ModelSelectorLogo provider={selectedModelData.chefSlug} />
-                      )}
-                      {selectedModelData?.name && (
-                        <ModelSelectorName>{selectedModelData.name}</ModelSelectorName>
-                      )}
-                    </PromptInputButton>
-                  </ModelSelectorTrigger>
-                  <ModelSelectorContent>
-                    <ModelSelectorInput placeholder="Search models..." />
-                    <ModelSelectorList>
-                      <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                      {["OpenAI", "Anthropic", "Google"].map((chef) => (
-                        <ModelSelectorGroup heading={chef} key={chef}>
-                          {models
-                            .filter((m) => m.chef === chef)
-                            .map((m) => (
-                              <ModelSelectorItem
-                                key={m.id}
-                                onSelect={() => {
-                                  setModel(m.id)
-                                  setModelSelectorOpen(false)
-                                }}
-                                value={m.id}
-                              >
-                                <ModelSelectorLogo provider={m.chefSlug} />
-                                <ModelSelectorName>{m.name}</ModelSelectorName>
-                                <ModelSelectorLogoGroup>
-                                  {m.providers.map((provider) => (
-                                    <ModelSelectorLogo key={provider} provider={provider} />
-                                  ))}
-                                </ModelSelectorLogoGroup>
-                                {model === m.id ? (
-                                  <CheckIcon className="ml-auto size-4" />
-                                ) : (
-                                  <div className="ml-auto size-4" />
-                                )}
-                              </ModelSelectorItem>
-                            ))}
-                        </ModelSelectorGroup>
-                      ))}
-                    </ModelSelectorList>
-                  </ModelSelectorContent>
-                </ModelSelector>
-              </PromptInputTools>
-              <PromptInputSubmit
-                disabled={!(text.trim() || status) || status === "streaming"}
-                status={status}
-              />
-            </PromptInputFooter>
-          </PromptInput>
-        </div>
-      </div>
-    </div>
+    <ChatWindow
+      messages={messages}
+      models={models}
+      suggestions={suggestions}
+      stickyHeight={stickyHeight}
+      stickyRef={stickyRef}
+      text={text}
+      status={status}
+      useWebSearch={useWebSearch}
+      useMicrophone={useMicrophone}
+      model={model}
+      modelSelectorOpen={modelSelectorOpen}
+      selectedModelData={selectedModelData}
+      onSuggestionClick={handleSuggestionClick}
+      onSubmit={handleSubmit}
+      onTextChange={(value) => setText(value)}
+      onToggleWebSearch={() => setUseWebSearch(!useWebSearch)}
+      onToggleMicrophone={() => setUseMicrophone(!useMicrophone)}
+      onSelectModel={(id) => setModel(id)}
+      onModelSelectorOpenChange={setModelSelectorOpen}
+    />
   )
 
   const [modalOpen, setModalOpen] = useState(false)
