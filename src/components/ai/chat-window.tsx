@@ -125,7 +125,7 @@ export type ChatWindowProps = {
   models: ChatWindowModel[]
   suggestions: string[]
   stickyHeight: number
-  stickyRef: RefObject<HTMLDivElement | null>
+  stickyRef: RefObject<HTMLDivElement>
   text: string
   status: "submitted" | "streaming" | "ready" | "error"
   useWebSearch: boolean
@@ -140,6 +140,8 @@ export type ChatWindowProps = {
   onToggleMicrophone: () => void
   onSelectModel: (id: string) => void
   onModelSelectorOpenChange: (open: boolean) => void
+  showInput?: boolean
+  showSuggestions?: boolean
 }
 
 export function ChatWindow({
@@ -163,6 +165,9 @@ export function ChatWindow({
   onSelectModel,
   onModelSelectorOpenChange,
 }: ChatWindowProps) {
+  const showInput = true
+  const showSuggestions = true
+
   return (
     <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
       <Conversation style={{ height: `calc(100% - ${stickyHeight}px)` }} className="min-h-0 border-b">
@@ -208,105 +213,111 @@ export function ChatWindow({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-      <div
-        ref={stickyRef}
-        className="sticky bottom-0 z-20 bg-zinc-900/95 backdrop-blur-sm shrink-0 space-y-4 pt-4"
-      >
-        <Suggestions className="px-4">
-          {suggestions.map((suggestion) => (
-            <Suggestion
-              key={suggestion}
-              onClick={() => onSuggestionClick(suggestion)}
-              suggestion={suggestion}
-            />
-          ))}
-        </Suggestions>
-        <div className="w-full px-4 pb-4">
-          <PromptInput globalDrop multiple onSubmit={onSubmit}>
-            <PromptInputHeader>
-              <PromptInputAttachmentsDisplay />
-            </PromptInputHeader>
-            <PromptInputBody>
-              <PromptInputTextarea
-                onChange={(event: { target: { value: SetStateAction<string> } }) =>
-                  onTextChange(event.target.value as string)
-                }
-                value={text}
-              />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <PromptInputTools>
-                {/* Autoscroll always enabled; toggle removed */}
-                <PromptInputActionMenu>
-                  <PromptInputActionMenuTrigger />
-                  <PromptInputActionMenuContent>
-                    <PromptInputActionAddAttachments />
-                  </PromptInputActionMenuContent>
-                </PromptInputActionMenu>
-                <PromptInputButton onClick={onToggleMicrophone} variant={useMicrophone ? "default" : "ghost"}>
-                  <MicIcon size={16} />
-                  <span className="sr-only">Microphone</span>
-                </PromptInputButton>
-                <PromptInputButton onClick={onToggleWebSearch} variant={useWebSearch ? "default" : "ghost"}>
-                  <GlobeIcon size={16} />
-                  <span>Search</span>
-                </PromptInputButton>
-                <ModelSelector onOpenChange={onModelSelectorOpenChange} open={modelSelectorOpen}>
-                  <ModelSelectorTrigger asChild>
-                    <PromptInputButton>
-                      {selectedModelData?.chefSlug && (
-                        <ModelSelectorLogo provider={selectedModelData.chefSlug} />
-                      )}
-                      {selectedModelData?.name && (
-                        <ModelSelectorName>{selectedModelData.name}</ModelSelectorName>
-                      )}
+      {((showSuggestions && suggestions.length > 0) || showInput) && (
+        <div
+          ref={stickyRef}
+          className="sticky bottom-0 z-20 bg-zinc-900/95 backdrop-blur-sm shrink-0 space-y-4 pt-4"
+        >
+          {showSuggestions && suggestions.length > 0 && (
+            <Suggestions className="px-4">
+              {suggestions.map((suggestion) => (
+                <Suggestion
+                  key={suggestion}
+                  onClick={() => onSuggestionClick(suggestion)}
+                  suggestion={suggestion}
+                />
+              ))}
+            </Suggestions>
+          )}
+          {showInput && (
+            <div className="w-full px-4 pb-4">
+              <PromptInput globalDrop multiple onSubmit={onSubmit}>
+                <PromptInputHeader>
+                  <PromptInputAttachmentsDisplay />
+                </PromptInputHeader>
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    onChange={(event: { target: { value: SetStateAction<string> } }) =>
+                      onTextChange(event.target.value as string)
+                    }
+                    value={text}
+                  />
+                </PromptInputBody>
+                <PromptInputFooter>
+                  <PromptInputTools>
+                    {/* Autoscroll always enabled; toggle removed */}
+                    <PromptInputActionMenu>
+                      <PromptInputActionMenuTrigger />
+                      <PromptInputActionMenuContent>
+                        <PromptInputActionAddAttachments />
+                      </PromptInputActionMenuContent>
+                    </PromptInputActionMenu>
+                    <PromptInputButton onClick={onToggleMicrophone} variant={useMicrophone ? "default" : "ghost"}>
+                      <MicIcon size={16} />
+                      <span className="sr-only">Microphone</span>
                     </PromptInputButton>
-                  </ModelSelectorTrigger>
-                  <ModelSelectorContent>
-                    <ModelSelectorInput placeholder="Search models..." />
-                    <ModelSelectorList>
-                      <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                      {["OpenAI", "Anthropic", "Google"].map((chef) => (
-                        <ModelSelectorGroup heading={chef} key={chef}>
-                          {models
-                            .filter((m) => m.chef === chef)
-                            .map((m) => (
-                              <ModelSelectorItem
-                                key={m.id}
-                                onSelect={() => {
-                                  onSelectModel(m.id)
-                                  onModelSelectorOpenChange(false)
-                                }}
-                                value={m.id}
-                              >
-                                <ModelSelectorLogo provider={m.chefSlug} />
-                                <ModelSelectorName>{m.name}</ModelSelectorName>
-                                <ModelSelectorLogoGroup>
-                                  {m.providers.map((provider) => (
-                                    <ModelSelectorLogo key={provider} provider={provider} />
-                                  ))}
-                                </ModelSelectorLogoGroup>
-                                {model === m.id ? (
-                                  <CheckIcon className="ml-auto size-4" />
-                                ) : (
-                                  <div className="ml-auto size-4" />
-                                )}
-                              </ModelSelectorItem>
-                            ))}
-                        </ModelSelectorGroup>
-                      ))}
-                    </ModelSelectorList>
-                  </ModelSelectorContent>
-                </ModelSelector>
-              </PromptInputTools>
-              <PromptInputSubmit
-                disabled={!(text.trim() || status) || status === "streaming"}
-                status={status}
-              />
-            </PromptInputFooter>
-          </PromptInput>
+                    <PromptInputButton onClick={onToggleWebSearch} variant={useWebSearch ? "default" : "ghost"}>
+                      <GlobeIcon size={16} />
+                      <span>Search</span>
+                    </PromptInputButton>
+                    <ModelSelector onOpenChange={onModelSelectorOpenChange} open={modelSelectorOpen}>
+                      <ModelSelectorTrigger asChild>
+                        <PromptInputButton>
+                          {selectedModelData?.chefSlug && (
+                            <ModelSelectorLogo provider={selectedModelData.chefSlug} />
+                          )}
+                          {selectedModelData?.name && (
+                            <ModelSelectorName>{selectedModelData.name}</ModelSelectorName>
+                          )}
+                        </PromptInputButton>
+                      </ModelSelectorTrigger>
+                      <ModelSelectorContent>
+                        <ModelSelectorInput placeholder="Search models..." />
+                        <ModelSelectorList>
+                          <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+                          {["OpenAI", "Anthropic", "Google"].map((chef) => (
+                            <ModelSelectorGroup heading={chef} key={chef}>
+                              {models
+                                .filter((m) => m.chef === chef)
+                                .map((m) => (
+                                  <ModelSelectorItem
+                                    key={m.id}
+                                    onSelect={() => {
+                                      onSelectModel(m.id)
+                                      onModelSelectorOpenChange(false)
+                                    }}
+                                    value={m.id}
+                                  >
+                                    <ModelSelectorLogo provider={m.chefSlug} />
+                                    <ModelSelectorName>{m.name}</ModelSelectorName>
+                                    <ModelSelectorLogoGroup>
+                                      {m.providers.map((provider) => (
+                                        <ModelSelectorLogo key={provider} provider={provider} />
+                                      ))}
+                                    </ModelSelectorLogoGroup>
+                                    {model === m.id ? (
+                                      <CheckIcon className="ml-auto size-4" />
+                                    ) : (
+                                      <div className="ml-auto size-4" />
+                                    )}
+                                  </ModelSelectorItem>
+                                ))}
+                            </ModelSelectorGroup>
+                          ))}
+                        </ModelSelectorList>
+                      </ModelSelectorContent>
+                    </ModelSelector>
+                  </PromptInputTools>
+                  <PromptInputSubmit
+                    disabled={!(text.trim() || status) || status === "streaming"}
+                    status={status}
+                  />
+                </PromptInputFooter>
+              </PromptInput>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

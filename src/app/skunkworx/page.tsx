@@ -156,7 +156,7 @@ export function ChatbotDemo() {
   const [messages, setMessages] = useState<ChatWindowMessage[]>(initialMessages)
   const [_streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
 
-  const stickyRef = useRef<HTMLDivElement | null>(null)
+  const stickyRef = useRef<HTMLDivElement>(null)
   const [stickyHeight, setStickyHeight] = useState(0)
 
   const selectedModelData = models.find((m) => m.id === model)

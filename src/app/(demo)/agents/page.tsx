@@ -1,9 +1,7 @@
 "use client"
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
-import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai/conversation"
-import { Message, MessageContent } from "@/components/ai/message"
-import { Badge } from "@/components/ui/badge"
+import { ChatWindow, type ChatWindowMessage, type ChatWindowModel } from "@/components/ai/chat-window"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,7 +13,7 @@ type Agent = {
   id: AgentId
   name: string
   description: string
-  badgeVariant?: "default" | "secondary" | "outline" | "destructive" | "ghost" | "link" | null
+  badgeVariant?: "default" | "secondary" | "outline" | "destructive" | "black" | null
 }
 
 type ChatMessage = {
@@ -345,6 +343,31 @@ export default function AgentsPage() {
     setIsRunning(false)
   }
 
+  const chatMessages = useMemo<ChatWindowMessage[]>(
+    () =>
+      messages.map((message) => {
+        const isUser = message.from === "user"
+        const agent = !isUser && message.from !== "user" ? agentsById[message.from] : null
+
+        const prefix = !isUser && agent?.name ? `${agent.name}: ` : ""
+
+        return {
+          key: message.id,
+          from: isUser ? "user" : "assistant",
+          versions: [
+            {
+              id: message.id,
+              content: `${prefix}${message.text}`,
+            },
+          ],
+        }
+      }),
+    [agentsById, messages]
+  )
+
+  const emptyModels: ChatWindowModel[] = []
+  const stickyRef = useRef<HTMLDivElement>(null)
+
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -416,7 +439,7 @@ export default function AgentsPage() {
               </form>
               <Button
                 variant="ghost"
-                size="xs"
+                size="sm"
                 className="text-[11px] text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setIsConnected(false)
@@ -449,38 +472,35 @@ export default function AgentsPage() {
       <div className="grid flex-1 gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <section className="relative flex min-h-[280px] max-h-[65vh] flex-col rounded-xl border bg-background/40">
           <div className="flex-1 overflow-y-auto">
-            <Conversation className="flex-1">
             {messages.length === 0 ? (
-              <ConversationEmptyState
-                description="Run the demo to see how multiple agents can talk in this UI."
-                title="No conversation yet"
-              />
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                Run the demo to see how multiple agents can talk in this UI.
+              </div>
             ) : (
-              <ConversationContent>
-                {messages.map((message) => {
-                  const isUser = message.from === "user"
-                  const agent = !isUser && message.from !== "user" ? agentsById[message.from] : null
-
-                  return (
-                    <Message from={isUser ? "user" : "assistant"} key={message.id}>
-                      <MessageContent>
-                        {!isUser && agent ? (
-                          <div className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <Badge size="sm" variant={agent.badgeVariant ?? "secondary"}>
-                              {agent.name}
-                            </Badge>
-                            <span className="truncate">speaks</span>
-                          </div>
-                        ) : null}
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.text}</p>
-                      </MessageContent>
-                    </Message>
-                  )
-                })}
-              </ConversationContent>
+              <ChatWindow
+                messages={chatMessages}
+                models={emptyModels}
+                suggestions={[]}
+                stickyHeight={0}
+                stickyRef={stickyRef}
+                text=""
+                status="ready"
+                useWebSearch={false}
+                useMicrophone={false}
+                model=""
+                modelSelectorOpen={false}
+                selectedModelData={undefined}
+                onSuggestionClick={() => {}}
+                onSubmit={() => {}}
+                onTextChange={() => {}}
+                onToggleWebSearch={() => {}}
+                onToggleMicrophone={() => {}}
+                onSelectModel={() => {}}
+                onModelSelectorOpenChange={() => {}}
+                showInput={false}
+                showSuggestions={false}
+              />
             )}
-              <ConversationScrollButton />
-            </Conversation>
           </div>
           {error && (
             <div className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
