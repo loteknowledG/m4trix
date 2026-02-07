@@ -36,6 +36,12 @@ type AgentsResponse = {
   error?: string
 }
 
+type AgentRole = {
+  id: string
+  label: string
+  description: string
+}
+
 type ModelOption = {
   id: string
   label: string
@@ -89,6 +95,12 @@ const AGENTS: Agent[] = [
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>(AGENTS)
+  const [agentRoles, setAgentRoles] = useState<AgentRole[]>([])
+  const [agentRoleSelections, setAgentRoleSelections] = useState<Record<AgentId, string>>({
+    researcher: "custom",
+    critic: "custom",
+    summarizer: "custom",
+  })
   const [selectedPersona, setSelectedPersona] = useState<PersonaId>("none")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isRunning, setIsRunning] = useState(false)
@@ -120,6 +132,52 @@ export default function AgentsPage() {
       window.sessionStorage.removeItem("ZEN_API_KEY_SESSION")
     }
   }, [zenApiKey])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadRoles() {
+      try {
+        const res = await fetch("/api/agent-roles")
+        if (!res.ok) return
+        const roles = (await res.json()) as AgentRole[]
+        if (cancelled) return
+        setAgentRoles(roles)
+
+        // Initialize agents from matching role presets if they are still empty
+        setAgents((prev) =>
+          prev.map((agent) => {
+            const existing = agent.name || agent.description
+            if (existing) return agent
+            const role = roles.find((r) => r.id === agent.id)
+            if (!role) return agent
+            return { ...agent, name: role.label, description: role.description }
+          }),
+        )
+
+        setAgentRoleSelections((prev) => {
+          const next = { ...prev }
+          ;(["researcher", "critic", "summarizer"] as AgentId[]).forEach((id) => {
+            if (next[id] === "custom") {
+              const role = roles.find((r) => r.id === id)
+              if (role) {
+                next[id] = role.id
+              }
+            }
+          })
+          return next
+        })
+      } catch {
+        // Silent failure; demo still works with manual roles
+      }
+    }
+
+    loadRoles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const agentsById = useMemo(() => {
     return agents.reduce<Record<AgentId, Agent>>((acc, agent) => {
@@ -552,6 +610,37 @@ export default function AgentsPage() {
                         Speaking
                       </span>
                     )}
+                  </div>
+                  <div className="mt-1 flex flex-col gap-1">
+                    <p className="text-[10px] font-medium text-muted-foreground">
+                      Role preset
+                    </p>
+                    <Select
+                      value={agentRoleSelections[agent.id] ?? "custom"}
+                      onValueChange={(value) => {
+                        setAgentRoleSelections((prev) => ({ ...prev, [agent.id]: value }))
+                        if (value === "custom") return
+                        const role = agentRoles.find((r) => r.id === value)
+                        if (role) {
+                          updateAgent(agent.id, {
+                            name: role.label,
+                            description: role.description,
+                          })
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-[11px]">
+                        <SelectValue placeholder="Choose role preset" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="custom">Custom</SelectItem>
+                        {agentRoles.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            {role.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="mt-1 flex flex-col gap-1">
                     <Input

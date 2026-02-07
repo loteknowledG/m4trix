@@ -1,4 +1,5 @@
 "use client";
+import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
 import Link from "next/link";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
@@ -364,12 +365,20 @@ function HeapInner() {
   const selectedIds = useSelection((s) => s.selections["heap"] || []);
   const toggleSelectStore = useSelection((s) => s.toggle);
   const clearSelectionStore = useSelection((s) => s.clear);
+  const setSelectionStore = useSelection((s) => s.set);
   const anySelected = (selectedIds || []).length > 0;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedCount = (selectedIds || []).length;
   const clearSelection = useCallback(() => {
     try { clearSelectionStore("heap"); } catch (e) { }
   }, [clearSelectionStore]);
+
+  const selectAll = useCallback(() => {
+    try {
+      if (!moments || moments.length === 0) return;
+      setSelectionStore("heap", moments.map((m) => m.id));
+    } catch (e) { }
+  }, [moments, setSelectionStore]);
 
   // When the Google Photos import sheet opens, focus the album URL input
   useEffect(() => {
@@ -492,20 +501,18 @@ function HeapInner() {
       title=""
       navLeft={
         anySelected ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
+          <SelectionHeaderBar
+            selectedIds={selectedIds || []}
+            moments={moments}
+            onSelectAll={() => {
+              if (selectedIds.length !== moments.length) {
+                selectAll();
+              } else {
                 clearSelection();
-              }}
-              className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              aria-label="Clear selection"
-            >
-              <X size={16} />
-            </button>
-            <span className="text-sm font-medium">{selectedCount} selected</span>
-          </div>
+              }
+            }}
+            onClearSelection={clearSelection}
+          />
         ) : null
       }
       navRight={

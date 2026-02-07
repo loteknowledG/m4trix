@@ -1,4 +1,6 @@
 import type { NextRequest } from "next/server"
+import fs from "node:fs/promises"
+import path from "node:path"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -60,6 +62,54 @@ export type AgentsResponse = {
   messages: OrchestratedMessage[]
   mode: "demo" | "live"
   error?: string
+}
+
+const AGENT_MARKDOWN_DIR = path.join(process.cwd(), "agents")
+
+const AGENT_DEFAULT_NAMES: Record<AgentId, string> = {
+  researcher: "Researcher",
+  critic: "Critic",
+  summarizer: "Summarizer",
+}
+
+const AGENT_FALLBACK_DESCRIPTIONS: Record<AgentId, string> = {
+  researcher: "Finds facts, breaks down the problem, and proposes options.",
+  critic: "Challenges assumptions, looks for risks and edge cases.",
+  summarizer: "Condenses the discussion into a concise plan.",
+}
+
+async function loadAgentDescriptionFromMarkdown(agentId: AgentId): Promise<string | null> {
+  try {
+    const filePath = path.join(AGENT_MARKDOWN_DIR, `${agentId}.md`)
+    const raw = await fs.readFile(filePath, "utf8")
+    return raw.trim()
+  } catch {
+    return null
+  }
+}
+
+async function getDefaultAgents(): Promise<Agent[]> {
+  const ids: AgentId[] = ["researcher", "critic", "summarizer"]
+
+  const agents: Agent[] = []
+  for (const id of ids) {
+    const descriptionFromFile = await loadAgentDescriptionFromMarkdown(id)
+    agents.push({
+      id,
+      name: AGENT_DEFAULT_NAMES[id],
+      description: descriptionFromFile ?? AGENT_FALLBACK_DESCRIPTIONS[id],
+    })
+  }
+
+  return agents
+}
+
+function selectAgentsForPrompt(prompt: string, agents: Agent[]): Agent[] {
+  const mentionMatch = prompt.match(/^\s*@?(researcher|critic|summarizer)\b/i)
+  if (!mentionMatch) return []
+
+  const addressedId = mentionMatch[1].toLowerCase() as AgentId
+  return agents.filter((agent) => agent.id === addressedId)
 }
 
 // In a real implementation you would:
@@ -323,6 +373,7 @@ export async function POST(req: NextRequest) {
         ? (body as any).zenApiKey.trim()
         : undefined
     const incomingAgents = Array.isArray((body as any).agents) ? (body as any).agents : undefined
+
     const effectiveAgents: Agent[] =
       incomingAgents && incomingAgents.length
         ? incomingAgents.map((agent: any) => ({
@@ -330,7 +381,10 @@ export async function POST(req: NextRequest) {
             name: typeof agent.name === "string" ? agent.name : "",
             description: typeof agent.description === "string" ? agent.description : "",
           }))
-        : DEMO_AGENTS
+        : await getDefaultAgents()
+
+    const addressedAgents = selectAgentsForPrompt(prompt, effectiveAgents)
+    const agentsForRun = addressedAgents.length ? addressedAgents : effectiveAgents
 
     const zenModelFromEnv = process.env.ZEN_MODEL
     const hasZenConfig = Boolean(
@@ -348,7 +402,7 @@ export async function POST(req: NextRequest) {
       try {
         messages = await buildModelTranscript(
           prompt,
-          effectiveAgents,
+          agentsForRun,
           modelOverride,
           prompterBackstory,
           zenApiKeyOverride,
