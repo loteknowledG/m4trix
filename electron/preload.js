@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 const { contextBridge, ipcRenderer } = require("electron");
 
 // expose a small API for renderer to use
@@ -29,7 +30,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
           console.warn("Detected chunk/load error — reloading to recover.");
           location.reload();
         }
-      } catch (err) {}
+      } catch (err) { /* ignore */ }
     });
 
     window.addEventListener("unhandledrejection", (ev) => {
@@ -40,7 +41,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
           console.warn("Detected unhandled chunk rejection — reloading to recover.");
           location.reload();
         }
-      } catch (err) {}
+      } catch (err) { /* ignore */ }
     });
-  } catch (err) {}
+  } catch (err) { /* ignore */ }
 })();

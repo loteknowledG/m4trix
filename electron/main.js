@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -73,7 +74,7 @@ function createWindow() {
       const ses = win.webContents.session;
       try {
         await ses.clearCache();
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
 
       // small delay to allow cache clear to settle
       setTimeout(() => {
@@ -90,10 +91,10 @@ function createWindow() {
             });
             return;
           }
-        } catch (e) {}
+        } catch (e) { /* ignore */ }
         if (!win.isDestroyed()) win.reload();
       }, 50);
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
   });
 }
 
@@ -143,7 +144,7 @@ async function getGooglePhotosFetcher() {
       gpFetcher = mod?.default || (typeof mod === "function" ? mod : null) ||
         mod?.fetchAlbum || mod?.fetchAlbumImageUrls || mod?.getAlbumImageUrls || mod?.getImageUrls || mod?.getUrls || mod?.fetchImageUrls ||
         (mod && typeof mod === 'object' ? Object.values(mod).find(v => typeof v === 'function') : undefined);
-    } catch {}
+    } catch (e) { /* ignore */ }
   }
   // Last-resort: scan pnpm virtual store for the package
   if (!gpFetcher) {
@@ -162,7 +163,7 @@ async function getGooglePhotosFetcher() {
             (mod && typeof mod === 'object' ? Object.values(mod).find(v => typeof v === 'function') : undefined);
         }
       }
-    } catch {}
+    } catch (e) { /* ignore */ }
   }
   return gpFetcher;
 }
@@ -172,6 +173,6 @@ ipcMain.handle("gp-fetch-album", async (_evt, albumUrl) => {
   if (!fn) throw new Error("google-photos-album-image-url-fetch not available in main");
   const raw = await fn(albumUrl);
   const urls = normalizeUrls(raw);
-  try { console.log("[electron-main] gp-fetch-album result", { total: urls.length, sample: urls.slice(0,5) }); } catch {}
+  try { console.log("[electron-main] gp-fetch-album result", { total: urls.length, sample: urls.slice(0, 5) }); } catch (e) { /* ignore */ }
   return urls;
 });

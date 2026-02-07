@@ -1,24 +1,8 @@
 "use client";
 import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
-import Link from "next/link";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator
-} from "@/components/ui/breadcrumb";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
+// Breadcrumbs, Label, Switch, Tooltip imports removed — not used in this view
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,7 +14,7 @@ import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
 import CollectionOverlay from "@/components/collection-overlay";
 import JustifiedMasonry from "@/components/ui/justified-masonry";
-import { Check, Circle, CheckCircle, X, Trash2, SquarePen, Upload } from "lucide-react";
+import { Trash2, SquarePen, Upload } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -42,73 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 
-// Local TextScramble component — lightweight scramble for numbers
-function TextScramble({
-  value,
-  duration = 800,
-  speed = 40,
-  characterSet = "0123456789",
-  className,
-}: {
-  value: number | string;
-  duration?: number;
-  speed?: number;
-  characterSet?: string;
-  className?: string;
-}) {
-  const target = String(value ?? "");
-  const [display, setDisplay] = useState(target);
-  const rafRef = useRef<number | null>(null);
-  const intervalRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const start = Date.now();
-    const chars = characterSet;
-
-    const tick = () => {
-      const elapsed = Date.now() - start;
-      const progress = Math.min(1, elapsed / duration);
-      const out: string[] = [];
-      for (let i = 0; i < target.length; i++) {
-        if (Math.random() < progress) {
-          out.push(target[i]);
-        } else {
-          out.push(chars[Math.floor(Math.random() * chars.length)]);
-        }
-      }
-      setDisplay(out.join(""));
-      if (progress >= 1) {
-        // ensure final value
-        setDisplay(target);
-        if (intervalRef.current) {
-          window.clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        if (rafRef.current) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-      }
-    };
-
-    // run immediately then at an interval
-    tick();
-    intervalRef.current = window.setInterval(tick, speed);
-
-    return () => {
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [target, duration, speed, characterSet]);
-
-  return <span className={className}>{display}</span>;
-}
+// Local TextScramble removed (unused)
 
 type Moment = {
   id: string;
@@ -120,6 +38,7 @@ type Moment = {
 function HeapInner() {
   const toast = useToast();
   const [storySheetOpen, setStorySheetOpen] = useState(false);
+  const router = useRouter();
   const isImageLikeUrl = useCallback((u: string) => {
     if (!u) return false;
     const clean = u.trim();
@@ -208,7 +127,7 @@ function HeapInner() {
     }, 250);
   }, [toast]);
 
-  const router = useRouter();
+
   type Story = { id: string; title: string; count?: number };
   const [stories, setStories] = useState<Story[]>([]);
   const [storyPreviews, setStoryPreviews] = useState<Record<string, string | null>>({});
@@ -368,16 +287,16 @@ function HeapInner() {
   const setSelectionStore = useSelection((s) => s.set);
   const anySelected = (selectedIds || []).length > 0;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const selectedCount = (selectedIds || []).length;
+
   const clearSelection = useCallback(() => {
-    try { clearSelectionStore("heap"); } catch (e) { }
+    try { clearSelectionStore("heap"); } catch (e) { /* ignore */ }
   }, [clearSelectionStore]);
 
   const selectAll = useCallback(() => {
     try {
       if (!moments || moments.length === 0) return;
       setSelectionStore("heap", moments.map((m) => m.id));
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
   }, [moments, setSelectionStore]);
 
   // When the Google Photos import sheet opens, focus the album URL input
@@ -485,9 +404,7 @@ function HeapInner() {
     setIsDragActive(false);
   }, []);
 
-  const removeMoment = useCallback((id: string) => {
-    setMoments((s) => s.filter((g) => g.id !== id));
-  }, []);
+
 
   const toggleSelect = useCallback((id: string) => {
     toggleSelectStore("heap", id);
@@ -495,7 +412,6 @@ function HeapInner() {
 
   const sidebar = useStore(useSidebar, (x) => x);
   if (!sidebar) return null;
-  const { settings, setSettings } = sidebar;
   return (
     <ContentLayout
       title=""
@@ -550,11 +466,11 @@ function HeapInner() {
                         detail: { count: newTrash.length, source: "heap" },
                       })
                     );
-                  } catch (e) {}
+                  } catch (e) { /* ignore */ }
                   // clear local selection now that items are moved
                   try {
                     clearSelection();
-                  } catch (e) {}
+                  } catch (e) { /* ignore */ }
                 } catch (err) {
                   logger.error("Failed to move to trash", err);
                 }
@@ -614,7 +530,7 @@ function HeapInner() {
                       await set("stories-active", id);
                       try {
                         toast.show(`Moved ${selected.length} moments to new story`);
-                      } catch (e) { }
+                      } catch (e) { /* ignore */ }
                       setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                       router.push(`/stories/${id}`);
                     } catch (err) {
@@ -673,7 +589,7 @@ function HeapInner() {
                           await set("stories-active", s.id);
                           try {
                             toast.show(`Moved ${selected.length} moments to ${s.title || "story"}`);
-                          } catch (e) { }
+                          } catch (e) { /* ignore */ }
                           // remove moved moments from heap
                           setMoments((prev) => prev.filter((g) => !(selectedIds || []).includes(g.id)));
                           router.push(`/stories/${s.id}`);
@@ -752,7 +668,7 @@ function HeapInner() {
                               added++;
                             }
                           }
-                          try { toast.show(`Imported ${added} images from album`); } catch (e) { }
+                          try { toast.show(`Imported ${added} images from album`); } catch (e) { /* ignore */ }
                           setImportSheetOpen(false);
                           setImportUrl("");
                         } catch (err: any) {
@@ -799,7 +715,7 @@ function HeapInner() {
                             added++;
                           }
                         }
-                        try { toast.show(`Imported ${added} images from album`); } catch (e) { }
+                        try { toast.show(`Imported ${added} images from album`); } catch (e) { /* ignore */ }
                         setImportSheetOpen(false);
                         setImportUrl("");
                       } catch (err: any) {

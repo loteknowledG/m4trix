@@ -1,0 +1,11 @@
+.next
+node_modules
+dist
+out
+build
+.vscode
+.idea
+.DS_Store
+coverage
+public/registry
+pnpm-lock.yaml

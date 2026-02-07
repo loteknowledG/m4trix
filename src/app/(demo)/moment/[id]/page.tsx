@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { get, set } from "idb-keyval";
+import { get } from "idb-keyval";
 import { logger } from "@/lib/logger";
-import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { ArrowLeft } from "lucide-react";
 import MomentCard from "@/components/moment-card";
 

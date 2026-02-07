@@ -36,7 +36,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   const onAction = (action: string) => {
     try {
       window.dispatchEvent(new CustomEvent("story-action", { detail: { action } }));
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
   };
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
       const h = headerRef.current?.offsetHeight ?? 56;
       try {
         document.documentElement.style.setProperty("--app-header-height", `${h}px`);
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
     };
     setVar();
     window.addEventListener("resize", setVar);
@@ -54,14 +54,14 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
   return (
     <header ref={headerRef} className="sticky top-0 z-10 w-full bg-background/95 shadow backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary">
       <div className="mx-4 sm:mx-8 flex h-14 items-center">
-          <div className="flex items-center space-x-4 lg:space-x-0 flex-1">
+        <div className="flex items-center space-x-4 lg:space-x-0 flex-1">
           <SheetMenu />
           {leftSlot ? (
             leftSlot
           ) : (
             isStoryDetail && selectedCount > 0 ? (
               <button
-                onClick={() => { try { clearSelection(scope); } catch (e) {} }}
+                onClick={() => { try { clearSelection(scope); } catch (e) { } }}
                 className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
                 aria-label="Clear selection"
               >

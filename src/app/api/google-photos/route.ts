@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       return candidates[0] ?? null;
     };
     let fn: any = null;
-    let errs: string[] = [];
+    const errs: string[] = [];
     // 1) Try standard ESM import
     try {
       const esm = await import("google-photos-album-image-url-fetch");

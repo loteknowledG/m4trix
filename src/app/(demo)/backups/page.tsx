@@ -46,7 +46,7 @@ export default function BackupsPage() {
   const [exportedObj, setExportedObj] = useState<any | null>(null);
   const [importedText, setImportedText] = useState<string | null>(null);
   const MAX_EXPORT_BYTES = 5 * 1024 * 1024; // 5 MB
-  const MAX_IMPORT_BYTES = 10 * 1024 * 1024; // 10 MB
+
 
   const handleExport = useCallback(async () => {
     let previewSummary: any = null
@@ -93,7 +93,7 @@ export default function BackupsPage() {
                   overlays[id] = raw;
                 }
               }
-            } catch (e) { }
+            } catch (e) { /* ignore */ }
           }
         };
         collectFor(heap);
@@ -174,7 +174,7 @@ export default function BackupsPage() {
           setExportedObj(removeSrc(previewSummary));
           setExportedText(s);
         }
-      } catch (er) { }
+      } catch (er) { /* ignore */ }
       setMessage("Export failed");
       setTimeout(() => setMessage(null), 4000);
     }
@@ -193,7 +193,7 @@ export default function BackupsPage() {
         } catch (e) {
           try {
             setImportedText(sanitizeAndStringify(String(reader.result || "")));
-          } catch (ee) { }
+          } catch (ee) { /* ignore */ }
         }
 
         // Handle old flat-array backups (array of heap items)
@@ -258,9 +258,7 @@ export default function BackupsPage() {
           await set("stories-active", null as any);
           try {
             window.dispatchEvent(new CustomEvent("stories-updated", { detail: {} }));
-          } catch (e) {
-            /* ignore in non-browser */
-          }
+          } catch (e) { /* ignore in non-browser */ }
         } catch (e) {
           logger.warn("Failed to reset stories keys after import", e);
         }
@@ -306,9 +304,7 @@ export default function BackupsPage() {
             );
             try {
               window.dispatchEvent(new CustomEvent("stories-updated", { detail: {} }));
-            } catch (e) {
-              /* ignore in non-browser */
-            }
+            } catch (e) { /* ignore in non-browser */ }
           } catch (e) {
             logger.warn("Failed to restore stories metadata", e);
           }
@@ -316,9 +312,7 @@ export default function BackupsPage() {
         // notify app to refresh any in-memory state
         try {
           window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: validated.length } }));
-        } catch (e) {
-          // ignore in non-browser
-        }
+        } catch (e) { /* ignore in non-browser */ }
         // don't reload the page; dispatch events above already notify the app
         setMessage(`Imported ${validated.length} moments`);
         setTimeout(() => setMessage(null), 4000);
@@ -327,7 +321,7 @@ export default function BackupsPage() {
         setMessage("Import failed");
         try {
           setImportedText(sanitizeAndStringify(String(reader.result || "")));
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
         setTimeout(() => setMessage(null), 4000);
       }
     };

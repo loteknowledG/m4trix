@@ -1,6 +1,5 @@
 import {
   Users,
-  Settings,
   Bookmark,
   SquarePen,
   LayoutGrid,
@@ -28,7 +27,7 @@ type Group = {
   menus: Menu[];
 };
 
-export function getMenuList(pathname: string): Group[] {
+export function getMenuList(): Group[] {
   return [
     {
       groupLabel: "",
@@ -70,13 +69,13 @@ export function getMenuList(pathname: string): Group[] {
           label: "Trash",
           icon: Trash2
         }
-      
+
       ]
     },
     {
       groupLabel: "Settings",
       menus: [
-        
+
         {
           href: "/backups",
           label: "Backups",

@@ -5,8 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
-import { Upload, ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 import useSelection from "@/hooks/use-selection";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
@@ -35,9 +34,9 @@ export default function StoryByIdPage() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollAnimRef = useRef<number | null>(null);
   const scrollDirectionRef = useRef<number>(0);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
-  
+
+
 
 
   useEffect(() => {
@@ -304,19 +303,19 @@ export default function StoryByIdPage() {
     <ContentLayout
       title="Stories"
       navLeft={
-          <SelectionHeaderBar
-            selectedIds={selectedIds || []}
-            moments={moments}
-            showSelectAll={(selectedIds || []).length > 0}
-            onSelectAll={() => {
-              if ((selectedIds || []).length !== moments.length) {
-                setSelectionStore(scope, moments.map((m) => m.id));
-              } else {
-                clearSelection(scope);
-              }
-            }}
-            onClearSelection={() => clearSelection(scope)}
-          />
+        <SelectionHeaderBar
+          selectedIds={selectedIds || []}
+          moments={moments}
+          showSelectAll={(selectedIds || []).length > 0}
+          onSelectAll={() => {
+            if ((selectedIds || []).length !== moments.length) {
+              setSelectionStore(scope, moments.map((m) => m.id));
+            } else {
+              clearSelection(scope);
+            }
+          }}
+          onClearSelection={() => clearSelection(scope)}
+        />
       }
       navRight={null}
     >

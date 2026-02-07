@@ -11,6 +11,7 @@
     "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:prod": "next build && concurrently \"next start -p 3000\" \"electron .\"",
     "lint": "next lint",
+    "lint:fix": "eslint --ext .js,.jsx,.ts,.tsx . --fix",
     "registry:build": "tsx ./scripts/build-registry.ts"
   },
   "dependencies": {
@@ -66,6 +67,11 @@
     "electron": "^39.2.7",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
+    "@typescript-eslint/parser": "^6.5.0",
+    "@typescript-eslint/eslint-plugin": "^6.5.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^2.8.8",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.19.1",

@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import { normalizeMomentSrc } from "@/lib/moments";
 import { ShineBorder } from "@/components/ui/shine-border";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { logger } from "@/lib/logger";
+import { usePathname } from "next/navigation";
 import { useMomentsContext } from "@/context/moments-collection";
 
 type Moment = {
@@ -29,7 +28,6 @@ export default function MomentCard({
   fullHeight?: boolean;
   onOpen?: (item: Moment) => void;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const momentsCtx = useMomentsContext();
   const [open, setOpen] = useState(false);
@@ -49,7 +47,7 @@ export default function MomentCard({
       window.removeEventListener("keydown", onKey);
       try {
         document.body.style.overflow = prevOverflow;
-      } catch (err) {}
+      } catch (err) { /* ignore */ }
     };
   }, [open]);
 
@@ -85,9 +83,8 @@ export default function MomentCard({
   return (
     <div
       onClick={handleContainerClick}
-      className={`relative group rounded overflow-hidden shadow-sm transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${
-        item.selected ? "ring-2 ring-primary/60" : ""
-      } ${fullHeight ? "h-full" : ""}`}
+      className={`relative group rounded overflow-hidden shadow-sm transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${item.selected ? "ring-2 ring-primary/60" : ""
+        } ${fullHeight ? "h-full" : ""}`}
     >
       {item.selected && (
         <ShineBorder
@@ -103,9 +100,8 @@ export default function MomentCard({
           e.preventDefault();
           toggleSelect(item.id);
         }}
-        className={`absolute z-0 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
-          item.selected || anySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        } transition-opacity pointer-events-auto`}
+        className={`absolute z-0 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${item.selected || anySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          } transition-opacity pointer-events-auto`}
         aria-label="Select moment"
       >
         {!item.selected && (
@@ -156,8 +152,8 @@ export default function MomentCard({
               <div className="max-h-full max-w-full flex items-center justify-center">
                 <div className="flex items-center justify-center w-full">
                   {/* eslint-disable-next-line @next/next/no-img-element -- overlay images can be blob/data URLs */}
-                    <img
-                      src={normalizeMomentSrc(item.src)}
+                  <img
+                    src={normalizeMomentSrc(item.src)}
                     alt={item.name || "Moment preview"}
                     className="h-screen max-w-full object-contain rounded"
                     onClick={(e) => {

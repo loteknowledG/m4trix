@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+// ReactNode import removed — not used
 import { Circle, CheckCircle, X } from "lucide-react";
 
 interface SelectionHeaderBarProps {
