@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic"
 const ZEN_CHAT_URL = "https://opencode.ai/zen/v1/chat/completions"
 const ZEN_MODELS_URL = "https://opencode.ai/zen/v1/models"
 
+// Google Gemini OpenAI-compatible endpoints
+const GOOGLE_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/openai/v1/models"
+
 // Simple proxy to list models available to your Zen/OpenCode API key.
 //
 // Uses the hardcoded OpenCode models endpoint above. You can still
@@ -32,36 +35,48 @@ function deriveModelsUrlFromChatUrl(chatUrl: string | undefined): string | null 
 
 export async function GET(req: NextRequest) {
   const overrideKey = req.headers.get("x-zen-api-key")?.trim() || null
+  const googleOverrideKey = req.headers.get("x-google-api-key")?.trim() || null
+  
   const zenApiKey = overrideKey || process.env.ZEN_API_KEY
+  const googleApiKey = googleOverrideKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY
 
-  if (!zenApiKey) {
+  if (!zenApiKey && !googleApiKey) {
     return new Response(
-      "ZEN_API_KEY is not configured and no per-request key was provided",
+      "Neither ZEN_API_KEY nor GOOGLE_GENERATIVE_AI_API_KEY are configured, and no per-request key was provided",
       { status: 400 },
     )
   }
-  const modelsUrl = ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL)
+
+  // If a google key is provided (or specifically requested via header), prefer it or use it.
+  // In the playground, the client sends exactly one key header usually.
+  const isGoogle = Boolean(googleOverrideKey || (googleApiKey && !zenApiKey && !overrideKey))
+  
+  const modelsUrl = isGoogle 
+    ? GOOGLE_MODELS_URL 
+    : (ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL))
+    
+  const apiKeyToUse = isGoogle ? googleApiKey : zenApiKey
 
   try {
-    const response = await fetch(modelsUrl, {
+    const response = await fetch(modelsUrl!, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${zenApiKey}`,
+        Authorization: `Bearer ${apiKeyToUse}`,
       },
     })
 
     const text = await response.text()
 
     if (!response.ok) {
+      const provider = isGoogle ? "Google Gemini" : "Zen"
       return new Response(
-        `Zen models endpoint error ${response.status}: ${text || response.statusText}`,
+        `${provider} models endpoint error ${response.status}: ${text || response.statusText}`,
         { status: response.status },
       )
     }
 
-    // Pass through JSON from Zen so you can see all details, including
-    // any fields that indicate free / paid tiers.
+    // Pass through JSON from provider so you can see all details.
     return new Response(text, {
       status: 200,
       headers: {
@@ -69,10 +84,11 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (error: unknown) {
+    const provider = isGoogle ? "Google Gemini" : "Zen"
     const message =
       error instanceof Error ? error.message : typeof error === "string" ? error : "Internal error"
 
-    return new Response(`Failed to fetch Zen models: ${message}`, {
+    return new Response(`Failed to fetch ${provider} models: ${message}`, {
       status: 500,
     })
   }

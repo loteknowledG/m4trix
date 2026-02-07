@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FileUp, Loader2, Send, User } from "lucide-react"
+import { toast } from "sonner"
 
-type AgentId = "researcher" | "critic" | "summarizer"
+type AgentId = string
 
 type Agent = {
   id: AgentId
@@ -36,7 +38,7 @@ type AgentsResponse = {
   error?: string
 }
 
-type AgentRole = {
+type AgentSpec = {
   id: string
   label: string
   description: string
@@ -45,6 +47,7 @@ type AgentRole = {
 type ModelOption = {
   id: string
   label: string
+  provider: "zen" | "google"
 }
 
 type PersonaId = "none" | "lotek"
@@ -94,14 +97,11 @@ const AGENTS: Agent[] = [
 ]
 
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<Agent[]>(AGENTS)
-  const [agentRoles, setAgentRoles] = useState<AgentRole[]>([])
-  const [agentRoleSelections, setAgentRoleSelections] = useState<Record<AgentId, string>>({
-    researcher: "custom",
-    critic: "custom",
-    summarizer: "custom",
+  const [agents, setAgents] = useState<Agent[]>([AGENTS[0]])
+  const [agentSpecs, setAgentSpecs] = useState<AgentSpec[]>([])
+  const [agentSelections, setAgentSelections] = useState<Record<AgentId, string>>({
+    [AGENTS[0].id]: "custom",
   })
-  const [selectedPersona, setSelectedPersona] = useState<PersonaId>("none")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -109,19 +109,31 @@ export default function AgentsPage() {
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [model, setModel] = useState<string>("")
   const [prompterBackstory, setPrompterBackstory] = useState("")
+  const [activeProvider, setActiveProvider] = useState<"zen" | "google">("zen")
   const [zenApiKey, setZenApiKey] = useState("")
-  const [isConnected, setIsConnected] = useState(false)
+  const [googleApiKey, setGoogleApiKey] = useState("")
+  const [zenConnected, setZenConnected] = useState(false)
+  const [googleConnected, setGoogleConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [showBackstory, setShowBackstory] = useState(false)
   const timeoutsRef = useRef<number[]>([])
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const stored = window.sessionStorage.getItem("ZEN_API_KEY_SESSION")
-    if (stored) {
-      setZenApiKey(stored)
-      setIsConnected(true)
+    const storedZen = window.sessionStorage.getItem("ZEN_API_KEY_SESSION")
+    const storedGoogle = window.sessionStorage.getItem("GOOGLE_API_KEY_SESSION")
+    const storedProvider = window.sessionStorage.getItem("ACTIVE_PROVIDER_SESSION") as "zen" | "google" | null
+    
+    if (storedZen) {
+      setZenApiKey(storedZen)
+      validateAndFetchModels("zen", storedZen)
     }
+    if (storedGoogle) {
+      setGoogleApiKey(storedGoogle)
+      validateAndFetchModels("google", storedGoogle)
+    }
+    if (storedProvider) setActiveProvider(storedProvider)
   }, [])
 
   useEffect(() => {
@@ -131,37 +143,32 @@ export default function AgentsPage() {
     } else {
       window.sessionStorage.removeItem("ZEN_API_KEY_SESSION")
     }
-  }, [zenApiKey])
+    if (googleApiKey) {
+      window.sessionStorage.setItem("GOOGLE_API_KEY_SESSION", googleApiKey)
+    } else {
+      window.sessionStorage.removeItem("GOOGLE_API_KEY_SESSION")
+    }
+    window.sessionStorage.setItem("ACTIVE_PROVIDER_SESSION", activeProvider)
+  }, [zenApiKey, googleApiKey, activeProvider])
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadRoles() {
+    async function loadAgents() {
       try {
         const res = await fetch("/api/agent-roles")
         if (!res.ok) return
-        const roles = (await res.json()) as AgentRole[]
+        const specs = (await res.json()) as AgentSpec[]
         if (cancelled) return
-        setAgentRoles(roles)
+        setAgentSpecs(specs)
 
-        // Initialize agents from matching role presets if they are still empty
-        setAgents((prev) =>
-          prev.map((agent) => {
-            const existing = agent.name || agent.description
-            if (existing) return agent
-            const role = roles.find((r) => r.id === agent.id)
-            if (!role) return agent
-            return { ...agent, name: role.label, description: role.description }
-          }),
-        )
-
-        setAgentRoleSelections((prev) => {
+        setAgentSelections((prev) => {
           const next = { ...prev }
-          ;(["researcher", "critic", "summarizer"] as AgentId[]).forEach((id) => {
-            if (next[id] === "custom") {
-              const role = roles.find((r) => r.id === id)
-              if (role) {
-                next[id] = role.id
+          agents.forEach((a) => {
+            if (next[a.id] === "custom") {
+              const spec = specs.find((s) => s.id === a.id)
+              if (spec) {
+                next[a.id] = spec.id
               }
             }
           })
@@ -172,7 +179,7 @@ export default function AgentsPage() {
       }
     }
 
-    loadRoles()
+    loadAgents()
 
     return () => {
       cancelled = true
@@ -200,22 +207,68 @@ export default function AgentsPage() {
     }
   }
 
-  const applyPersonaPreset = (id: PersonaId) => {
-    if (id === "none") {
-      setAgents(AGENTS)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    for (const file of Array.from(files)) {
+      if (!file.name.endsWith(".md")) {
+        toast.error(`File ${file.name} is not a Markdown file.`)
+        continue
+      }
+
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const content = e.target?.result as string
+        if (!content) return
+
+        const id = file.name.replace(/\.md$/, "")
+        const firstHeadingLine = content
+          .split(/\r?\n/)
+          .find((line) => line.trim().startsWith("#"))
+
+        const label = firstHeadingLine
+          ? firstHeadingLine.replace(/^#+\s*/, "").trim() || id
+          : id
+
+        const newSpec: AgentSpec = { id, label, description: content.trim() }
+        
+        setAgentSpecs((prev) => {
+          const filtered = prev.filter(s => s.id !== id)
+          return [...filtered, newSpec]
+        })
+        
+        toast.success(`Agent "${label}" added successfully!`)
+      }
+      reader.readAsText(file)
+    }
+    // reset input
+    event.target.value = ""
+  }
+
+  const addAgent = () => {
+    const newId = `agent-${Date.now()}`
+    const newAgent: Agent = {
+      id: newId,
+      name: "",
+      description: "",
+      badgeVariant: "outline",
+    }
+    setAgents((prev) => [...prev, newAgent])
+    setAgentSelections((prev) => ({ ...prev, [newId]: "custom" }))
+  }
+
+  const removeAgent = (id: AgentId) => {
+    if (agents.length <= 1) {
+      toast.error("You must have at least one agent.")
       return
     }
-
-    const preset = PERSONA_PRESETS.find((p) => p.id === id)
-    if (!preset) return
-
-    setAgents((prev) =>
-      prev.map((agent) =>
-        agent.id === "researcher"
-          ? { ...agent, name: preset.agentName, description: preset.agentDescription }
-          : agent,
-      ),
-    )
+    setAgents((prev) => prev.filter((a) => a.id !== id))
+    setAgentSelections((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
   }
 
   const updateAgent = (id: AgentId, updates: Partial<Pick<Agent, "name" | "description">>) => {
@@ -239,26 +292,23 @@ export default function AgentsPage() {
     }
   }
 
-  const connectWithKey = async (event?: FormEvent<HTMLFormElement>) => {
-    if (event) {
-      event.preventDefault()
-    }
+  const validateAndFetchModels = async (provider: "zen" | "google", keyToUse: string) => {
+    const trimmedKey = keyToUse.trim()
+    if (!trimmedKey) return
 
     setConnectionError(null)
-
-    const key = zenApiKey.trim()
-    if (!key) {
-      setConnectionError("Please paste your OpenCode API key.")
-      return
-    }
-
     setIsConnecting(true)
     try {
+      const headers: Record<string, string> = {}
+      if (provider === "zen") {
+        headers["x-zen-api-key"] = trimmedKey
+      } else {
+        headers["x-google-api-key"] = trimmedKey
+      }
+
       const res = await fetch("/api/models", {
         method: "GET",
-        headers: {
-          "x-zen-api-key": key,
-        },
+        headers,
       })
 
       if (!res.ok) {
@@ -275,7 +325,7 @@ export default function AgentsPage() {
             ? payload.models
             : []
 
-      const options: ModelOption[] = rawModels
+      const options: (ModelOption & { provider: "zen" | "google" })[] = rawModels
         .map((m: any) => {
           const id =
             (typeof m?.id === "string" && m.id) ||
@@ -289,23 +339,39 @@ export default function AgentsPage() {
             (typeof m?.name === "string" && m.name) ||
             id
 
-          return { id, label }
+          return { id, label, provider }
         })
-        .filter((m: ModelOption | null): m is ModelOption => Boolean(m))
+        .filter((m: any): m is any => Boolean(m))
 
-      setModelOptions(options)
+      setModelOptions((prev) => {
+        // Filter out existing models for the same provider to avoid duplicates
+        const filtered = prev.filter(p => p.provider !== provider)
+        const combined = [...filtered, ...options]
+        return combined
+      })
+
       if (options.length && !model) {
         setModel(options[0]!.id)
       }
 
-      setIsConnected(true)
+      if (provider === "zen") setZenConnected(true)
+      else setGoogleConnected(true)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to validate API key."
+      const msg = e instanceof Error ? e.message : `Failed to validate ${provider} API key.`
       setConnectionError(msg)
-      setIsConnected(false)
+      if (provider === "zen") setZenConnected(false)
+      else setGoogleConnected(false)
     } finally {
       setIsConnecting(false)
     }
+  }
+
+  const connectWithKey = async (event?: FormEvent<HTMLFormElement>) => {
+    if (event) {
+      event.preventDefault()
+    }
+    const key = activeProvider === "zen" ? zenApiKey : googleApiKey
+    await validateAndFetchModels(activeProvider, key)
   }
 
   const runDemo = async (promptText?: string) => {
@@ -325,28 +391,40 @@ export default function AgentsPage() {
         throw new Error("Please select a model for the agents.")
       }
 
-      if (!zenApiKey.trim()) {
+      if (activeProvider === "zen" && !zenApiKey.trim()) {
         throw new Error("Please enter your OpenCode API key for this session.")
       }
+      
+      if (activeProvider === "google" && !googleApiKey.trim()) {
+        throw new Error("Please enter your Google API key for this session.")
+      }
+
+      const selectedModel = modelOptions.find(o => o.id === model)
+      const modelProvider = selectedModel?.provider || activeProvider
 
       const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: effectivePrompt,
-          maxTurns: 4,
-          model,
-          agents: agents.map((agent) => ({
-            id: agent.id,
-            name: agent.name,
-            description: agent.description,
-          })),
-          prompterBackstory,
-          zenApiKey,
-        }),
-      })
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: effectivePrompt,
+            maxTurns: 4,
+            model,
+            agents: agents.map((agent) => {
+              const specId = agentSelections[agent.id]
+              const spec = agentSpecs.find((s) => s.id === specId)
+              return {
+                id: agent.id,
+                name: agent.name || spec?.label || "",
+                description: agent.description || spec?.description || "",
+              }
+            }),
+            prompterBackstory,
+            zenApiKey: modelProvider === "zen" ? zenApiKey : undefined,
+            googleApiKey: modelProvider === "google" ? googleApiKey : undefined,
+          }),
+        })
 
       if (!res.ok) {
         const text = await res.text()
@@ -438,32 +516,41 @@ export default function AgentsPage() {
             </span>
           </div>
           <p className="text-muted-foreground text-sm">
-            Experiment with multiple agents talking to each other. This demo calls a server
-            coordinator at <code>POST /api/agents</code>, which uses the OpenCode gateway
-            (via your OpenCode API key and selected model) to talk to LLMs.
+            Experiment with multiple agents talking to each other.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {!isConnected ? (
-            <form
-              className="flex flex-1 items-center gap-2"
-              onSubmit={connectWithKey}
-            >
-              <Input
-                type="password"
-                className="h-8 w-[260px] text-xs"
-                placeholder="Paste your OpenCode API key to connect"
-                value={zenApiKey}
-                onChange={(e) => setZenApiKey(e.target.value)}
-              />
-              <Button disabled={isConnecting} size="sm" type="submit">
-                {isConnecting ? "Connecting..." : "Connect OpenCode"}
-              </Button>
-            </form>
-          ) : (
-            <>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {!zenConnected || !googleConnected ? (
               <form
-                className="flex flex-1 items-center gap-2"
+                className="flex items-center gap-2"
+                onSubmit={connectWithKey}
+              >
+                <Select value={activeProvider} onValueChange={(v: any) => setActiveProvider(v)}>
+                  <SelectTrigger className="h-8 w-[120px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!zenConnected && <SelectItem value="zen">OpenCode</SelectItem>}
+                    {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="password"
+                  className="h-8 w-[200px] text-xs"
+                  placeholder={`Paste ${activeProvider === "zen" ? "OpenCode" : "Google"} key`}
+                  value={activeProvider === "zen" ? zenApiKey : googleApiKey}
+                  onChange={(e) => activeProvider === "zen" ? setZenApiKey(e.target.value) : setGoogleApiKey(e.target.value)}
+                />
+                <Button disabled={isConnecting} size="sm" type="submit">
+                  {isConnecting ? "..." : "Connect"}
+                </Button>
+              </form>
+            ) : null}
+
+            {(zenConnected || googleConnected) && (
+              <form
+                className="flex items-center gap-2"
                 onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault()
                   await runDemo(prompt)
@@ -474,19 +561,32 @@ export default function AgentsPage() {
                   onValueChange={setModel}
                   value={model}
                 >
-                  <SelectTrigger className="h-8 w-[240px] text-xs">
+                  <SelectTrigger className="h-8 w-[220px] text-xs">
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent>
                     {modelOptions.length ? (
-                      modelOptions.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          {option.label}
-                        </SelectItem>
-                      ))
+                      <>
+                        {modelOptions.some(o => o.provider === "zen") && (
+                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">OpenCode</div>
+                        )}
+                        {modelOptions.filter(o => o.provider === "zen").map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                        {modelOptions.some(o => o.provider === "google") && (
+                          <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Google Gemini</div>
+                        )}
+                        {modelOptions.filter(o => o.provider === "google").map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </>
                     ) : (
                       <SelectItem value="__no-models__" disabled>
-                        No models available for this key
+                        No models available
                       </SelectItem>
                     )}
                   </SelectContent>
@@ -495,27 +595,42 @@ export default function AgentsPage() {
                   {isRunning ? "Running" : messages.length ? "Run again" : "Run demo"}
                 </Button>
               </form>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-[11px] text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setIsConnected(false)
-                  setZenApiKey("")
-                  setConnectionError(null)
-                }}
-              >
-                Change key
-              </Button>
-            </>
-          )}
-          <Button disabled={!isRunning} onClick={stopDemo} size="sm" variant="outline">
-            Stop
-          </Button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 border-l pl-4">
+            {zenConnected && (
+              <div className="flex items-center gap-1.5">
+                <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                <span className="text-[11px] font-medium text-muted-foreground">OpenCode</span>
+                <button 
+                  onClick={() => { setZenConnected(false); setZenApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'zen')); }}
+                  className="text-[10px] text-muted-foreground hover:text-destructive"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {googleConnected && (
+              <div className="flex items-center gap-1.5">
+                <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
+                <button 
+                  onClick={() => { setGoogleConnected(false); setGoogleApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'google')); }}
+                  className="text-[10px] text-muted-foreground hover:text-destructive"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <Button disabled={!isRunning} onClick={stopDemo} size="sm" variant="ghost" className="h-8 px-2 text-xs">
+              Stop
+            </Button>
+          </div>
         </div>
       </header>
 
-      {!isConnected && connectionError && (
+      {connectionError && (
         <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
           {connectionError}
         </div>
@@ -565,33 +680,94 @@ export default function AgentsPage() {
               {error}
             </div>
           )}
+
+          <div className="mt-auto border-t bg-background/60 p-4">
+            <div className="flex flex-col gap-3">
+              <div className="relative flex items-end gap-2">
+                <div className="relative flex-1">
+                  <Textarea
+                    autoComplete="off"
+                    className="min-h-[60px] resize-none pr-12 text-sm shadow-sm"
+                    disabled={isRunning}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        runDemo(prompt)
+                      }
+                    }}
+                    placeholder="Message the agent team..."
+                    value={prompt}
+                  />
+                  <Button
+                    className="absolute right-2 bottom-2 h-8 w-8 rounded-full"
+                    disabled={isRunning || !prompt.trim()}
+                    onClick={() => runDemo(prompt)}
+                    size="icon"
+                  >
+                    {isRunning ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowBackstory(!showBackstory)}
+                >
+                  <User className="h-3 w-3" />
+                  {showBackstory ? "Hide Prompter Backstory" : "Set Prompter Backstory"}
+                </button>
+                
+                {showBackstory && (
+                  <Textarea
+                    autoComplete="off"
+                    className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
+                    disabled={isRunning}
+                    onChange={(e) => setPrompterBackstory(e.target.value)}
+                    placeholder="Who are you in this conversation? (e.g., Senior Developer, Curious Student...)"
+                    value={prompterBackstory}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
         </section>
 
         <aside className="flex max-h-[65vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4">
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Agent preset
+                Import Agents (.md)
               </p>
-              <Select
-                value={selectedPersona}
-                onValueChange={(value) => {
-                  const id = value as PersonaId
-                  setSelectedPersona(id)
-                  applyPersonaPreset(id)
-                }}
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border py-4 transition-colors hover:border-primary/50 hover:bg-primary/5">
+                <div className="flex flex-col items-center justify-center pt-1 pb-1">
+                  <FileUp className="mb-2 h-5 w-5 text-muted-foreground" />
+                  <p className="text-[10px] text-muted-foreground">
+                    <span className="font-semibold">Click to upload</span> or drag and drop
+                  </p>
+                </div>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept=".md" 
+                  multiple 
+                  onChange={handleFileUpload} 
+                />
+              </label>
+
+              <Button 
+                onClick={addAgent}
+                size="sm" 
+                variant="outline" 
+                className="h-8 w-full border-dashed text-[11px]"
               >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Choose a skill/persona" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERSONA_PRESETS.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {preset.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                + Add Agent
+              </Button>
             </div>
 
             {agents.map((agent) => {
@@ -604,97 +780,71 @@ export default function AgentsPage() {
                   }
                   key={agent.id}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between">
                     {isActive && (
                       <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
                         Speaking
                       </span>
                     )}
+                    <button
+                      onClick={() => removeAgent(agent.id)}
+                      className="ml-auto text-[10px] text-muted-foreground hover:text-destructive"
+                      title="Remove Agent"
+                    >
+                      Remove
+                    </button>
                   </div>
                   <div className="mt-1 flex flex-col gap-1">
                     <p className="text-[10px] font-medium text-muted-foreground">
-                      Role preset
+                      Agent preset
                     </p>
                     <Select
-                      value={agentRoleSelections[agent.id] ?? "custom"}
+                      value={agentSelections[agent.id] ?? "custom"}
                       onValueChange={(value) => {
-                        setAgentRoleSelections((prev) => ({ ...prev, [agent.id]: value }))
-                        if (value === "custom") return
-                        const role = agentRoles.find((r) => r.id === value)
-                        if (role) {
-                          updateAgent(agent.id, {
-                            name: role.label,
-                            description: role.description,
-                          })
-                        }
+                        setAgentSelections((prev) => ({ ...prev, [agent.id]: value }))
                       }}
                     >
                       <SelectTrigger className="h-7 text-[11px]">
-                        <SelectValue placeholder="Choose role preset" />
+                        <SelectValue placeholder="Choose agent preset" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="custom">Custom</SelectItem>
-                        {agentRoles.map((role) => (
-                          <SelectItem key={role.id} value={role.id}>
-                            {role.label}
+                        {agentSpecs.map((spec) => (
+                          <SelectItem key={spec.id} value={spec.id}>
+                            {spec.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="mt-1 flex flex-col gap-1">
-                    <Input
-                      className="h-7 text-xs"
-                      placeholder="Role name (shown in messages)"
-                      value={agent.name}
-                      onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
-                    />
-                    <Textarea
-                      className="min-h-[60px] text-[11px]"
-                      placeholder="Describe how this agent should think and speak..."
-                      value={agent.description}
-                      onChange={(e) => updateAgent(agent.id, { description: e.target.value })}
-                    />
+                    {(() => {
+                      const specId = agentSelections[agent.id]
+                      const spec = agentSpecs.find((s) => s.id === specId)
+                      return (
+                        <>
+                          <Input
+                            className="h-7 text-xs"
+                            placeholder={spec?.label || "Agent name (shown in messages)"}
+                            value={agent.name}
+                            onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
+                          />
+                          <Textarea
+                            className="min-h-[60px] text-[11px]"
+                            placeholder={spec?.description || "Describe how this agent should think and speak..."}
+                            value={agent.description}
+                            onChange={(e) => updateAgent(agent.id, { description: e.target.value })}
+                          />
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
               )
             })}
           </div>
-
-          <div className="mt-2 flex flex-col gap-2 rounded-xl border bg-background/80 p-3 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Prompter
-            </p>
-            <Textarea
-              autoComplete="off"
-              className="min-h-[120px] text-xs"
-              disabled={isRunning}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe what you want the agent team to work on..."
-              value={prompt}
-            />
-            <Textarea
-              autoComplete="off"
-              className="min-h-[80px] text-[11px]"
-              disabled={isRunning}
-              onChange={(e) => setPrompterBackstory(e.target.value)}
-              placeholder="Optional: what's the backstory or persona of the prompter (you)?"
-              value={prompterBackstory}
-            />
-            {error ? (
-              <p className="text-[11px] text-destructive break-words">
-                Error: {error}
-              </p>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">
-                Edit your prompt here, then use the Run / Stop controls at the top.
-              </p>
-            )}
-          </div>
-
         </aside>
       </div>
     </div>
   )
 }
-

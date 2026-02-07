@@ -8,6 +8,13 @@ import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
 import { MomentsProvider } from "@/context/moments-collection";
 import MomentsGrid from "@/components/moments-grid";
+import { Trash2, RotateCcw } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type Moment = { id: string; src: string; name?: string };
 
@@ -93,7 +100,7 @@ export default function TrashPage() {
     <ContentLayout
       title="Trash"
       navLeft={
-        <div className="w-full flex justify-end">
+        anySelected ? (
           <SelectionHeaderBar
             selectedIds={Object.keys(selected).filter((k) => selected[k])}
             moments={moments}
@@ -101,32 +108,43 @@ export default function TrashPage() {
               setSelected(Object.fromEntries(moments.map(m => [m.id, true])));
             }}
             onClearSelection={clearSelection}
-            actions={
-              anySelected ? (
-                <>
+          />
+        ) : null
+      }
+      navRight={
+        anySelected ? (
+          <TooltipProvider>
+            <div className="flex items-center gap-3">
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <button
                     onClick={restoreSelected}
-                    className="btn inline-flex items-center px-3 py-1 rounded bg-primary text-primary-foreground"
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
                   >
-                    Restore ({Object.keys(selected).filter((k) => selected[k]).length})
+                    <RotateCcw size={18} />
                   </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10}>
+                  <p>Restore to Heap</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <button
                     onClick={deleteSelectedPermanently}
-                    className="btn inline-flex items-center px-3 py-1 rounded bg-destructive text-destructive-foreground"
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
                   >
-                    Delete permanently
+                    <Trash2 size={18} />
                   </button>
-                  <button
-                    onClick={clearSelection}
-                    className="inline-flex items-center px-3 py-1 rounded border"
-                  >
-                    Clear
-                  </button>
-                </>
-              ) : null
-            }
-          />
-        </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10}>
+                  <p>Delete permanently</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+        ) : null
       }
     >
       <ErrorBoundary>

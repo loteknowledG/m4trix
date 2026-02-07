@@ -8,6 +8,9 @@ export const dynamic = "force-dynamic"
 // Hardcoded OpenCode chat completions endpoint.
 const ZEN_CHAT_URL = "https://opencode.ai/zen/v1/chat/completions"
 
+// Google Gemini OpenAI-compatible chat completions endpoint.
+const GOOGLE_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions"
+
 // Basic agent identifiers used by the demo UI.
 // You can freely change or extend this list as you evolve your system.
 type AgentId = "researcher" | "critic" | "summarizer"
@@ -251,6 +254,35 @@ async function callOpenCodeForAgent(
   })
 }
 
+async function callGoogleAIForAgent(
+  prompt: string,
+  agent: Agent,
+  modelOverride?: string,
+  prompterBackstory?: string,
+  googleApiKeyOverride?: string,
+): Promise<string> {
+  const googleApiKey = googleApiKeyOverride || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  const googleModelFromEnv = process.env.GOOGLE_MODEL || "gemini-1.5-flash"
+
+  const googleModelToUse = modelOverride || googleModelFromEnv
+
+  const googleConfigured = Boolean(GOOGLE_CHAT_URL && googleApiKey && googleModelToUse)
+
+  if (!googleConfigured) {
+    throw new Error(
+      "No Google AI configuration: set GOOGLE_GENERATIVE_AI_API_KEY or provide a per-session googleApiKey, plus GOOGLE_MODEL or a model override.",
+    )
+  }
+
+  return await callProvider(prompt, agent, {
+    url: GOOGLE_CHAT_URL,
+    apiKey: googleApiKey!,
+    model: googleModelToUse!,
+    providerName: "Google Gemini",
+    prompterBackstory,
+  })
+}
+
 function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
   const baseId = Date.now().toString(36)
 
@@ -294,9 +326,9 @@ function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
 async function buildModelTranscript(
   prompt: string,
   agents: Agent[],
+  apiKeys: { zenApiKey?: string; googleApiKey?: string },
   modelOverride?: string,
   prompterBackstory?: string,
-  zenApiKeyOverride?: string,
 ): Promise<OrchestratedMessage[]> {
   const baseId = Date.now().toString(36)
 
@@ -308,18 +340,27 @@ async function buildModelTranscript(
     },
   ]
 
-  // Use a v2-compatible OpenAI model ID.
-  // You can change this to any supported model, e.g. "gpt-4.1".
-  // Call OpenAI once per agent, in parallel, and map
+  // Decide which provider to use. If googleApiKey is present, use Google.
+  const isGoogle = Boolean(apiKeys.googleApiKey || (process.env.GOOGLE_GENERATIVE_AI_API_KEY && !apiKeys.zenApiKey && !process.env.ZEN_API_KEY))
+
+  // Call provider once per agent, in parallel
   const agentReplies = await Promise.all(
     agents.map(async (agent) => {
-      const text = await callOpenCodeForAgent(
-        prompt,
-        agent,
-        modelOverride,
-        prompterBackstory,
-        zenApiKeyOverride,
-      )
+      const text = isGoogle 
+        ? await callGoogleAIForAgent(
+            prompt,
+            agent,
+            modelOverride,
+            prompterBackstory,
+            apiKeys.googleApiKey,
+          )
+        : await callOpenCodeForAgent(
+            prompt,
+            agent,
+            modelOverride,
+            prompterBackstory,
+            apiKeys.zenApiKey,
+          )
       return { agent, text }
     }),
   )
@@ -356,6 +397,11 @@ export async function POST(req: NextRequest) {
       typeof (body as any).zenApiKey === "string" && (body as any).zenApiKey.trim()
         ? (body as any).zenApiKey.trim()
         : undefined
+    const googleApiKeyOverride =
+      typeof (body as any).googleApiKey === "string" && (body as any).googleApiKey.trim()
+        ? (body as any).googleApiKey.trim()
+        : undefined
+        
     const incomingAgents = Array.isArray((body as any).agents) ? (body as any).agents : undefined
 
     const effectiveAgents: Agent[] =
@@ -371,30 +417,36 @@ export async function POST(req: NextRequest) {
     const agentsForRun = addressedAgents.length ? addressedAgents : effectiveAgents
 
     const zenModelFromEnv = process.env.ZEN_MODEL
+    const googleModelFromEnv = process.env.GOOGLE_MODEL
+
     const hasZenConfig = Boolean(
       (zenApiKeyOverride || process.env.ZEN_API_KEY) &&
       (modelOverride || zenModelFromEnv),
+    )
+    const hasGoogleConfig = Boolean(
+      (googleApiKeyOverride || process.env.GOOGLE_GENERATIVE_AI_API_KEY) &&
+      (modelOverride || googleModelFromEnv || true), // Fallback to a default if not set
     )
 
     let messages: OrchestratedMessage[]
     let mode: AgentsResponse["mode"] = "demo"
     let error: string | undefined
 
-    if (!hasZenConfig) {
+    if (!hasZenConfig && !hasGoogleConfig) {
       messages = buildDemoTranscript(prompt)
     } else {
       try {
         messages = await buildModelTranscript(
           prompt,
           agentsForRun,
+          { zenApiKey: zenApiKeyOverride, googleApiKey: googleApiKeyOverride },
           modelOverride,
           prompterBackstory,
-          zenApiKeyOverride,
         )
         mode = "live"
       } catch (e) {
         const err = e instanceof Error ? e.message : String(e)
-        console.error("/api/agents OpenCode error", err)
+        console.error("/api/agents error", err)
         error = err
         // Fall back to deterministic demo transcript so the
         // UI still works instead of surfacing a server error.

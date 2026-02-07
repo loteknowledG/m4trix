@@ -3,7 +3,13 @@
 import useSelection from "@/hooks/use-selection";
 import { SheetMenu } from "@/components/admin-panel/sheet-menu";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Trash2, SquarePen, X } from "lucide-react";
+import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useRef, useEffect } from "react";
 
 interface NavbarProps {
@@ -81,29 +87,51 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
         </div>
         <div className="flex flex-1 items-center justify-end">
           {isStoryDetail && selectedCount > 0 ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onAction("move-to-heap")}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded bg-secondary text-secondary-foreground"
-              >
-                <LayoutGrid size={16} />
-                <span className="text-sm">Move to Heap</span>
-              </button>
-              <button
-                onClick={() => onAction("move-to-chapter")}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded bg-secondary text-secondary-foreground"
-              >
-                <SquarePen size={16} />
-                <span className="text-sm">Move to Chapter</span>
-              </button>
-              <button
-                onClick={() => onAction("move-to-trash")}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded bg-destructive text-destructive-foreground"
-              >
-                <Trash2 size={16} />
-                <span className="text-sm">Move to Trash</span>
-              </button>
-            </div>
+            <TooltipProvider>
+              <div className="flex items-center gap-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => onAction("move-to-heap")}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                    >
+                      <LayoutGrid size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Move to Heap</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => onAction("move-to-chapter")}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                    >
+                      <SquarePen size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Move to Chapter</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => onAction("move-to-trash")}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Move to Trash</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
           ) : (
             navRight
           )}
