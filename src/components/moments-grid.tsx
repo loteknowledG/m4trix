@@ -30,7 +30,6 @@ export default function MomentsGrid({
   onDragOver,
   onDrop,
   toggleSelect,
-  dragIndexRef,
   dragOverIndex,
 }: MomentsGridProps) {
   if (!moments || moments.length === 0) return null;

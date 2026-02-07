@@ -182,11 +182,7 @@ export type MessageBranchSelectorProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"]
 }
 
-export const MessageBranchSelector = ({
-  className,
-  from,
-  ...props
-}: MessageBranchSelectorProps) => {
+export const MessageBranchSelector = (props: MessageBranchSelectorProps) => {
   const { totalBranches } = useMessageBranch()
 
   // Don't render if there's only one branch
@@ -236,6 +232,7 @@ export const MessageBranchNext = ({ children, className, ...props }: MessageBran
       size="icon"
       type="button"
       variant="ghost"
+      className={className}
       {...props}
     >
       {children ?? <ChevronRightIcon size={14} />}

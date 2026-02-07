@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 const urls = [
   'http://localhost:3001/',
   'http://localhost:3001/heap',

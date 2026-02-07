@@ -6,8 +6,7 @@ import { ChevronDown, Dot, LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { CountingNumber } from "@/components/ui/counting-number";
-import { Badge } from "@/components/ui/badge";
+// removed unused imports
 import CountBadge from "@/components/ui/count-badge";
 import { DropdownMenuArrow } from "@radix-ui/react-dropdown-menu";
 import {
@@ -206,7 +205,7 @@ export function CollapseMenuButton({
         <Tooltip delayDuration={100}>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-                <Button
+              <Button
                 variant={active ? "secondary" : "ghost"}
                 className={cn(
                   "w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active",
@@ -236,11 +235,11 @@ export function CollapseMenuButton({
                       {label}
                     </p>
                   </div>
-                    {typeof topCount === "number" && isOpen === false && (
-                      <div className="absolute left-10 top-1/2 -translate-y-1/2">
-                        <CountBadge value={topCount} />
-                      </div>
-                    )}
+                  {typeof topCount === "number" && isOpen === false && (
+                    <div className="absolute left-10 top-1/2 -translate-y-1/2">
+                      <CountBadge value={topCount} />
+                    </div>
+                  )}
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -250,7 +249,7 @@ export function CollapseMenuButton({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-        <DropdownMenuContent
+      <DropdownMenuContent
         side="right"
         sideOffset={25}
         align="start"

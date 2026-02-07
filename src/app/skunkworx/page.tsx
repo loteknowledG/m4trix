@@ -12,7 +12,7 @@ import { nanoid } from "nanoid"
 import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import DraggableDialog from "@/components/ui/draggable-dialog"
 import { Button } from "@/components/ui/button"
-import { useStickToBottomContext } from "use-stick-to-bottom"
+// removed unused import to satisfy linter
 import { toast } from "sonner"
 
 const initialMessages: ChatWindowMessage[] = [
@@ -154,7 +154,7 @@ export function ChatbotDemo() {
   const [useMicrophone, setUseMicrophone] = useState<boolean>(false)
   const [status, setStatus] = useState<"submitted" | "streaming" | "ready" | "error">("ready")
   const [messages, setMessages] = useState<ChatWindowMessage[]>(initialMessages)
-  const [_streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [, setStreamingMessageId] = useState<string | null>(null)
 
   const stickyRef = useRef<HTMLDivElement>(null)
   const [stickyHeight, setStickyHeight] = useState(0)

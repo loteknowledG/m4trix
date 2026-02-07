@@ -5,9 +5,7 @@ import { useEffect, useState } from "react";
 import { get } from "idb-keyval";
 import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
-import { ArrowLeft } from "lucide-react";
-import { CountingNumber } from "@/components/ui/counting-number";
-import { Badge } from "@/components/ui/badge";
+// removed unused imports
 import CountBadge from "@/components/ui/count-badge";
 
 type StoryMeta = { id: string; title?: string; count?: number };

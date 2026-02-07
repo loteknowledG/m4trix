@@ -118,23 +118,7 @@ function selectAgentsForPrompt(prompt: string, agents: Agent[]): Agent[] {
 // - Implement a loop where agents take turns, possibly with a coordinator
 // For now we keep it simple and just return a deterministic script so the UI
 // has a concrete shape to integrate with.
-const DEMO_AGENTS: Agent[] = [
-  {
-    id: "researcher",
-    name: "Researcher",
-    description: "Finds facts, breaks down the problem, and proposes options.",
-  },
-  {
-    id: "critic",
-    name: "Critic",
-    description: "Challenges assumptions, looks for risks and edge cases.",
-  },
-  {
-    id: "summarizer",
-    name: "Summarizer",
-    description: "Condenses the discussion into a concise plan.",
-  },
-]
+// Demo agents constant removed (unused)
 
 async function callProvider(
   prompt: string,
@@ -377,10 +361,10 @@ export async function POST(req: NextRequest) {
     const effectiveAgents: Agent[] =
       incomingAgents && incomingAgents.length
         ? incomingAgents.map((agent: any) => ({
-            id: agent.id as AgentId,
-            name: typeof agent.name === "string" ? agent.name : "",
-            description: typeof agent.description === "string" ? agent.description : "",
-          }))
+          id: agent.id as AgentId,
+          name: typeof agent.name === "string" ? agent.name : "",
+          description: typeof agent.description === "string" ? agent.description : "",
+        }))
         : await getDefaultAgents()
 
     const addressedAgents = selectAgentsForPrompt(prompt, effectiveAgents)
@@ -389,7 +373,7 @@ export async function POST(req: NextRequest) {
     const zenModelFromEnv = process.env.ZEN_MODEL
     const hasZenConfig = Boolean(
       (zenApiKeyOverride || process.env.ZEN_API_KEY) &&
-        (modelOverride || zenModelFromEnv),
+      (modelOverride || zenModelFromEnv),
     )
 
     let messages: OrchestratedMessage[]

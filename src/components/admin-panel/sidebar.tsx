@@ -1,6 +1,6 @@
 "use client";
 import { Menu } from "@/components/admin-panel/menu";
-import { SidebarToggle } from "@/components/admin-panel/sidebar-toggle";
+// removed unused import SidebarToggle
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
@@ -11,7 +11,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 export function Sidebar() {
   const sidebar = useStore(useSidebar, (x) => x);
   if (!sidebar) return null;
-  const { isOpen, toggleOpen, getOpenState, setIsHover, settings } = sidebar;
+  const { getOpenState, setIsHover, settings } = sidebar;
   return (
     <aside
       className={cn(

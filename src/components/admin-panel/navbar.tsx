@@ -61,7 +61,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
           ) : (
             isStoryDetail && selectedCount > 0 ? (
               <button
-                onClick={() => { try { clearSelection(scope); } catch (e) { } }}
+                onClick={() => { try { clearSelection(scope); } catch (e) { /* ignore */ } }}
                 className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
                 aria-label="Clear selection"
               >
@@ -70,7 +70,7 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
             ) : null
           )}
           <div className="ml-8 truncate">
-            {isStoryDetail && selectedCount > 0 && !leftSlot ? (
+            {!leftSlot && selectedCount ? (
               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
             ) : (
               <h2 className={isStories || isStoryDetail || isTags || isTrash ? "text-sm font-medium lowercase truncate" : "text-lg font-medium truncate"}>

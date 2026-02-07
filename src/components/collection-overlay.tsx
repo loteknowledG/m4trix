@@ -6,7 +6,7 @@ import { useMomentsContext } from "@/context/moments-collection";
 import { normalizeMomentSrc } from "@/lib/moments";
 import { X, ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 
-const noop = () => {};
+const noop = () => { };
 
 export default function CollectionOverlay() {
   const ctx = useMomentsContext();
@@ -27,7 +27,7 @@ export default function CollectionOverlay() {
   const [fontColor, setFontColor] = useState("#ffffff");
   const [pixelWidth, setPixelWidth] = useState<number | null>(null);
   const pixelWidthRef = useRef<number | null>(null);
-  
+
   const posRef = useRef(pos);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
@@ -134,7 +134,7 @@ export default function CollectionOverlay() {
       } else {
         localStorage.removeItem(`overlay:text:${currentId}`);
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
     setText(t);
     if (p) setPos(p);
     if (f) setFont(f);
@@ -146,7 +146,7 @@ export default function CollectionOverlay() {
     setEditing(false);
   };
 
-  
+
 
   const savePosition = (p: { x: number; y: number }) => {
     try {
@@ -162,11 +162,11 @@ export default function CollectionOverlay() {
         fontColor,
       };
       if (text) localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
     setPos(p);
   };
 
-  
+
 
   const onStartDrag = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
@@ -188,12 +188,12 @@ export default function CollectionOverlay() {
       setPos({ x, y });
       posRef.current = { x, y };
     };
-    const end = (ev?: Event) => {
+    const end = () => {
       draggingRef.current = false;
       try {
         // persist when drag ends
         savePosition(posRef.current);
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
       // unlock pixel width and recompute based on container
       pixelWidthRef.current = null;
       computePixelWidth();
@@ -225,7 +225,7 @@ export default function CollectionOverlay() {
       window.removeEventListener("keydown", onKey);
       try {
         document.body.style.overflow = prevOverflow;
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
     };
   }, [ctx, isOpen, close, next, prev]);
 
@@ -349,11 +349,11 @@ export default function CollectionOverlay() {
                     color: fontColor,
                     fontFamily: (
                       font === "serif" ? "Georgia, 'Times New Roman', Times, serif" :
-                      font === "mono" ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace" :
-                      font === "mrs" ? "'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive" :
-                      font === "satisfy" ? "'Satisfy', 'Segoe Script', 'Brush Script MT', cursive" :
-                      font === "cursive" ? "'Brush Script MT', 'Segoe Script', cursive" :
-                      "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"
+                        font === "mono" ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace" :
+                          font === "mrs" ? "'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive" :
+                            font === "satisfy" ? "'Satisfy', 'Segoe Script', 'Brush Script MT', cursive" :
+                              font === "cursive" ? "'Brush Script MT', 'Segoe Script', cursive" :
+                                "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"
                     ),
                     fontSize: `${fontSize}px`,
                     lineHeight: 1.1,
@@ -371,9 +371,8 @@ export default function CollectionOverlay() {
           {/* Editor action buttons removed per request */}
 
           <div
-            className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${
-              editing ? "translate-x-0" : "translate-x-full"
-            }`}
+            className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${editing ? "translate-x-0" : "translate-x-full"
+              }`}
             role="dialog"
             aria-hidden={!editing}
           >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { get, set } from "idb-keyval";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
@@ -18,7 +18,6 @@ type Moment = { id: string; src: string; name?: string };
 
 export default function StoryByIdPage() {
   const params = useParams();
-  const router = useRouter();
   const id = (params as any)?.id as string | undefined;
 
   const [moments, setMoments] = useState<Moment[]>([]);
@@ -26,7 +25,7 @@ export default function StoryByIdPage() {
   const [title, setTitle] = useState("");
   const scope = id ? `story:${id}` : "";
   const selectedIds = useSelection((s) => (scope ? s.selections[scope] || [] : []));
-  const anySelected = (selectedIds || []).length > 0;
+
   const toggleSelect = useSelection((s) => s.toggle);
   const clearSelection = useSelection((s) => s.clear);
   const setSelectionStore = useSelection((s) => s.set);
@@ -96,7 +95,7 @@ export default function StoryByIdPage() {
           const stored = (await get<any>(storyKey)) || [];
           let remaining: any[] = [];
           if (Array.isArray(stored)) {
-            remaining = stored.filter((s: any) => !ids.includes(s.id || s));
+            try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { /* ignore */ }
           } else if (stored && Array.isArray(stored.items)) {
             remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
             stored.items = remaining;
@@ -112,10 +111,10 @@ export default function StoryByIdPage() {
             if (idx > -1) {
               saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
               await set("stories", saved);
-              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { }
+              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { /* ignore */ }
             }
-          } catch (e) { }
-          try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newHeap.length } })); } catch (e) { }
+          } catch (e) { /* ignore */ }
+          try { window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: newHeap.length } })); } catch (e) { /* ignore */ }
         }
 
         if (action === "move-to-trash") {
@@ -126,7 +125,7 @@ export default function StoryByIdPage() {
           // remove from story (same as above)
           const storyKey = `story:${id}`;
           const stored = (await get<any>(storyKey)) || [];
-          let remaining: any[] = [];
+          try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { /* ignore */ }
           if (Array.isArray(stored)) {
             remaining = stored.filter((s: any) => !ids.includes(s.id || s));
           } else if (stored && Array.isArray(stored.items)) {
@@ -134,7 +133,7 @@ export default function StoryByIdPage() {
             stored.items = remaining;
             await set(storyKey, stored);
           }
-          await set(storyKey, remaining);
+          try { clearSelection(scope); } catch (e) { /* ignore */ }
           setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
           try {
             const saved = (await get<any>("stories")) || [];
@@ -142,15 +141,15 @@ export default function StoryByIdPage() {
             if (idx > -1) {
               saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
               await set("stories", saved);
-              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { }
+              try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { /* ignore */ }
             }
-          } catch (e) { }
+          } catch (e) { /* ignore */ }
         }
       } catch (e) {
         logger.error("Failed to perform story action", e);
       } finally {
         // clear selection
-        try { clearSelection(scope); } catch (e) { }
+        try { clearSelection(scope); } catch (e) { /* ignore */ }
       }
     };
     window.addEventListener("story-action", handler as EventListener);
@@ -162,7 +161,7 @@ export default function StoryByIdPage() {
     try {
       e.dataTransfer.setData("text/plain", String(idx));
       e.dataTransfer.effectAllowed = "move";
-    } catch (err) { }
+    } catch (err) { /* ignore */ }
   }, []);
 
   const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
@@ -170,7 +169,7 @@ export default function StoryByIdPage() {
     setDragOverIndex(idx);
     try {
       e.dataTransfer.dropEffect = "move";
-    } catch (err) { }
+    } catch (err) { /* ignore */ }
 
     // Only auto-scroll when a drag is active (dragIndexRef is set).
     if (dragIndexRef.current === null) return;
@@ -219,7 +218,7 @@ export default function StoryByIdPage() {
         await set(storyKey, next);
         try {
           window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
       } catch (err) {
         logger.error("Failed to persist reordered story", err);
       }
@@ -237,7 +236,7 @@ export default function StoryByIdPage() {
       }
       try {
         window.scrollBy({ top: dir * 12 });
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
       scrollAnimRef.current = requestAnimationFrame(step);
     };
     scrollAnimRef.current = requestAnimationFrame(step);

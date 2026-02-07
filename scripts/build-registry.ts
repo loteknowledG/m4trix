@@ -1,12 +1,13 @@
 import { promises as fs } from "fs";
 import path from "path";
+/* eslint-disable no-console */
 import { z } from "zod";
 import { registryComponents } from "../registry";
 import { registryItemFileSchema } from "../registry/schema";
 
 const REGISTRY_BASE_PATH = "src";
 const PUBLIC_FOLDER_BASE_PATH = "public/registry";
-const COMPONENT_FOLDER_PATH = "components";
+// const COMPONENT_FOLDER_PATH = "components"; // unused
 
 type File = z.infer<typeof registryItemFileSchema>;
 const FolderToComponentTypeMap = {

@@ -5,8 +5,8 @@ import { logger } from "@/lib/logger";
 
 type State = { hasError: boolean; error?: Error | null; info?: React.ErrorInfo | null };
 
-export default class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, State> {
-  constructor(props: React.PropsWithChildren<{}>) {
+export default class ErrorBoundary extends React.Component<React.PropsWithChildren<Record<string, unknown>>, State> {
+  constructor(props: React.PropsWithChildren<Record<string, unknown>>) {
     super(props);
     this.state = { hasError: false, error: null, info: null };
   }

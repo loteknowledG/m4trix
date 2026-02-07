@@ -10,7 +10,6 @@ interface Props {
 
 export function CountingNumber({ value, duration = 600, className }: Props) {
   const [display, setDisplay] = useState(value);
-  const refStart = useRef<number | null>(null);
   const fromRef = useRef<number>(value);
 
   useEffect(() => {

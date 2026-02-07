@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Ellipsis, LogOut } from "lucide-react";
+import { Ellipsis } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -18,8 +18,7 @@ import {
   TooltipProvider
 } from "@/components/ui/tooltip";
 import { get } from "idb-keyval";
-import { CountingNumber } from "@/components/ui/counting-number";
-import { Badge } from "@/components/ui/badge";
+// removed unused imports
 import CountBadge from "@/components/ui/count-badge";
 
 interface MenuProps {

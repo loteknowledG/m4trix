@@ -24,25 +24,19 @@ const editorConfig: InitialConfigType = {
 
 export function Editor({
   editorState,
-  editorSerializedState,
   onChange,
   onSerializedChange,
-    import { logger } from "@/lib/logger";
 }: {
   editorState?: EditorState
-  editorSerializedState?: SerializedEditorState
   onChange?: (editorState: EditorState) => void
   onSerializedChange?: (editorSerializedState: SerializedEditorState) => void
 }) {
   return (
     <div className="bg-background overflow-hidden rounded-lg border shadow">
-        logger.error(error)
+      <LexicalComposer
         initialConfig={{
           ...editorConfig,
           ...(editorState ? { editorState } : {}),
-          ...(editorSerializedState
-            ? { editorState: JSON.stringify(editorSerializedState) }
-            : {}),
         }}
       >
         <TooltipProvider>
