@@ -7,11 +7,10 @@ import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
 import { Upload } from "lucide-react";
 import useSelection from "@/hooks/use-selection";
-import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
 import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
 import CollectionOverlay from "@/components/collection-overlay";
-import JustifiedMasonry from "@/components/ui/justified-masonry";
+import MomentsGrid from "@/components/moments-grid";
 import { logger } from "@/lib/logger";
 
 type Moment = { id: string; src: string; name?: string };
@@ -352,38 +351,15 @@ export default function StoryByIdPage() {
                     <div className="text-sm">Create a new story from the heap to move moments here.</div>
                   </div>
                 ) : (
-                  <JustifiedMasonry
-                    items={moments}
-                    targetRowHeight={220}
-                    itemSpacing={16}
-                    rowSpacing={16}
-                    renderItem={(item, style) => {
-                      const idx = moments.findIndex((m) => m.id === item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          style={style}
-                          draggable
-                          onDragStart={(e) => onDragStart(e, idx)}
-                          onDragEnd={() => {
-                            dragIndexRef.current = null;
-                            setDragOverIndex(null);
-                            stopAutoScroll();
-                          }}
-                          onDragOver={(e) => onDragOver(e, idx)}
-                          onDrop={(e) => onDrop(e, idx)}
-                          className={
-                            "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
-                          }
-                        >
-                          <MomentCard
-                            item={{ ...item, selected: (selectedIds || []).includes(item.id) } as any}
-                            anySelected={(selectedIds || []).length > 0}
-                            toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                          />
-                        </div>
-                      );
-                    }}
+                  <MomentsGrid
+                    moments={moments}
+                    selectedIds={selectedIds}
+                    toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                    onDragStart={onDragStart}
+                    onDragEnd={(_idx: number) => { dragIndexRef.current = null; setDragOverIndex(null); stopAutoScroll(); }}
+                    onDragOver={onDragOver}
+                    onDrop={onDrop}
+                    dragOverIndex={dragOverIndex}
                   />
                 )}
                 <CollectionOverlay />

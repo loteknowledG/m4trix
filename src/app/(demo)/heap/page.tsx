@@ -10,10 +10,9 @@ import useSelection from "@/hooks/use-selection";
 import { usePathname, useRouter } from "next/navigation";
 import { get, set } from "idb-keyval";
 import { logger } from "@/lib/logger";
-import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
 import CollectionOverlay from "@/components/collection-overlay";
-import JustifiedMasonry from "@/components/ui/justified-masonry";
+import MomentsGrid from "@/components/moments-grid";
 import { Trash2, SquarePen, Upload } from "lucide-react";
 import {
   Sheet,
@@ -602,7 +601,7 @@ function HeapInner() {
                     >
                       <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
                         {storyPreviews[s.id] ? (
-                           
+
                           <img src={storyPreviews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-zinc-700" />
@@ -765,18 +764,10 @@ function HeapInner() {
                 No moments yet 	 drop files or click to add
               </div>
             ) : (
-              <JustifiedMasonry
-                items={moments}
-                targetRowHeight={220}
-                itemSpacing={16}
-                rowSpacing={16}
-                renderItem={(item) => (
-                  <MomentCard
-                    item={{ ...item, selected: (selectedIds || []).includes(item.id) } as any}
-                    anySelected={anySelected}
-                    toggleSelect={(tid) => toggleSelect(tid)}
-                  />
-                )}
+              <MomentsGrid
+                moments={moments}
+                selectedIds={selectedIds}
+                toggleSelect={(tid) => toggleSelect(tid)}
               />
             )}
             <CollectionOverlay />

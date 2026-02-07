@@ -1,0 +1,25 @@
+#!/bin/sh
+# Run ESLint --fix before committing and stage any autofixes.
+# Exit non-zero to block the commit if ESLint reports errors.
+
+echo "Running eslint --fix..."
+pnpm exec eslint --ext .js,.jsx,.ts,.tsx . --fix
+status=$?
+if [ $status -ne 0 ]; then
+  echo "ESLint reported problems. Please fix them before committing."
+  exit $status
+fi
+
+# Stage any fixes made by eslint --fix
+git add -A
+
+# Run TypeScript type-check to block commits that introduce type errors
+echo "Running tsc --noEmit..."
+pnpm exec tsc --noEmit
+status=$?
+if [ $status -ne 0 ]; then
+  echo "TypeScript errors found. Please fix them before committing."
+  exit $status
+fi
+
+exit 0

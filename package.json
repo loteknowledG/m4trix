@@ -12,6 +12,8 @@
     "electron:prod": "next build && concurrently \"next start -p 3000\" \"electron .\"",
     "lint": "next lint",
     "lint:fix": "eslint --ext .js,.jsx,.ts,.tsx . --fix",
+    "lint:watch": "eslint --ext .js,.jsx,.ts,.tsx . --fix --watch",
+    "prepare": "git config core.hooksPath .githooks || true",
     "registry:build": "tsx ./scripts/build-registry.ts"
   },
   "dependencies": {

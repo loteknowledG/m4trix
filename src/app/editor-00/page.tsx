@@ -36,11 +36,10 @@ const initialValue = {
 } as unknown as SerializedEditorState
 
 export default function EditorPage() {
-  const [editorState, setEditorState] =
+  const [_editorState, setEditorState] =
     useState<SerializedEditorState>(initialValue)
   return (
     <Editor
-      editorSerializedState={editorState}
       onSerializedChange={(value) => setEditorState(value)}
     />
   )

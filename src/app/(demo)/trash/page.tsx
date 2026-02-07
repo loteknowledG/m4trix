@@ -6,9 +6,8 @@ import { get, set } from "idb-keyval";
 import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import ErrorBoundary from "@/components/error-boundary";
-import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
-import JustifiedMasonry from "@/components/ui/justified-masonry";
+import MomentsGrid from "@/components/moments-grid";
 
 type Moment = { id: string; src: string; name?: string };
 
@@ -94,14 +93,40 @@ export default function TrashPage() {
     <ContentLayout
       title="Trash"
       navLeft={
-        <SelectionHeaderBar
-          selectedIds={Object.keys(selected).filter((k) => selected[k])}
-          moments={moments}
-          onSelectAll={() => {
-            setSelected(Object.fromEntries(moments.map(m => [m.id, true])));
-          }}
-          onClearSelection={clearSelection}
-        />
+        <div className="w-full flex justify-end">
+          <SelectionHeaderBar
+            selectedIds={Object.keys(selected).filter((k) => selected[k])}
+            moments={moments}
+            onSelectAll={() => {
+              setSelected(Object.fromEntries(moments.map(m => [m.id, true])));
+            }}
+            onClearSelection={clearSelection}
+            actions={
+              anySelected ? (
+                <>
+                  <button
+                    onClick={restoreSelected}
+                    className="btn inline-flex items-center px-3 py-1 rounded bg-primary text-primary-foreground"
+                  >
+                    Restore ({Object.keys(selected).filter((k) => selected[k]).length})
+                  </button>
+                  <button
+                    onClick={deleteSelectedPermanently}
+                    className="btn inline-flex items-center px-3 py-1 rounded bg-destructive text-destructive-foreground"
+                  >
+                    Delete permanently
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    className="inline-flex items-center px-3 py-1 rounded border"
+                  >
+                    Clear
+                  </button>
+                </>
+              ) : null
+            }
+          />
+        </div>
       }
     >
       <ErrorBoundary>
@@ -111,42 +136,10 @@ export default function TrashPage() {
               <div className="text-center py-12 text-muted-foreground">No items in Trash.</div>
             ) : (
               <MomentsProvider collection={moments}>
-                <div className="mb-4 flex items-center space-x-2">
-                  {anySelected ? (
-                    <>
-                      <button
-                        onClick={restoreSelected}
-                        className="btn inline-flex items-center px-3 py-1 rounded bg-primary text-primary-foreground"
-                      >
-                        Restore ({Object.keys(selected).filter((k) => selected[k]).length})
-                      </button>
-                      <button
-                        onClick={deleteSelectedPermanently}
-                        className="btn inline-flex items-center px-3 py-1 rounded bg-destructive text-destructive-foreground"
-                      >
-                        Delete permanently
-                      </button>
-                      <button
-                        onClick={clearSelection}
-                        className="inline-flex items-center px-3 py-1 rounded border"
-                      >
-                        Clear
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-                <JustifiedMasonry
-                  items={moments}
-                  targetRowHeight={220}
-                  itemSpacing={16}
-                  rowSpacing={16}
-                  renderItem={(item) => (
-                    <MomentCard
-                      item={{ ...item, selected: !!selected[item.id] } as any}
-                      anySelected={anySelected}
-                      toggleSelect={toggleSelect}
-                    />
-                  )}
+                <MomentsGrid
+                  moments={moments}
+                  selectedIds={Object.keys(selected).filter((k) => selected[k])}
+                  toggleSelect={toggleSelect}
                 />
               </MomentsProvider>
             )}

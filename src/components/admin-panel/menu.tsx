@@ -110,7 +110,7 @@ export function Menu({ isOpen }: MenuProps) {
     }
   }, [pathname, searchParams]);
 
-  const menuList = getMenuList(pathname);
+  const menuList = getMenuList();
 
   return (
     <ScrollArea className="[&>div>div[style]]:!block">
