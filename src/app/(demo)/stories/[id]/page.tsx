@@ -125,6 +125,7 @@ export default function StoryByIdPage() {
           // remove from story (same as above)
           const storyKey = `story:${id}`;
           const stored = (await get<any>(storyKey)) || [];
+          let remaining: any[] = [];
           try { window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } })); } catch (e) { /* ignore */ }
           if (Array.isArray(stored)) {
             remaining = stored.filter((s: any) => !ids.includes(s.id || s));

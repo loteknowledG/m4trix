@@ -77,7 +77,7 @@ export default function StoriesPage() {
                 >
                   <div className="bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
                     {previews[s.id] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+                       
                       <img src={previews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-auto object-contain" />
                     ) : (
                       <div className="text-sm text-muted-foreground">No preview</div>

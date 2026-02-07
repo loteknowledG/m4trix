@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
+ 
 const { contextBridge, ipcRenderer } = require("electron");
 
 // expose a small API for renderer to use

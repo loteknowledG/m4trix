@@ -285,7 +285,7 @@ export function MessageAttachment({ data, className, onRemove, ...props }: Messa
     <div className={cn("group relative size-24 overflow-hidden rounded-lg", className)} {...props}>
       {isImage ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element -- message attachments can be blob URLs that next/image cannot render */}
+          { }
           <img
             alt={filename || "attachment"}
             className="size-full object-cover"

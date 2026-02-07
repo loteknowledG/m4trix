@@ -116,7 +116,7 @@ export default function MomentCard({
           </span>
         )}
       </button>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src={normalizeMomentSrc(item.src)}
         alt={item.name || "moment"}
@@ -151,7 +151,7 @@ export default function MomentCard({
             <div className="w-full h-full flex items-center justify-center relative">
               <div className="max-h-full max-w-full flex items-center justify-center">
                 <div className="flex items-center justify-center w-full">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- overlay images can be blob/data URLs */}
+                  { }
                   <img
                     src={normalizeMomentSrc(item.src)}
                     alt={item.name || "Moment preview"}

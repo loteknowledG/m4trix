@@ -204,7 +204,7 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
           const id = getId(item);
           const src = getSrc(item);
           return (
-            // eslint-disable-next-line @next/next/no-img-element
+             
             <img
               key={id}
               src={src}

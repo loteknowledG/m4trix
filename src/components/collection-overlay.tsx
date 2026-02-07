@@ -312,7 +312,7 @@ export default function CollectionOverlay() {
 
           <div ref={containerRef} className="max-h-full max-w-full flex items-center justify-center relative">
             <div className="flex items-center justify-center w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element -- overlay images may be blob/data URLs */}
+              { }
               <img
                 src={normalizeMomentSrc(item.src)}
                 alt={item.name || "Moment preview"}

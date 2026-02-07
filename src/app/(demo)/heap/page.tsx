@@ -602,7 +602,7 @@ function HeapInner() {
                     >
                       <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
                         {storyPreviews[s.id] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
+                           
                           <img src={storyPreviews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-zinc-700" />

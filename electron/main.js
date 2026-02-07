@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
+ 
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 /* eslint-disable no-console */

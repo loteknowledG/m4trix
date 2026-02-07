@@ -291,7 +291,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
           <div className="relative size-5 shrink-0">
             <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
               {isImage ? (
-                // eslint-disable-next-line @next/next/no-img-element -- local attachment thumbnails use blob URLs from URL.createObjectURL
+                 
                 <img
                   alt={filename || "attachment"}
                   className="size-5 object-cover"
@@ -327,7 +327,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
         <div className="w-auto space-y-3">
           {isImage && (
             <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
-              {/* eslint-disable-next-line @next/next/no-img-element -- preview must support blob/data URLs without next/image */}
+              { }
               <img
                 alt={filename || "attachment preview"}
                 className="max-h-full max-w-full object-contain"
@@ -634,7 +634,7 @@ export const PromptInput = ({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
+     
     [usingProvider],
   )
 
