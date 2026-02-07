@@ -6,9 +6,11 @@ interface SelectionHeaderBarProps {
   moments: { id: string }[];
   onSelectAll: () => void;
   onClearSelection: () => void;
+  showSelectAll?: boolean;
 }
 
-export function SelectionHeaderBar({ selectedIds, moments, onSelectAll, onClearSelection }: SelectionHeaderBarProps) {
+export function SelectionHeaderBar({ selectedIds, moments, onSelectAll, onClearSelection, showSelectAll }: SelectionHeaderBarProps) {
+  const shouldShowSelectAll = showSelectAll ?? true;
   return (
     <div className="flex items-center gap-2 justify-start">
       <button
@@ -19,22 +21,24 @@ export function SelectionHeaderBar({ selectedIds, moments, onSelectAll, onClearS
       >
         <X size={16} />
       </button>
-      <button
-        onClick={onSelectAll}
-        className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
-        aria-label="Select all"
-        disabled={moments.length === 0}
-      >
-        <span className="relative w-7 h-7 flex items-center justify-center">
-          {selectedIds.length === moments.length && moments.length > 0 ? (
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
-              <CheckCircle size={14} />
-            </span>
-          ) : (
-            <Circle size={18} className="text-white/70" />
-          )}
-        </span>
-      </button>
+      {shouldShowSelectAll && (
+        <button
+          onClick={onSelectAll}
+          className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+          aria-label="Select all"
+          disabled={moments.length === 0}
+        >
+          <span className="relative w-7 h-7 flex items-center justify-center">
+            {selectedIds.length === moments.length && moments.length > 0 ? (
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
+                <CheckCircle size={14} />
+              </span>
+            ) : (
+              <Circle size={18} className="text-white/70" />
+            )}
+          </span>
+        </button>
+      )}
       <span className="text-sm font-medium">{selectedIds.length} selected</span>
     </div>
   );

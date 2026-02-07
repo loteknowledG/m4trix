@@ -1,4 +1,5 @@
 "use client";
+import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
 
 import { useEffect, useState } from "react";
 import { get, set } from "idb-keyval";
@@ -90,7 +91,19 @@ export default function TrashPage() {
   }, []);
 
   return (
-    <ContentLayout title="Trash" navLeft={null}>
+    <ContentLayout
+      title="Trash"
+      navLeft={
+        <SelectionHeaderBar
+          selectedIds={Object.keys(selected).filter((k) => selected[k])}
+          moments={moments}
+          onSelectAll={() => {
+            setSelected(Object.fromEntries(moments.map(m => [m.id, true])));
+          }}
+          onClearSelection={clearSelection}
+        />
+      }
+    >
       <ErrorBoundary>
         <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
           <div className="py-4">

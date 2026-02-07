@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import useSelection from "@/hooks/use-selection";
 import MomentCard from "@/components/moment-card";
 import { MomentsProvider } from "@/context/moments-collection";
+import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
 import CollectionOverlay from "@/components/collection-overlay";
 import JustifiedMasonry from "@/components/ui/justified-masonry";
 import { logger } from "@/lib/logger";
@@ -26,12 +27,18 @@ export default function StoryByIdPage() {
   const [title, setTitle] = useState("");
   const scope = id ? `story:${id}` : "";
   const selectedIds = useSelection((s) => (scope ? s.selections[scope] || [] : []));
+  const anySelected = (selectedIds || []).length > 0;
   const toggleSelect = useSelection((s) => s.toggle);
   const clearSelection = useSelection((s) => s.clear);
+  const setSelectionStore = useSelection((s) => s.set);
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollAnimRef = useRef<number | null>(null);
   const scrollDirectionRef = useRef<number>(0);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+
+  
+
 
   useEffect(() => {
     let mounted = true;
@@ -296,26 +303,22 @@ export default function StoryByIdPage() {
   return (
     <ContentLayout
       title="Stories"
-      navLeft={(
-        <Button
-          onClick={() => router.push('/stories')}
-          className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
-          variant="outline"
-          size="icon"
-          aria-label="Back to list"
-        >
-          <ChevronLeft size={16} />
-        </Button>
-      )}
-      navRight={(
-        <Button
-          onClick={() => { }}
-          className="ml-2"
-          variant="outline"
-        >
-          Preview
-        </Button>
-      )}
+      navLeft={
+          <SelectionHeaderBar
+            selectedIds={selectedIds || []}
+            moments={moments}
+            showSelectAll={(selectedIds || []).length > 0}
+            onSelectAll={() => {
+              if ((selectedIds || []).length !== moments.length) {
+                setSelectionStore(scope, moments.map((m) => m.id));
+              } else {
+                clearSelection(scope);
+              }
+            }}
+            onClearSelection={() => clearSelection(scope)}
+          />
+      }
+      navRight={null}
     >
       <ErrorBoundary>
         <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>

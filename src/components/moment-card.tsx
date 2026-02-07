@@ -85,7 +85,7 @@ export default function MomentCard({
   return (
     <div
       onClick={handleContainerClick}
-      className={`relative group bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden shadow-sm transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${
+      className={`relative group rounded overflow-hidden shadow-sm transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${
         item.selected ? "ring-2 ring-primary/60" : ""
       } ${fullHeight ? "h-full" : ""}`}
     >
@@ -125,19 +125,8 @@ export default function MomentCard({
         src={normalizeMomentSrc(item.src)}
         alt={item.name || "moment"}
         referrerPolicy="no-referrer"
-        className={`w-full h-auto object-contain opacity-0 transition-opacity duration-500 bg-zinc-100 dark:bg-zinc-800`}
-        onLoad={(e) => {
-          const img = e.currentTarget as HTMLImageElement;
-          img.style.opacity = "1";
-        }}
-        onError={(e) => {
-          try {
-            const img = e.currentTarget as HTMLImageElement;
-            logger.warn("[moment] image failed to load", { src: img.src });
-            // show broken image placeholder instead of invisible element
-            img.style.opacity = "1";
-          } catch {}
-        }}
+        className="w-full h-auto object-contain"
+        style={{ display: 'block', maxHeight: 220 }}
       />
       {open && (
         <div

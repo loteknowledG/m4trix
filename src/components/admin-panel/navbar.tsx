@@ -56,19 +56,21 @@ export function Navbar({ title, leftSlot, navRight }: NavbarProps) {
       <div className="mx-4 sm:mx-8 flex h-14 items-center">
           <div className="flex items-center space-x-4 lg:space-x-0 flex-1">
           <SheetMenu />
-          {isStoryDetail && selectedCount > 0 ? (
-            <button
-              onClick={() => { try { clearSelection(scope); } catch (e) {} }}
-              className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              aria-label="Clear selection"
-            >
-              <X size={16} />
-            </button>
-          ) : (
+          {leftSlot ? (
             leftSlot
+          ) : (
+            isStoryDetail && selectedCount > 0 ? (
+              <button
+                onClick={() => { try { clearSelection(scope); } catch (e) {} }}
+                className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                aria-label="Clear selection"
+              >
+                <X size={16} />
+              </button>
+            ) : null
           )}
           <div className="ml-8 truncate">
-            {isStoryDetail && selectedCount > 0 ? (
+            {isStoryDetail && selectedCount > 0 && !leftSlot ? (
               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
             ) : (
               <h2 className={isStories || isStoryDetail || isTags || isTrash ? "text-sm font-medium lowercase truncate" : "text-lg font-medium truncate"}>
