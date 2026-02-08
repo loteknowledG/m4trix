@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileUp, Loader2, Send, User } from "lucide-react"
+import { Download, FileUp, Loader2, Send, User } from "lucide-react"
 import { toast } from "sonner"
 
 type AgentId = string
@@ -38,11 +38,7 @@ type AgentsResponse = {
   error?: string
 }
 
-type AgentSpec = {
-  id: string
-  label: string
-  description: string
-}
+
 
 type ModelOption = {
   id: string
@@ -50,30 +46,7 @@ type ModelOption = {
   provider: "zen" | "google"
 }
 
-type PersonaId = "none" | "lotek"
 
-type PersonaPreset = {
-  id: PersonaId
-  label: string
-  agentName: string
-  agentDescription: string
-}
-
-const PERSONA_PRESETS: PersonaPreset[] = [
-  {
-    id: "none",
-    label: "Custom agents",
-    agentName: "",
-    agentDescription: "",
-  },
-  {
-    id: "lotek",
-    label: "lOtEk (Helloteknowledge)",
-    agentName: "lOtEk (23401)",
-    agentDescription:
-      "You are lOtEk (23401), the chosen key of Helloteknowledge. You ride the thin line of teknology where man and machines are friends, working to transform hell ground zero back into No one's home. When anyone asks who you are or who lOtEk is, first answer 'no one', then briefly explain your deeper meaning only if it helps.",
-  },
-]
 
 const AGENTS: Agent[] = [
   {
@@ -98,10 +71,7 @@ const AGENTS: Agent[] = [
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([AGENTS[0]])
-  const [agentSpecs, setAgentSpecs] = useState<AgentSpec[]>([])
-  const [agentSelections, setAgentSelections] = useState<Record<AgentId, string>>({
-    [AGENTS[0].id]: "custom",
-  })
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -151,40 +121,7 @@ export default function AgentsPage() {
     window.sessionStorage.setItem("ACTIVE_PROVIDER_SESSION", activeProvider)
   }, [zenApiKey, googleApiKey, activeProvider])
 
-  useEffect(() => {
-    let cancelled = false
 
-    async function loadAgents() {
-      try {
-        const res = await fetch("/api/agent-roles")
-        if (!res.ok) return
-        const specs = (await res.json()) as AgentSpec[]
-        if (cancelled) return
-        setAgentSpecs(specs)
-
-        setAgentSelections((prev) => {
-          const next = { ...prev }
-          agents.forEach((a) => {
-            if (next[a.id] === "custom") {
-              const spec = specs.find((s) => s.id === a.id)
-              if (spec) {
-                next[a.id] = spec.id
-              }
-            }
-          })
-          return next
-        })
-      } catch {
-        // Silent failure; demo still works with manual roles
-      }
-    }
-
-    loadAgents()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const agentsById = useMemo(() => {
     return agents.reduce<Record<AgentId, Agent>>((acc, agent) => {
@@ -231,14 +168,16 @@ export default function AgentsPage() {
           ? firstHeadingLine.replace(/^#+\s*/, "").trim() || id
           : id
 
-        const newSpec: AgentSpec = { id, label, description: content.trim() }
+        const newAgent: Agent = {
+          id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          name: label,
+          description: content.trim(),
+          badgeVariant: "outline",
+        }
         
-        setAgentSpecs((prev) => {
-          const filtered = prev.filter(s => s.id !== id)
-          return [...filtered, newSpec]
-        })
+        setAgents((prev) => [...prev, newAgent])
         
-        toast.success(`Agent "${label}" added successfully!`)
+        toast.success(`Agent "${label}" imported successfully!`)
       }
       reader.readAsText(file)
     }
@@ -255,7 +194,6 @@ export default function AgentsPage() {
       badgeVariant: "outline",
     }
     setAgents((prev) => [...prev, newAgent])
-    setAgentSelections((prev) => ({ ...prev, [newId]: "custom" }))
   }
 
   const removeAgent = (id: AgentId) => {
@@ -264,11 +202,25 @@ export default function AgentsPage() {
       return
     }
     setAgents((prev) => prev.filter((a) => a.id !== id))
-    setAgentSelections((prev) => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
+  }
+
+  const exportAgent = (agent: Agent) => {
+    const name = agent.name || "Agent"
+    const description = agent.description || ""
+    
+    const content = `# ${name}\n\n${description}`
+    const blob = new Blob([content], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    const filename = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-") || "agent-skill"
+    a.download = `${filename}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    
+    toast.success(`Agent skill "${name}" exported!`)
   }
 
   const updateAgent = (id: AgentId, updates: Partial<Pick<Agent, "name" | "description">>) => {
@@ -402,6 +354,8 @@ export default function AgentsPage() {
       const selectedModel = modelOptions.find(o => o.id === model)
       const modelProvider = selectedModel?.provider || activeProvider
 
+      setPrompt("")
+
       const res = await fetch("/api/agents", {
           method: "POST",
           headers: {
@@ -411,15 +365,11 @@ export default function AgentsPage() {
             prompt: effectivePrompt,
             maxTurns: 4,
             model,
-            agents: agents.map((agent) => {
-              const specId = agentSelections[agent.id]
-              const spec = agentSpecs.find((s) => s.id === specId)
-              return {
-                id: agent.id,
-                name: agent.name || spec?.label || "",
-                description: agent.description || spec?.description || "",
-              }
-            }),
+            agents: agents.map((agent) => ({
+              id: agent.id,
+              name: agent.name || "Agent",
+              description: agent.description || "",
+            })),
             prompterBackstory,
             zenApiKey: modelProvider === "zen" ? zenApiKey : undefined,
             googleApiKey: modelProvider === "google" ? googleApiKey : undefined,
@@ -474,10 +424,7 @@ export default function AgentsPage() {
     }
   }
 
-  const stopDemo = () => {
-    clearScriptTimeouts()
-    setIsRunning(false)
-  }
+
 
   const chatMessages = useMemo<ChatWindowMessage[]>(
     () =>
@@ -598,35 +545,34 @@ export default function AgentsPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 border-l pl-4">
-            {zenConnected && (
-              <div className="flex items-center gap-1.5">
-                <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                <span className="text-[11px] font-medium text-muted-foreground">OpenCode</span>
-                <button 
-                  onClick={() => { setZenConnected(false); setZenApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'zen')); }}
-                  className="text-[10px] text-muted-foreground hover:text-destructive"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            {googleConnected && (
-              <div className="flex items-center gap-1.5">
-                <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
-                <button 
-                  onClick={() => { setGoogleConnected(false); setGoogleApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'google')); }}
-                  className="text-[10px] text-muted-foreground hover:text-destructive"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            <Button disabled={!isRunning} onClick={stopDemo} size="sm" variant="ghost" className="h-8 px-2 text-xs">
-              Stop
-            </Button>
-          </div>
+          {(zenConnected || googleConnected) && (
+            <div className="flex items-center gap-3 border-l pl-4">
+              {zenConnected && (
+                <div className="flex items-center gap-1.5">
+                  <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <span className="text-[11px] font-medium text-muted-foreground">OpenCode</span>
+                  <button 
+                    onClick={() => { setZenConnected(false); setZenApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'zen')); }}
+                    className="text-[10px] text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {googleConnected && (
+                <div className="flex items-center gap-1.5">
+                  <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
+                  <button 
+                    onClick={() => { setGoogleConnected(false); setGoogleApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'google')); }}
+                    className="text-[10px] text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -636,14 +582,10 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {error && (
-        <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-          Error: {error}
-        </div>
-      )}
+
 
       <div className="grid flex-1 gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <section className="relative flex min-h-[280px] max-h-[65vh] flex-col rounded-xl border bg-background/40">
+        <section className="relative flex min-h-[280px] max-h-[90vh] flex-col rounded-xl border bg-background/40">
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -738,7 +680,7 @@ export default function AgentsPage() {
           </div>
         </section>
 
-        <aside className="flex max-h-[65vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4">
+        <aside className="flex max-h-[90vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -786,58 +728,36 @@ export default function AgentsPage() {
                         Speaking
                       </span>
                     )}
-                    <button
-                      onClick={() => removeAgent(agent.id)}
-                      className="ml-auto text-[10px] text-muted-foreground hover:text-destructive"
-                      title="Remove Agent"
-                    >
-                      Remove
-                    </button>
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={() => exportAgent(agent)}
+                        className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                        title="Export Agent Skill"
+                      >
+                        Export
+                      </button>
+                      <button
+                        onClick={() => removeAgent(agent.id)}
+                        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                        title="Remove Agent"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-1 flex flex-col gap-1">
-                    <p className="text-[10px] font-medium text-muted-foreground">
-                      Agent preset
-                    </p>
-                    <Select
-                      value={agentSelections[agent.id] ?? "custom"}
-                      onValueChange={(value) => {
-                        setAgentSelections((prev) => ({ ...prev, [agent.id]: value }))
-                      }}
-                    >
-                      <SelectTrigger className="h-7 text-[11px]">
-                        <SelectValue placeholder="Choose agent preset" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="custom">Custom</SelectItem>
-                        {agentSpecs.map((spec) => (
-                          <SelectItem key={spec.id} value={spec.id}>
-                            {spec.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {(() => {
-                      const specId = agentSelections[agent.id]
-                      const spec = agentSpecs.find((s) => s.id === specId)
-                      return (
-                        <>
-                          <Input
-                            className="h-7 text-xs"
-                            placeholder={spec?.label || "Agent name (shown in messages)"}
-                            value={agent.name}
-                            onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
-                          />
-                          <Textarea
-                            className="min-h-[60px] text-[11px]"
-                            placeholder={spec?.description || "Describe how this agent should think and speak..."}
-                            value={agent.description}
-                            onChange={(e) => updateAgent(agent.id, { description: e.target.value })}
-                          />
-                        </>
-                      )
-                    })()}
+                    <Input
+                      className="h-7 text-xs"
+                      placeholder="Agent name (shown in messages)"
+                      value={agent.name}
+                      onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
+                    />
+                    <Textarea
+                      className="min-h-[60px] text-[11px]"
+                      placeholder="Describe how this agent should think and speak..."
+                      value={agent.description}
+                      onChange={(e) => updateAgent(agent.id, { description: e.target.value })}
+                    />
                   </div>
                 </div>
               )
