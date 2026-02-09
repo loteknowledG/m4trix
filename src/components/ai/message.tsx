@@ -9,20 +9,54 @@ import { Button } from "@/components/ui/button"
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { UserIcon } from "lucide-react"
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"]
+  avatarUrl?: string
+  avatarCrop?: { x: number; y: number; zoom: number }
 }
 
-export const Message = ({ className, from, ...props }: MessageProps) => (
+export const Message = ({ className, from, avatarUrl, avatarCrop, children, ...props }: MessageProps) => (
   <div
     className={cn(
-      "group flex w-full max-w-[95%] flex-col gap-2",
-      from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
+      "group flex w-full max-w-[95%] items-start gap-3",
+      from === "user" ? "is-user ml-auto justify-end flex-row-reverse" : "is-assistant flex-row",
       className,
     )}
     {...props}
-  />
+  >
+    {avatarUrl && (
+      <Avatar className="h-8 w-8 shrink-0 overflow-hidden">
+        <AvatarImage 
+          src={avatarUrl} 
+          style={avatarCrop ? {
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            // 32px avatar / 400px workspace = 0.08 for translation
+            // Fine-tuned zoom multiplier + Y-offset correction
+            transform: `translate(${avatarCrop.x * 0.08 + 3.2}px, ${avatarCrop.y * 0.08 + 10.88}px) scale(${avatarCrop.zoom * 1.38})`,
+          } : undefined}
+          className={cn(avatarCrop && "max-w-none")}
+        />
+        <AvatarFallback>
+          <UserIcon className="h-4 w-4" />
+        </AvatarFallback>
+      </Avatar>
+    )}
+    <div className="flex flex-col gap-2 min-w-0 flex-1">
+      {children}
+    </div>
+  </div>
+)
+
+export type MessageHeaderProps = HTMLAttributes<HTMLDivElement>
+export const MessageHeader = ({ children, className, ...props }: MessageHeaderProps) => (
+  <div className={cn("text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1", className)} {...props}>
+    {children}
+  </div>
 )
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement>

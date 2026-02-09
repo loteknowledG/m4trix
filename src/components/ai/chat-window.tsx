@@ -16,6 +16,7 @@ import {
   MessageBranchPrevious,
   MessageBranchSelector,
   MessageContent,
+  MessageHeader,
   MessageResponse,
 } from "@/components/ai/message"
 import {
@@ -70,6 +71,9 @@ import { CheckIcon, GlobeIcon, MicIcon } from "lucide-react"
 export interface ChatWindowMessage {
   key: string
   from: "user" | "assistant"
+  name?: string
+  avatarUrl?: string
+  avatarCrop?: { x: number; y: number; zoom: number }
   sources?: { href: string; title: string }[]
   versions: {
     id: string
@@ -176,8 +180,13 @@ export function ChatWindow({
             <MessageBranch defaultBranch={0} key={message.key}>
               <MessageBranchContent>
                 {versions.map((version) => (
-                  <Message from={message.from} key={`${message.key}-${version.id}`}>
+                  <Message from={message.from} avatarUrl={message.avatarUrl} avatarCrop={message.avatarCrop} key={`${message.key}-${version.id}`}>
                     <div>
+                      {message.name && (
+                        <MessageHeader className={message.from === "user" ? "text-right" : "text-left"}>
+                          {message.name}
+                        </MessageHeader>
+                      )}
                       {message.sources?.length && (
                         <Sources>
                           <SourcesTrigger count={message.sources.length} />

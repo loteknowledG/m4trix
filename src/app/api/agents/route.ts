@@ -22,6 +22,8 @@ export type Agent = {
   id: AgentId
   name: string
   description: string
+  avatarUrl?: string
+  avatarCrop?: { x: number; y: number; zoom: number }
 }
 
 export type OrchestratedMessage = {
@@ -468,6 +470,12 @@ export async function POST(req: NextRequest) {
           id: agent.id as AgentId,
           name: typeof agent.name === "string" ? agent.name : "",
           description: typeof agent.description === "string" ? agent.description : "",
+          avatarUrl: typeof agent.avatarUrl === "string" ? agent.avatarUrl : undefined,
+          avatarCrop: agent.avatarCrop ? {
+            x: Number(agent.avatarCrop.x),
+            y: Number(agent.avatarCrop.y),
+            zoom: Number(agent.avatarCrop.zoom),
+          } : undefined,
         }))
         : await getDefaultAgents()
 

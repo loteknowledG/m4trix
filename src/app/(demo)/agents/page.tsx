@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronLeft, Download, FileUp, Loader2, PanelRightClose, PanelRightOpen, Send, User } from "lucide-react"
+import { ChevronLeft, Download, FileUp, ImageIcon, ImagePlus, Loader2, PanelRightClose, PanelRightOpen, Plus, Send, Trash2, User, UserCheck } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
 type AgentId = string
 
@@ -16,6 +18,8 @@ type Agent = {
   id: AgentId
   name: string
   description: string
+  avatarUrl?: string
+  avatarCrop?: { x: number; y: number; zoom: number }
   badgeVariant?: "default" | "secondary" | "outline" | "destructive" | "black" | null
 }
 
@@ -71,7 +75,7 @@ const AGENTS: Agent[] = [
 ]
 
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<Agent[]>([AGENTS[0]])
+  const [agents, setAgents] = useState<Agent[]>([])
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isRunning, setIsRunning] = useState(false)
@@ -94,8 +98,17 @@ export default function AgentsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [prompterAgent, setPrompterAgent] = useState<Agent | null>(null)
   const [useCustomModel, setUseCustomModel] = useState(false)
+  const [isHoveringEdge, setIsHoveringEdge] = useState(false)
   const [customModelId, setCustomModelId] = useState("")
+  const [showImportArea, setShowImportArea] = useState(false)
+  const [croppingImage, setCroppingImage] = useState<string | null>(null)
+  const [croppingTarget, setCroppingTarget] = useState<AgentId | "user" | null>(null)
+  const [crop, setCrop] = useState({ x: 0, y: 0, zoom: 1 })
+  const [isDragOverCrop, setIsDragOverCrop] = useState(false)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [isGif, setIsGif] = useState(false)
   const timeoutsRef = useRef<number[]>([])
+  const hasLoaded = useRef(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -117,7 +130,42 @@ export default function AgentsPage() {
       validateAndFetchModels("huggingface", storedHf)
     }
     if (storedProvider) setActiveProvider(storedProvider)
+
+    const storedAgents = window.localStorage.getItem("PLAYGROUND_AGENTS")
+    if (storedAgents) {
+      try {
+        setAgents(JSON.parse(storedAgents))
+      } catch (e) {
+        console.error("Failed to parse stored agents", e)
+      }
+    }
+
+    const storedPrompter = window.localStorage.getItem("PLAYGROUND_PROMPTER")
+    if (storedPrompter) {
+      try {
+        setPrompterAgent(JSON.parse(storedPrompter))
+      } catch (e) {
+        console.error("Failed to parse stored prompter", e)
+      }
+    }
+
+    const storedStory = window.localStorage.getItem("PLAYGROUND_STORY")
+    if (storedStory) setStory(storedStory)
+
+    hasLoaded.current = true
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasLoaded.current) return
+    
+    window.localStorage.setItem("PLAYGROUND_AGENTS", JSON.stringify(agents))
+    if (prompterAgent) {
+      window.localStorage.setItem("PLAYGROUND_PROMPTER", JSON.stringify(prompterAgent))
+    } else {
+      window.localStorage.removeItem("PLAYGROUND_PROMPTER")
+    }
+    window.localStorage.setItem("PLAYGROUND_STORY", story)
+  }, [agents, prompterAgent, story])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -190,6 +238,7 @@ export default function AgentsPage() {
           id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           name: label,
           description: content.trim(),
+          avatarUrl: "",
           badgeVariant: "outline",
         }
         
@@ -209,6 +258,7 @@ export default function AgentsPage() {
       id: newId,
       name: "",
       description: "",
+      avatarUrl: "",
       badgeVariant: "outline",
     }
     setAgents((prev) => [...prev, newAgent])
@@ -241,7 +291,99 @@ export default function AgentsPage() {
     toast.success(`Agent skill "${name}" exported!`)
   }
 
-  const updateAgent = (id: AgentId, updates: Partial<Pick<Agent, "name" | "description">>) => {
+  const handleAvatarUpload = (
+    file: File,
+    id: AgentId | "user",
+  ) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("File is not an image.")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      setCroppingImage(result)
+      setCroppingTarget(id)
+      setCrop({ x: 0, y: 0, zoom: 1 })
+      setIsGif(file.type === "image/gif")
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const applyGifImmediately = () => {
+    if (!croppingImage || !croppingTarget) return
+    if (croppingTarget === "user") {
+      updatePrompterAgent({ avatarUrl: croppingImage })
+    } else {
+      updateAgent(croppingTarget, { avatarUrl: croppingImage })
+    }
+    setCroppingImage(null)
+    setCroppingTarget(null)
+    setIsGif(false)
+  }
+
+  const handleApplyCrop = async () => {
+    if (!croppingImage || !croppingTarget) return
+
+    // For GIFs, we just store the crop info and the original URL to keep it animated
+    if (isGif) {
+      if (croppingTarget === "user") {
+        updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: { ...crop } })
+      } else {
+        updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: { ...crop } })
+      }
+      setCroppingImage(null)
+      setCroppingTarget(null)
+      setIsGif(false)
+      toast.success("Animated crop applied!")
+      return
+    }
+
+    const img = new Image()
+    img.src = croppingImage
+    await new Promise((resolve) => { img.onload = resolve })
+
+    const canvas = document.createElement("canvas")
+    const size = 256
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    const UI_WORKSPACE = 400
+    const UI_CROP_CIRCLE = 320
+    
+    // Scaling ratio from original high-res pixels to the 400px UI workspace
+    const baseScale = UI_WORKSPACE / Math.min(img.width, img.height)
+    const currentScale = baseScale * crop.zoom
+    
+    // The portion of the image that was inside the 320px UI circle selection
+    const sourceSize = UI_CROP_CIRCLE / currentScale
+    
+    // Map the UI center displacement back to source coordinates
+    const sourceX = (img.width / 2) - (crop.x / currentScale)
+    const sourceY = (img.height / 2) - (crop.y / currentScale)
+    
+    const sx = sourceX - sourceSize / 2
+    const sy = sourceY - sourceSize / 2
+
+    // Final extraction box
+    ctx.drawImage(img, sx, sy, sourceSize, sourceSize, 0, 0, size, size)
+    
+    const croppedDataUrl = canvas.toDataURL("image/webp", 0.9)
+    
+    if (croppingTarget === "user") {
+      updatePrompterAgent({ avatarUrl: croppedDataUrl, avatarCrop: undefined })
+    } else {
+      updateAgent(croppingTarget, { avatarUrl: croppedDataUrl, avatarCrop: undefined })
+    }
+    
+    setCroppingImage(null)
+    setCroppingTarget(null)
+  }
+
+  const updateAgent = (id: AgentId, updates: Partial<Pick<Agent, "name" | "description" | "avatarUrl" | "avatarCrop">>) => {
     setAgents((prev) =>
       prev.map((agent) => (agent.id === id ? { ...agent, ...updates } : agent)),
     )
@@ -261,7 +403,7 @@ export default function AgentsPage() {
     }
   }
 
-  const updatePrompterAgent = (updates: Partial<Pick<Agent, "name" | "description">>) => {
+  const updatePrompterAgent = (updates: Partial<Pick<Agent, "name" | "description" | "avatarUrl" | "avatarCrop">>) => {
     if (prompterAgent) {
       setPrompterAgent({ ...prompterAgent, ...updates })
     }
@@ -423,6 +565,8 @@ export default function AgentsPage() {
               id: agent.id,
               name: agent.name || "Agent",
               description: agent.description || "",
+              avatarUrl: agent.avatarUrl,
+              avatarCrop: agent.avatarCrop,
             })),
             story,
             prompterAgent,
@@ -492,20 +636,20 @@ export default function AgentsPage() {
         const isUser = message.from === "user"
         const agent = !isUser && message.from !== "user" ? agentsById[message.from] : null
 
-        let prefix = ""
-        if (isUser && prompterAgent && prompterAgent.name) {
-          prefix = `${prompterAgent.name} (You): `
-        } else if (!isUser && agent?.name) {
-          prefix = `${agent.name}: `
-        }
+        const name = isUser 
+          ? (prompterAgent?.name || "You") 
+          : (agent?.name || "Agent")
 
         return {
           key: message.id,
           from: isUser ? "user" : "assistant",
+          name,
+          avatarUrl: isUser ? prompterAgent?.avatarUrl : agent?.avatarUrl,
+          avatarCrop: isUser ? prompterAgent?.avatarCrop : agent?.avatarCrop,
           versions: [
             {
               id: message.id,
-              content: `${prefix}${message.text}`,
+              content: message.text,
             },
           ],
         }
@@ -567,13 +711,7 @@ export default function AgentsPage() {
             ) : null}
 
             {(zenConnected || googleConnected || hfConnected) && (
-              <form
-                className="flex items-center gap-2"
-                onSubmit={async (event: FormEvent<HTMLFormElement>) => {
-                  event.preventDefault()
-                  await runDemo(prompt)
-                }}
-              >
+              <div className="flex items-center gap-2">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
                     {useCustomModel ? (
@@ -638,9 +776,6 @@ export default function AgentsPage() {
                         </SelectContent>
                       </Select>
                     )}
-                    <Button disabled={isRunning} size="sm" type="submit">
-                      {isRunning ? "Running" : messages.length ? "Run again" : "Run demo"}
-                    </Button>
                   </div>
                   {hfConnected && (
                     <button 
@@ -652,7 +787,7 @@ export default function AgentsPage() {
                     </button>
                   )}
                 </div>
-              </form>
+              </div>
             )}
           </div>
 
@@ -824,18 +959,84 @@ export default function AgentsPage() {
                         )}
                       </div>
                       
-                      <Input
-                        className="h-7 text-xs"
-                        placeholder="Your name (shown in messages)"
-                        value={prompterAgent?.name || ""}
-                        onChange={(e) => {
-                          if (prompterAgent) {
-                            updatePrompterAgent({ name: e.target.value })
-                          } else {
-                            setPrompterAgent({ id: 'user-agent', name: e.target.value, description: '' })
-                          }
-                        }}
-                      />
+                      <div className="flex gap-2 items-center">
+                        <label 
+                          className="relative group cursor-pointer"
+                          onClick={(e) => {
+                            // If avatar already exists, open crop dialog with current settings
+                            if (prompterAgent?.avatarUrl) {
+                              e.preventDefault()
+                              setCroppingImage(prompterAgent.avatarUrl)
+                              setCroppingTarget("user")
+                              setIsGif(prompterAgent.avatarUrl.startsWith('data:image/gif'))
+                              if (prompterAgent.avatarCrop) {
+                                setCrop(prompterAgent.avatarCrop)
+                              } else {
+                                setCrop({ x: 0, y: 0, zoom: 1 })
+                              }
+                            }
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault()
+                            setDragOverId("user")
+                          }}
+                          onDragLeave={() => setDragOverId(null)}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            setDragOverId(null)
+                            const file = e.dataTransfer.files[0]
+                            if (file) handleAvatarUpload(file, "user")
+                          }}
+                        >
+                          <Avatar className="h-10 w-10 shrink-0 border transition-all hover:border-primary/50 overflow-hidden relative">
+                            <AvatarImage 
+                              src={prompterAgent?.avatarUrl} 
+                              style={prompterAgent?.avatarCrop ? {
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                // 40px avatar / 400px workspace = 0.1 for translation
+                                // Fine-tuned zoom multiplier + Y-offset correction
+                                transform: `translate(${prompterAgent.avatarCrop.x * 0.1 + 4}px, ${prompterAgent.avatarCrop.y * 0.1 + 13.6}px) scale(${prompterAgent.avatarCrop.zoom * 1.38})`,
+                              } : undefined}
+                              className={cn(prompterAgent?.avatarCrop && "max-w-none")}
+                            />
+                            <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
+                            <div className={cn(
+                              "absolute inset-0 flex flex-col items-center justify-center bg-black/40 transition-all",
+                              dragOverId === "user" ? "opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background scale-105" : "opacity-0 group-hover:opacity-100"
+                            )}>
+                              <ImagePlus className="h-4 w-4 text-white mb-1" />
+                              {dragOverId === "user" && <span className="text-[8px] text-white font-bold uppercase tracking-tighter">Drop</span>}
+                            </div>
+                          </Avatar>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/*" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) handleAvatarUpload(file, "user")
+                              e.target.value = ""
+                            }}
+                          />
+                        </label>
+                        <div className="flex-1">
+                          <Input
+                            className="h-7 text-xs"
+                            placeholder="Your name (shown in messages)"
+                            value={prompterAgent?.name || ""}
+                            onChange={(e) => {
+                              if (prompterAgent) {
+                                updatePrompterAgent({ name: e.target.value })
+                              } else {
+                                setPrompterAgent({ id: 'user-agent', name: e.target.value, description: '', avatarUrl: '' })
+                              }
+                            }}
+                          />
+                          {/* Removed Avatar URL input as we use drag-and-drop/crop UI */}
+                        </div>
+                      </div>
                       <Textarea
                         className="min-h-[60px] text-[11px]"
                         placeholder="Describe your role and how you interact..."
@@ -877,95 +1078,352 @@ export default function AgentsPage() {
         >
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Import Agents (.md)
-              </p>
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border py-4 transition-colors hover:border-primary/50 hover:bg-primary/5">
-                <div className="flex flex-col items-center justify-center pt-1 pb-1">
-                  <FileUp className="mb-2 h-5 w-5 text-muted-foreground" />
-                  <p className="text-[10px] text-muted-foreground">
-                    <span className="font-semibold">Click to upload</span> or drag and drop
-                  </p>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Agents
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button 
+                    onClick={() => setShowImportArea(!showImportArea)}
+                    size="icon" 
+                    variant="ghost" 
+                    className={cn(
+                      "h-6 w-6 transition-colors",
+                      showImportArea ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary"
+                    )}
+                    title="Import Agents (.md)"
+                  >
+                    <FileUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button 
+                    onClick={addAgent}
+                    size="icon" 
+                    variant="ghost" 
+                    className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+                    title="Add New Agent"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".md" 
-                  multiple 
-                  onChange={handleFileUpload} 
-                />
-              </label>
+              </div>
 
-              <Button 
-                onClick={addAgent}
-                size="sm" 
-                variant="outline" 
-                className="h-8 w-full border-dashed text-[11px]"
-              >
-                + Add Agent
-              </Button>
+              {showImportArea && (
+                <label className="flex animate-in fade-in zoom-in duration-200 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border py-4 transition-colors hover:border-primary/50 hover:bg-primary/5">
+                  <div className="flex flex-col items-center justify-center pt-1 pb-1">
+                    <FileUp className="mb-2 h-5 w-5 text-muted-foreground" />
+                    <p className="text-[10px] text-muted-foreground">
+                      <span className="font-semibold">Click to upload</span> or drag and drop
+                    </p>
+                  </div>
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    accept=".md" 
+                    multiple 
+                    onChange={handleFileUpload} 
+                  />
+                </label>
+              )}
             </div>
 
-            {agents.map((agent) => {
-              const isActive = activeAgentId === agent.id
-              return (
-                <div
-                  className={
-                    "flex flex-col gap-1 rounded-lg border px-3 py-2 text-sm transition-colors " +
-                    (isActive ? "border-primary/70 bg-primary/5" : "border-border bg-background/60")
-                  }
-                  key={agent.id}
-                >
-                  <div className="flex items-center justify-between">
-                    {isActive && (
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
-                        Speaking
-                      </span>
-                    )}
-                    <div className="ml-auto flex items-center gap-2">
-                      <button
-                        onClick={() => assumeAgent(agent)}
-                        className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
-                        title="Assume this Agent Role"
-                      >
-                        Assume
-                      </button>
-                      <button
-                        onClick={() => exportAgent(agent)}
-                        className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
-                        title="Export Agent Skill"
-                      >
-                        Export
-                      </button>
-                      <button
-                        onClick={() => removeAgent(agent.id)}
-                        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                        title="Remove Agent"
-                      >
-                        Remove
-                      </button>
+            {agents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                <p className="text-[11px] text-muted-foreground">
+                  No agents in the team. Import or add one to get started!
+                </p>
+              </div>
+            ) : (
+              agents.map((agent) => {
+                const isActive = activeAgentId === agent.id
+                return (
+                  <div
+                    className={
+                      "flex flex-col gap-1 rounded-lg border px-3 py-2 text-sm transition-colors " +
+                      (isActive ? "border-primary/70 bg-primary/5" : "border-border bg-background/60")
+                    }
+                    key={agent.id}
+                  >
+                    <div className="flex items-center justify-between">
+                      {isActive && (
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
+                          Speaking
+                        </span>
+                      )}
+                      <div className="ml-auto flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => assumeAgent(agent)}
+                          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+                          title="Assume this Agent Role"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => exportAgent(agent)}
+                          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+                          title="Export Agent Skill"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAgent(agent.id)}
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Remove Agent"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-1 flex flex-col gap-1">
-                    <Input
-                      className="h-7 text-xs"
-                      placeholder="Agent name (shown in messages)"
-                      value={agent.name}
-                      onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
-                    />
+                    <div className="mt-1 flex gap-2 items-center">
+                      <label 
+                        className="relative group cursor-pointer"
+                        onClick={(e) => {
+                          // If avatar already exists, open crop dialog with current settings
+                          if (agent.avatarUrl) {
+                            e.preventDefault()
+                            setCroppingImage(agent.avatarUrl)
+                            setCroppingTarget(agent.id)
+                            setIsGif(agent.avatarUrl.startsWith('data:image/gif'))
+                            if (agent.avatarCrop) {
+                              setCrop(agent.avatarCrop)
+                            } else {
+                              setCrop({ x: 0, y: 0, zoom: 1 })
+                            }
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setDragOverId(agent.id)
+                        }}
+                        onDragLeave={() => setDragOverId(null)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setDragOverId(null)
+                          const file = e.dataTransfer.files[0]
+                          if (file) handleAvatarUpload(file, agent.id)
+                        }}
+                      >
+                        <Avatar className="h-10 w-10 shrink-0 border transition-all hover:border-primary/50 overflow-hidden relative">
+                          <AvatarImage 
+                            src={agent.avatarUrl} 
+                            style={agent.avatarCrop ? {
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              // 40px avatar / 400px workspace = 0.1 for translation
+                              // Fine-tuned zoom multiplier + Y-offset correction
+                              transform: `translate(${agent.avatarCrop.x * 0.1 + 4}px, ${agent.avatarCrop.y * 0.1 + 13.6}px) scale(${agent.avatarCrop.zoom * 1.38})`,
+                            } : undefined}
+                            className={cn(agent.avatarCrop && "max-w-none")}
+                          />
+                          <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
+                          <div className={cn(
+                            "absolute inset-0 flex flex-col items-center justify-center bg-black/40 transition-all",
+                            dragOverId === agent.id ? "opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background scale-105" : "opacity-0 group-hover:opacity-100"
+                          )}>
+                            <ImagePlus className="h-4 w-4 text-white mb-1" />
+                            {dragOverId === agent.id && <span className="text-[8px] text-white font-bold uppercase tracking-tighter">Drop</span>}
+                          </div>
+                        </Avatar>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleAvatarUpload(file, agent.id)
+                            e.target.value = ""
+                          }}
+                        />
+                      </label>
+                      <div className="flex-1">
+                        <Input
+                          className="h-7 text-xs"
+                          placeholder="Agent name (shown in messages)"
+                          value={agent.name}
+                          onChange={(e) => updateAgent(agent.id, { name: e.target.value })}
+                        />
+                        {/* Removed Avatar URL input as we use drag-and-drop/crop UI */}
+                      </div>
+                    </div>
                     <Textarea
-                      className="min-h-[60px] text-[11px]"
+                      className="min-h-[60px] text-[11px] mt-1"
                       placeholder="Describe how this agent should think and speak..."
                       value={agent.description}
                       onChange={(e) => updateAgent(agent.id, { description: e.target.value })}
                     />
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </div>
         </aside>
       </div>
+
+      <Dialog open={!!croppingImage} onOpenChange={(open) => { 
+        if (!open) {
+          setCroppingImage(null)
+          setCroppingTarget(null)
+          setIsGif(false)
+        }
+      }}>
+        <DialogContent className="sm:max-w-[420px] max-h-[95vh] p-0 overflow-hidden flex flex-col bg-zinc-950 border-zinc-800 shadow-2xl">
+          <DialogHeader className="p-4 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur-md shrink-0">
+            <DialogTitle className="text-sm font-medium text-zinc-100 font-mono tracking-tight uppercase flex items-center gap-2">
+              {isGif && <span className="bg-amber-500/20 text-amber-500 text-[9px] px-1.5 py-0.5 rounded leading-none">GIF</span>}
+              Crop Avatar
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto relative bg-zinc-950 flex justify-center py-8">
+            <div 
+              className={cn(
+                "relative aspect-square w-[400px] h-[400px] shrink-0 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden select-none touch-none",
+                isHoveringEdge ? "cursor-nwse-resize" : "cursor-move"
+              )}
+              onPointerMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const centerX = rect.left + rect.width / 2
+                const centerY = rect.top + rect.height / 2
+                const dist = Math.sqrt(Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2))
+                setIsHoveringEdge(dist > 145 && dist < 180)
+              }}
+              onWheel={(e) => {
+                e.preventDefault()
+                const zoomSpeed = 0.001
+                const newZoom = Math.min(Math.max(crop.zoom - e.deltaY * zoomSpeed, 1), 10)
+                setCrop(prev => ({ ...prev, zoom: newZoom }))
+              }}
+              onPointerDown={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const centerX = rect.left + rect.width / 2
+                const centerY = rect.top + rect.height / 2
+                const distCenter = Math.sqrt(Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2))
+
+                // Zoom mode if grabbing the white edge (160px +/- 15px)
+                if (distCenter > 145 && distCenter < 180) {
+                  const startDist = distCenter
+                  const startZoom = crop.zoom
+                  const onPointerMove = (moveEvent: PointerEvent) => {
+                    const newDist = Math.sqrt(Math.pow(moveEvent.clientX - centerX, 2) + Math.pow(moveEvent.clientY - centerY, 2))
+                    // Drag away = Circle gets BIGGER = Area covers MORE = Zoom OUT
+                    const ratio = newDist / startDist
+                    const newZoom = Math.min(Math.max(startZoom / ratio, 1), 10)
+                    setCrop(prev => ({ ...prev, zoom: newZoom }))
+                  }
+                  const onPointerUp = () => {
+                    window.removeEventListener('pointermove', onPointerMove)
+                    window.removeEventListener('pointerup', onPointerUp)
+                  }
+                  window.addEventListener('pointermove', onPointerMove)
+                  window.addEventListener('pointerup', onPointerUp)
+                } else {
+                  // Pan mode everywhere else
+                  const startX = e.clientX - crop.x
+                  const startY = e.clientY - crop.y
+                  const onPointerMove = (moveEvent: PointerEvent) => {
+                    setCrop(prev => ({ ...prev, x: moveEvent.clientX - startX, y: moveEvent.clientY - startY }))
+                  }
+                  const onPointerUp = () => {
+                    window.removeEventListener('pointermove', onPointerMove)
+                    window.removeEventListener('pointerup', onPointerUp)
+                  }
+                  window.addEventListener('pointermove', onPointerMove)
+                  window.addEventListener('pointerup', onPointerUp)
+                }
+              }}
+            >
+              {croppingImage && (
+                <img 
+                  src={croppingImage} 
+                  alt="Crop preview" 
+                  className="w-full h-full object-cover max-w-none pointer-events-none"
+                  style={{
+                    transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
+                  }}
+                />
+              )}
+              
+              {/* Zoom Indicator Badge */}
+              <div className="absolute top-4 right-4 z-30 pointer-events-none">
+                <div className="bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-mono text-white/80 shadow-xl">
+                  {Math.round(crop.zoom * 100)}%
+                </div>
+              </div>
+
+              {/* Live Avatar Preview */}
+              {croppingImage && (
+                <div className="absolute top-4 left-4 z-30 pointer-events-none">
+                  <div className="bg-black/60 backdrop-blur-md border border-white/20 p-2 rounded">
+                    <div className="text-[8px] text-white/60 mb-1 text-center">Preview</div>
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 border border-white/20">
+                      <img 
+                        src={croppingImage} 
+                        alt="Preview"
+                        className="w-full h-full object-cover max-w-none"
+                        style={{
+                          transform: `translate(${crop.x * 0.1 + 4}px, ${crop.y * 0.1 + 13.6}px) scale(${crop.zoom * 1.38})`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Circular Mask Overlay */}
+              <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+                <div 
+                  className="absolute inset-0 bg-black/60" 
+                  style={{
+                    maskImage: 'radial-gradient(circle at center, transparent 160px, black 160.5px)',
+                    WebkitMaskImage: 'radial-gradient(circle at center, transparent 160px, black 160.5px)'
+                  }} 
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-[320px] aspect-square rounded-full border border-white/40 shadow-[0_0_0_1000px_rgba(0,0,0,0.3)]" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 bg-zinc-950 border-t border-zinc-900 shrink-0">
+            <DialogFooter className="flex items-center gap-2 sm:gap-0 justify-between">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-zinc-500 hover:text-zinc-300 transition-colors" 
+                onClick={() => { setCroppingImage(null); setIsGif(false); }}
+              >
+                Cancel
+              </Button>
+              <div className="flex items-center gap-2">
+                {isGif && (
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    className="border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
+                    onClick={applyGifImmediately}
+                  >
+                    Skip Crop
+                  </Button>
+                )}
+                <Button 
+                  size="sm" 
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4"
+                  onClick={handleApplyCrop}
+                >
+                  {isGif ? "Apply Animated Crop" : "Apply Crop"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
