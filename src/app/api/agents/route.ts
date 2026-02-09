@@ -11,6 +11,9 @@ const ZEN_CHAT_URL = "https://opencode.ai/zen/v1/chat/completions"
 // Google Gemini OpenAI-compatible chat completions endpoint.
 const GOOGLE_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions"
 
+// Hugging Face Router API endpoint (better compatibility for models like GLM-4.5).
+const HUGGINGFACE_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
+
 // Basic agent identifiers used by the demo UI.
 // You can freely change or extend this list as you evolve your system.
 type AgentId = "researcher" | "critic" | "summarizer"
@@ -53,11 +56,15 @@ export type AgentsRequest = {
    */
   agents?: Agent[]
   /**
-   * Optional backstory / persona for the prompter (the user).
+   * Optional global story context / persona for the agents.
    * When provided, it is included in the system prompt so agents
    * can tailor their responses to that background.
    */
-  prompterBackstory?: string
+  story?: string
+  /**
+   * Optional agent persona for the prompter.
+   */
+  prompterAgent?: Agent
 }
 
 export type AgentsResponse = {
@@ -131,15 +138,20 @@ async function callProvider(
     apiKey: string
     model: string
     providerName: string
-    prompterBackstory?: string
+    story?: string
+    prompterAgent?: Agent
   },
 ): Promise<string> {
-  const { url, apiKey, model, providerName, prompterBackstory } = options
+  const { url, apiKey, model, providerName, story, prompterAgent } = options
 
   const systemPromptBase = `You are ${agent.name}. ${agent.description}`.trim()
 
-  const systemPrompt = prompterBackstory
-    ? `${systemPromptBase} The user has the following background and context: ${prompterBackstory}. Respond concisely as this agent only.`
+  let context = ""
+  if (story) context += `The global story context is: ${story}. `
+  if (prompterAgent) context += `The user is playing the role of ${prompterAgent.name}: ${prompterAgent.description}. `
+
+  const systemPrompt = context
+    ? `${systemPromptBase} ${context}Respond concisely as this agent only.`
     : `${systemPromptBase} Respond concisely as this agent only.`
 
   const response = await fetch(url, {
@@ -229,7 +241,8 @@ async function callOpenCodeForAgent(
   prompt: string,
   agent: Agent,
   modelOverride?: string,
-  prompterBackstory?: string,
+  story?: string,
+  prompterAgent?: Agent,
   zenApiKeyOverride?: string,
 ): Promise<string> {
   const zenApiKey = zenApiKeyOverride || process.env.ZEN_API_KEY
@@ -250,7 +263,8 @@ async function callOpenCodeForAgent(
     apiKey: zenApiKey!,
     model: zenModelToUse!,
     providerName: "Zen",
-    prompterBackstory,
+    story,
+    prompterAgent,
   })
 }
 
@@ -258,7 +272,8 @@ async function callGoogleAIForAgent(
   prompt: string,
   agent: Agent,
   modelOverride?: string,
-  prompterBackstory?: string,
+  story?: string,
+  prompterAgent?: Agent,
   googleApiKeyOverride?: string,
 ): Promise<string> {
   const googleApiKey = googleApiKeyOverride || process.env.GOOGLE_GENERATIVE_AI_API_KEY
@@ -279,7 +294,33 @@ async function callGoogleAIForAgent(
     apiKey: googleApiKey!,
     model: googleModelToUse!,
     providerName: "Google Gemini",
-    prompterBackstory,
+    story,
+    prompterAgent,
+  })
+}
+
+async function callHuggingFaceForAgent(
+  prompt: string,
+  agent: Agent,
+  modelOverride?: string,
+  story?: string,
+  prompterAgent?: Agent,
+  hfApiKeyOverride?: string,
+): Promise<string> {
+  const hfApiKey = hfApiKeyOverride || process.env.HUGGINGFACE_API_KEY
+  const hfModelToUse = modelOverride || "meta-llama/Llama-3-8b-instruct"
+
+  if (!hfApiKey) {
+    throw new Error("No Hugging Face configuration: set HUGGINGFACE_API_KEY or provide a per-session hfApiKey.")
+  }
+
+  return await callProvider(prompt, agent, {
+    url: HUGGINGFACE_CHAT_URL,
+    apiKey: hfApiKey,
+    model: hfModelToUse,
+    providerName: "Hugging Face",
+    story,
+    prompterAgent,
   })
 }
 
@@ -326,9 +367,10 @@ function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
 async function buildModelTranscript(
   prompt: string,
   agents: Agent[],
-  apiKeys: { zenApiKey?: string; googleApiKey?: string },
+  apiKeys: { zenApiKey?: string; googleApiKey?: string; hfApiKey?: string },
   modelOverride?: string,
-  prompterBackstory?: string,
+  story?: string,
+  prompterAgent?: Agent,
 ): Promise<OrchestratedMessage[]> {
   const baseId = Date.now().toString(36)
 
@@ -340,8 +382,9 @@ async function buildModelTranscript(
     },
   ]
 
-  // Decide which provider to use. If googleApiKey is present, use Google.
-  const isGoogle = Boolean(apiKeys.googleApiKey || (process.env.GOOGLE_GENERATIVE_AI_API_KEY && !apiKeys.zenApiKey && !process.env.ZEN_API_KEY))
+  // Decide which provider to use.
+  const isGoogle = Boolean(apiKeys.googleApiKey)
+  const isHF = Boolean(apiKeys.hfApiKey)
 
   // Call provider once per agent, in parallel
   const agentReplies = await Promise.all(
@@ -351,14 +394,25 @@ async function buildModelTranscript(
             prompt,
             agent,
             modelOverride,
-            prompterBackstory,
+            story,
+            prompterAgent,
             apiKeys.googleApiKey,
+          )
+        : isHF
+        ? await callHuggingFaceForAgent(
+            prompt,
+            agent,
+            modelOverride,
+            story,
+            prompterAgent,
+            apiKeys.hfApiKey,
           )
         : await callOpenCodeForAgent(
             prompt,
             agent,
             modelOverride,
-            prompterBackstory,
+            story,
+            prompterAgent,
             apiKeys.zenApiKey,
           )
       return { agent, text }
@@ -389,9 +443,9 @@ export async function POST(req: NextRequest) {
 
     const prompt = body.prompt.trim()
     const modelOverride = typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined
-    const prompterBackstory =
-      typeof body.prompterBackstory === "string" && body.prompterBackstory.trim()
-        ? body.prompterBackstory.trim()
+    const story =
+      typeof body.story === "string" && body.story.trim()
+        ? body.story.trim()
         : undefined
     const zenApiKeyOverride =
       typeof (body as any).zenApiKey === "string" && (body as any).zenApiKey.trim()
@@ -400,6 +454,10 @@ export async function POST(req: NextRequest) {
     const googleApiKeyOverride =
       typeof (body as any).googleApiKey === "string" && (body as any).googleApiKey.trim()
         ? (body as any).googleApiKey.trim()
+        : undefined
+    const hfApiKeyOverride =
+      typeof (body as any).hfApiKey === "string" && (body as any).hfApiKey.trim()
+        ? (body as any).hfApiKey.trim()
         : undefined
         
     const incomingAgents = Array.isArray((body as any).agents) ? (body as any).agents : undefined
@@ -427,21 +485,23 @@ export async function POST(req: NextRequest) {
       (googleApiKeyOverride || process.env.GOOGLE_GENERATIVE_AI_API_KEY) &&
       (modelOverride || googleModelFromEnv || true), // Fallback to a default if not set
     )
+    const hasHFConfig = Boolean(hfApiKeyOverride || process.env.HUGGINGFACE_API_KEY)
 
     let messages: OrchestratedMessage[]
     let mode: AgentsResponse["mode"] = "demo"
     let error: string | undefined
 
-    if (!hasZenConfig && !hasGoogleConfig) {
+    if (!hasZenConfig && !hasGoogleConfig && !hasHFConfig) {
       messages = buildDemoTranscript(prompt)
     } else {
       try {
         messages = await buildModelTranscript(
           prompt,
           agentsForRun,
-          { zenApiKey: zenApiKeyOverride, googleApiKey: googleApiKeyOverride },
+          { zenApiKey: zenApiKeyOverride, googleApiKey: googleApiKeyOverride, hfApiKey: hfApiKeyOverride },
           modelOverride,
-          prompterBackstory,
+          story,
+          body.prompterAgent,
         )
         mode = "live"
       } catch (e) {

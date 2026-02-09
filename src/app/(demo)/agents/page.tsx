@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, FileUp, Loader2, Send, User } from "lucide-react"
+import { ChevronLeft, Download, FileUp, Loader2, PanelRightClose, PanelRightOpen, Send, User } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 type AgentId = string
 
@@ -43,7 +44,7 @@ type AgentsResponse = {
 type ModelOption = {
   id: string
   label: string
-  provider: "zen" | "google"
+  provider: "zen" | "google" | "huggingface"
 }
 
 
@@ -76,24 +77,32 @@ export default function AgentsPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState("")
+  const promptInputRef = useRef<HTMLTextAreaElement>(null)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [model, setModel] = useState<string>("")
-  const [prompterBackstory, setPrompterBackstory] = useState("")
-  const [activeProvider, setActiveProvider] = useState<"zen" | "google">("zen")
+  const [story, setStory] = useState("")
+  const [activeProvider, setActiveProvider] = useState<"zen" | "google" | "huggingface">("zen")
   const [zenApiKey, setZenApiKey] = useState("")
   const [googleApiKey, setGoogleApiKey] = useState("")
+  const [hfApiKey, setHfApiKey] = useState("")
   const [zenConnected, setZenConnected] = useState(false)
   const [googleConnected, setGoogleConnected] = useState(false)
+  const [hfConnected, setHfConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [showBackstory, setShowBackstory] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [prompterAgent, setPrompterAgent] = useState<Agent | null>(null)
+  const [useCustomModel, setUseCustomModel] = useState(false)
+  const [customModelId, setCustomModelId] = useState("")
   const timeoutsRef = useRef<number[]>([])
 
   useEffect(() => {
     if (typeof window === "undefined") return
     const storedZen = window.sessionStorage.getItem("ZEN_API_KEY_SESSION")
     const storedGoogle = window.sessionStorage.getItem("GOOGLE_API_KEY_SESSION")
-    const storedProvider = window.sessionStorage.getItem("ACTIVE_PROVIDER_SESSION") as "zen" | "google" | null
+    const storedHf = window.sessionStorage.getItem("HF_API_KEY_SESSION")
+    const storedProvider = window.sessionStorage.getItem("ACTIVE_PROVIDER_SESSION") as "zen" | "google" | "huggingface" | null
     
     if (storedZen) {
       setZenApiKey(storedZen)
@@ -102,6 +111,10 @@ export default function AgentsPage() {
     if (storedGoogle) {
       setGoogleApiKey(storedGoogle)
       validateAndFetchModels("google", storedGoogle)
+    }
+    if (storedHf) {
+      setHfApiKey(storedHf)
+      validateAndFetchModels("huggingface", storedHf)
     }
     if (storedProvider) setActiveProvider(storedProvider)
   }, [])
@@ -118,8 +131,13 @@ export default function AgentsPage() {
     } else {
       window.sessionStorage.removeItem("GOOGLE_API_KEY_SESSION")
     }
+    if (hfApiKey) {
+      window.sessionStorage.setItem("HF_API_KEY_SESSION", hfApiKey)
+    } else {
+      window.sessionStorage.removeItem("HF_API_KEY_SESSION")
+    }
     window.sessionStorage.setItem("ACTIVE_PROVIDER_SESSION", activeProvider)
-  }, [zenApiKey, googleApiKey, activeProvider])
+  }, [zenApiKey, googleApiKey, hfApiKey, activeProvider])
 
 
 
@@ -229,6 +247,26 @@ export default function AgentsPage() {
     )
   }
 
+  const assumeAgent = (agent: Agent) => {
+    setPrompterAgent(agent)
+    setAgents((prev) => prev.filter((a) => a.id !== agent.id))
+    setShowBackstory(true)
+    toast.success(`You have assumed the role of ${agent.name || "this agent"}`)
+  }
+
+  const unassumeAgent = () => {
+    if (prompterAgent) {
+      setAgents((prev) => [prompterAgent, ...prev])
+      setPrompterAgent(null)
+    }
+  }
+
+  const updatePrompterAgent = (updates: Partial<Pick<Agent, "name" | "description">>) => {
+    if (prompterAgent) {
+      setPrompterAgent({ ...prompterAgent, ...updates })
+    }
+  }
+
   const streamMessageText = async (messageId: string, fullText: string) => {
     const words = fullText.split(" ")
     let current = ""
@@ -244,7 +282,7 @@ export default function AgentsPage() {
     }
   }
 
-  const validateAndFetchModels = async (provider: "zen" | "google", keyToUse: string) => {
+  const validateAndFetchModels = async (provider: "zen" | "google" | "huggingface", keyToUse: string) => {
     const trimmedKey = keyToUse.trim()
     if (!trimmedKey) return
 
@@ -254,8 +292,10 @@ export default function AgentsPage() {
       const headers: Record<string, string> = {}
       if (provider === "zen") {
         headers["x-zen-api-key"] = trimmedKey
-      } else {
+      } else if (provider === "google") {
         headers["x-google-api-key"] = trimmedKey
+      } else {
+        headers["x-hf-api-key"] = trimmedKey
       }
 
       const res = await fetch("/api/models", {
@@ -277,7 +317,7 @@ export default function AgentsPage() {
             ? payload.models
             : []
 
-      const options: (ModelOption & { provider: "zen" | "google" })[] = rawModels
+      const options: (ModelOption & { provider: "zen" | "google" | "huggingface" })[] = rawModels
         .map((m: any) => {
           const id =
             (typeof m?.id === "string" && m.id) ||
@@ -307,12 +347,14 @@ export default function AgentsPage() {
       }
 
       if (provider === "zen") setZenConnected(true)
-      else setGoogleConnected(true)
+      else if (provider === "google") setGoogleConnected(true)
+      else setHfConnected(true)
     } catch (e) {
       const msg = e instanceof Error ? e.message : `Failed to validate ${provider} API key.`
       setConnectionError(msg)
       if (provider === "zen") setZenConnected(false)
-      else setGoogleConnected(false)
+      else if (provider === "google") setGoogleConnected(false)
+      else setHfConnected(false)
     } finally {
       setIsConnecting(false)
     }
@@ -322,14 +364,13 @@ export default function AgentsPage() {
     if (event) {
       event.preventDefault()
     }
-    const key = activeProvider === "zen" ? zenApiKey : googleApiKey
+    const key = activeProvider === "zen" ? zenApiKey : activeProvider === "google" ? googleApiKey : hfApiKey
     await validateAndFetchModels(activeProvider, key)
   }
 
   const runDemo = async (promptText?: string) => {
     clearScriptTimeouts()
     setError(null)
-    setMessages([])
     setIsRunning(true)
 
     try {
@@ -351,9 +392,22 @@ export default function AgentsPage() {
         throw new Error("Please enter your Google API key for this session.")
       }
 
+      if (activeProvider === "huggingface" && !hfApiKey.trim()) {
+        throw new Error("Please enter your Hugging Face API token for this session.")
+      }
+
       const selectedModel = modelOptions.find(o => o.id === model)
       const modelProvider = selectedModel?.provider || activeProvider
 
+      const temporaryUserMessageId = `user-${Date.now()}`
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: temporaryUserMessageId,
+          from: "user",
+          text: effectivePrompt,
+        },
+      ])
       setPrompt("")
 
       const res = await fetch("/api/agents", {
@@ -370,9 +424,11 @@ export default function AgentsPage() {
               name: agent.name || "Agent",
               description: agent.description || "",
             })),
-            prompterBackstory,
+            story,
+            prompterAgent,
             zenApiKey: modelProvider === "zen" ? zenApiKey : undefined,
             googleApiKey: modelProvider === "google" ? googleApiKey : undefined,
+            hfApiKey: modelProvider === "huggingface" ? hfApiKey : undefined,
           }),
         })
 
@@ -410,7 +466,11 @@ export default function AgentsPage() {
       const userMessages = mapped.filter((m) => m.from === "user")
       const agentMessages = mapped.filter((m) => m.from !== "user")
 
-      setMessages(userMessages)
+      // Replace our temporary user message with the official one from the API
+      setMessages((prev) => {
+        const filtered = prev.filter((m) => m.id !== temporaryUserMessageId)
+        return [...filtered, ...userMessages]
+      })
 
       for (const agentMessage of agentMessages) {
         setMessages((prev) => [...prev, { ...agentMessage, text: "" }])
@@ -432,7 +492,12 @@ export default function AgentsPage() {
         const isUser = message.from === "user"
         const agent = !isUser && message.from !== "user" ? agentsById[message.from] : null
 
-        const prefix = !isUser && agent?.name ? `${agent.name}: ` : ""
+        let prefix = ""
+        if (isUser && prompterAgent && prompterAgent.name) {
+          prefix = `${prompterAgent.name} (You): `
+        } else if (!isUser && agent?.name) {
+          prefix = `${agent.name}: `
+        }
 
         return {
           key: message.id,
@@ -445,7 +510,7 @@ export default function AgentsPage() {
           ],
         }
       }),
-    [agentsById, messages]
+    [agentsById, messages, prompterAgent]
   )
 
   const emptyModels: ChatWindowModel[] = []
@@ -468,7 +533,7 @@ export default function AgentsPage() {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            {!zenConnected || !googleConnected ? (
+            {!zenConnected || !googleConnected || !hfConnected ? (
               <form
                 className="flex items-center gap-2"
                 onSubmit={connectWithKey}
@@ -480,14 +545,20 @@ export default function AgentsPage() {
                   <SelectContent>
                     {!zenConnected && <SelectItem value="zen">OpenCode</SelectItem>}
                     {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
+                    {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
                   </SelectContent>
                 </Select>
                 <Input
                   type="password"
                   className="h-8 w-[200px] text-xs"
-                  placeholder={`Paste ${activeProvider === "zen" ? "OpenCode" : "Google"} key`}
-                  value={activeProvider === "zen" ? zenApiKey : googleApiKey}
-                  onChange={(e) => activeProvider === "zen" ? setZenApiKey(e.target.value) : setGoogleApiKey(e.target.value)}
+                  placeholder={`Paste ${activeProvider === "zen" ? "OpenCode" : activeProvider === "google" ? "Google" : "Hugging Face"} key`}
+                  value={activeProvider === "zen" ? zenApiKey : activeProvider === "google" ? googleApiKey : hfApiKey}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (activeProvider === "zen") setZenApiKey(val)
+                    else if (activeProvider === "google") setGoogleApiKey(val)
+                    else setHfApiKey(val)
+                  }}
                 />
                 <Button disabled={isConnecting} size="sm" type="submit">
                   {isConnecting ? "..." : "Connect"}
@@ -495,7 +566,7 @@ export default function AgentsPage() {
               </form>
             ) : null}
 
-            {(zenConnected || googleConnected) && (
+            {(zenConnected || googleConnected || hfConnected) && (
               <form
                 className="flex items-center gap-2"
                 onSubmit={async (event: FormEvent<HTMLFormElement>) => {
@@ -503,49 +574,89 @@ export default function AgentsPage() {
                   await runDemo(prompt)
                 }}
               >
-                <Select
-                  disabled={isRunning || !modelOptions.length}
-                  onValueChange={setModel}
-                  value={model}
-                >
-                  <SelectTrigger className="h-8 w-[220px] text-xs">
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modelOptions.length ? (
-                      <>
-                        {modelOptions.some(o => o.provider === "zen") && (
-                          <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">OpenCode</div>
-                        )}
-                        {modelOptions.filter(o => o.provider === "zen").map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                        {modelOptions.some(o => o.provider === "google") && (
-                          <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Google Gemini</div>
-                        )}
-                        {modelOptions.filter(o => o.provider === "google").map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    {useCustomModel ? (
+                      <Input
+                        className="h-8 w-[220px] text-xs"
+                        placeholder="e.g. zai-org/GLM-4.5"
+                        value={customModelId}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            promptInputRef.current?.focus()
+                            toast.success(`Broadcasting to ${customModelId}`)
+                          }
+                        }}
+                        onChange={(e) => {
+                          setCustomModelId(e.target.value)
+                          setModel(e.target.value)
+                        }}
+                      />
                     ) : (
-                      <SelectItem value="__no-models__" disabled>
-                        No models available
-                      </SelectItem>
+                      <Select
+                        disabled={isRunning || !modelOptions.length}
+                        onValueChange={setModel}
+                        value={model}
+                      >
+                        <SelectTrigger className="h-8 w-[220px] text-xs">
+                          <SelectValue placeholder="Select model" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {modelOptions.length ? (
+                            <>
+                              {modelOptions.some(o => o.provider === "zen") && (
+                                <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">OpenCode</div>
+                              )}
+                              {modelOptions.filter(o => o.provider === "zen").map((option) => (
+                                <SelectItem key={option.id} value={option.id}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                              {modelOptions.some(o => o.provider === "google") && (
+                                <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Google Gemini</div>
+                              )}
+                              {modelOptions.filter(o => o.provider === "google").map((option) => (
+                                <SelectItem key={option.id} value={option.id}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                              {modelOptions.some(o => o.provider === "huggingface") && (
+                                <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Hugging Face</div>
+                              )}
+                              {modelOptions.filter(o => o.provider === "huggingface").map((option) => (
+                                <SelectItem key={option.id} value={option.id}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </>
+                          ) : (
+                            <SelectItem value="__no-models__" disabled>
+                              No models available
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </SelectContent>
-                </Select>
-                <Button disabled={isRunning} size="sm" type="submit">
-                  {isRunning ? "Running" : messages.length ? "Run again" : "Run demo"}
-                </Button>
+                    <Button disabled={isRunning} size="sm" type="submit">
+                      {isRunning ? "Running" : messages.length ? "Run again" : "Run demo"}
+                    </Button>
+                  </div>
+                  {hfConnected && (
+                    <button 
+                      type="button"
+                      onClick={() => setUseCustomModel(!useCustomModel)}
+                      className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-dashed border-primary/30 px-2 py-0.5 text-[10px] text-muted-foreground hover:border-primary hover:text-primary transition-all"
+                    >
+                      {useCustomModel ? "← Back to listed models" : "Can't find your model? Enter HF ID manually"}
+                    </button>
+                  )}
+                </div>
               </form>
             )}
           </div>
 
-          {(zenConnected || googleConnected) && (
+          {(zenConnected || googleConnected || hfConnected) && (
             <div className="flex items-center gap-3 border-l pl-4">
               {zenConnected && (
                 <div className="flex items-center gap-1.5">
@@ -571,6 +682,18 @@ export default function AgentsPage() {
                   </button>
                 </div>
               )}
+              {hfConnected && (
+                <div className="flex items-center gap-1.5">
+                  <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <span className="text-[11px] font-medium text-muted-foreground">HF</span>
+                  <button 
+                    onClick={() => { setHfConnected(false); setHfApiKey(""); setModelOptions(m => m.filter(o => o.provider !== 'huggingface')); }}
+                    className="text-[10px] text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -584,8 +707,26 @@ export default function AgentsPage() {
 
 
 
-      <div className="grid flex-1 gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <section className="relative flex min-h-[280px] max-h-[90vh] flex-col rounded-xl border bg-background/40">
+      <div className={`flex flex-1 overflow-hidden transition-all duration-300 relative ${sidebarOpen ? "gap-6" : "gap-0"}`}>
+        <div 
+          className="absolute z-50 top-1/2 -translate-y-1/2 transition-all duration-300"
+          style={{ right: sidebarOpen ? "284px" : "-16px" }}
+        >
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="h-8 w-8 rounded-full shadow-md bg-background hover:bg-accent"
+          >
+            <ChevronLeft
+              className={cn(
+                "h-4 w-4 transition-transform duration-500",
+                !sidebarOpen ? "rotate-180" : "rotate-0"
+              )}
+            />
+          </Button>
+        </div>
+        <section className="relative flex min-h-[280px] max-h-[90vh] flex-1 flex-col rounded-xl border bg-background/40 overflow-hidden">
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -628,6 +769,7 @@ export default function AgentsPage() {
               <div className="relative flex items-end gap-2">
                 <div className="relative flex-1">
                   <Textarea
+                    ref={promptInputRef}
                     autoComplete="off"
                     className="min-h-[60px] resize-none pr-12 text-sm shadow-sm"
                     disabled={isRunning}
@@ -662,25 +804,77 @@ export default function AgentsPage() {
                   onClick={() => setShowBackstory(!showBackstory)}
                 >
                   <User className="h-3 w-3" />
-                  {showBackstory ? "Hide Prompter Backstory" : "Set Prompter Backstory"}
+                  {showBackstory ? "Hide Story" : "Set Story"}
                 </button>
                 
                 {showBackstory && (
-                  <Textarea
-                    autoComplete="off"
-                    className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
-                    disabled={isRunning}
-                    onChange={(e) => setPrompterBackstory(e.target.value)}
-                    placeholder="Who are you in this conversation? (e.g., Senior Developer, Curious Student...)"
-                    value={prompterBackstory}
-                  />
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Your Persona
+                        </p>
+                        {prompterAgent && (
+                          <button
+                            onClick={unassumeAgent}
+                            className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            Unassume
+                          </button>
+                        )}
+                      </div>
+                      
+                      <Input
+                        className="h-7 text-xs"
+                        placeholder="Your name (shown in messages)"
+                        value={prompterAgent?.name || ""}
+                        onChange={(e) => {
+                          if (prompterAgent) {
+                            updatePrompterAgent({ name: e.target.value })
+                          } else {
+                            setPrompterAgent({ id: 'user-agent', name: e.target.value, description: '' })
+                          }
+                        }}
+                      />
+                      <Textarea
+                        className="min-h-[60px] text-[11px]"
+                        placeholder="Describe your role and how you interact..."
+                        value={prompterAgent?.description || ""}
+                        onChange={(e) => {
+                          if (prompterAgent) {
+                            updatePrompterAgent({ description: e.target.value })
+                          } else {
+                            setPrompterAgent({ id: 'user-agent', name: '', description: e.target.value })
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Global Story Context
+                      </p>
+                      <Textarea
+                        autoComplete="off"
+                        className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
+                        disabled={isRunning}
+                        onChange={(e) => setStory(e.target.value)}
+                        placeholder="Provide global story context or character details for the agents..."
+                        value={story}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
           </div>
         </section>
 
-        <aside className="flex max-h-[90vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4">
+        <aside 
+          className={`flex max-h-[90vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
+            sidebarOpen ? "w-[300px] opacity-100" : "w-0 p-0 border-0 opacity-0 pointer-events-none"
+          }`}
+        >
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -729,6 +923,13 @@ export default function AgentsPage() {
                       </span>
                     )}
                     <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={() => assumeAgent(agent)}
+                        className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                        title="Assume this Agent Role"
+                      >
+                        Assume
+                      </button>
                       <button
                         onClick={() => exportAgent(agent)}
                         className="text-[10px] text-muted-foreground hover:text-primary transition-colors"

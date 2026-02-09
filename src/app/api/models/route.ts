@@ -10,6 +10,9 @@ const ZEN_MODELS_URL = "https://opencode.ai/zen/v1/models"
 // Google Gemini OpenAI-compatible endpoints
 const GOOGLE_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/openai/v1/models"
 
+// Hugging Face Inference API models endpoint (simulated via chat endpoint for validation if needed, or static list)
+const HUGGINGFACE_MODELS_URL = "https://huggingface.co/api/models?pipeline_tag=text-generation&sort=downloads&direction=-1&limit=20"
+
 // Simple proxy to list models available to your Zen/OpenCode API key.
 //
 // Uses the hardcoded OpenCode models endpoint above. You can still
@@ -39,37 +42,42 @@ export async function GET(req: NextRequest) {
   
   const zenApiKey = overrideKey || process.env.ZEN_API_KEY
   const googleApiKey = googleOverrideKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  const hfOverrideKey = req.headers.get("x-hf-api-key")?.trim() || null
+  const hfApiKey = hfOverrideKey || process.env.HUGGINGFACE_API_KEY
 
-  if (!zenApiKey && !googleApiKey) {
+  if (!zenApiKey && !googleApiKey && !hfApiKey) {
     return new Response(
-      "Neither ZEN_API_KEY nor GOOGLE_GENERATIVE_AI_API_KEY are configured, and no per-request key was provided",
+      "No API keys configured (Zen, Google, or Hugging Face)",
       { status: 400 },
     )
   }
 
   // If a google key is provided (or specifically requested via header), prefer it or use it.
   // In the playground, the client sends exactly one key header usually.
-  const isGoogle = Boolean(googleOverrideKey || (googleApiKey && !zenApiKey && !overrideKey))
+  const isGoogle = Boolean(googleOverrideKey || (googleApiKey && !zenApiKey && !overrideKey && !hfApiKey && !hfOverrideKey))
+  const isHF = Boolean(hfOverrideKey)
   
-  const modelsUrl = isGoogle 
+  const modelsUrl = isHF
+    ? HUGGINGFACE_MODELS_URL
+    : isGoogle 
     ? GOOGLE_MODELS_URL 
     : (ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL))
     
-  const apiKeyToUse = isGoogle ? googleApiKey : zenApiKey
+  const apiKeyToUse = isHF ? hfApiKey : isGoogle ? googleApiKey : zenApiKey
 
   try {
     const response = await fetch(modelsUrl!, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKeyToUse}`,
+        ...(isHF ? {} : { Authorization: `Bearer ${apiKeyToUse}` }),
       },
     })
 
     const text = await response.text()
 
     if (!response.ok) {
-      const provider = isGoogle ? "Google Gemini" : "Zen"
+      const provider = isHF ? "Hugging Face" : isGoogle ? "Google Gemini" : "Zen"
       return new Response(
         `${provider} models endpoint error ${response.status}: ${text || response.statusText}`,
         { status: response.status },
@@ -84,7 +92,7 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    const provider = isGoogle ? "Google Gemini" : "Zen"
+    const provider = isHF ? "Hugging Face" : isGoogle ? "Google Gemini" : "Zen"
     const message =
       error instanceof Error ? error.message : typeof error === "string" ? error : "Internal error"
 
