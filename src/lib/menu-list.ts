@@ -5,8 +5,9 @@ import {
   LayoutGrid,
   DatabaseBackup,
   Trash2,
-  LucideIcon
-} from "lucide-react";
+  Gamepad,
+  LucideIcon,
+} from 'lucide-react';
 
 type Submenu = {
   href: string;
@@ -30,58 +31,61 @@ type Group = {
 export function getMenuList(): Group[] {
   return [
     {
-      groupLabel: "",
+      groupLabel: '',
       menus: [
         {
-          href: "/heap",
-          label: "Heap",
+          href: '/heap',
+          label: 'Heap',
           icon: LayoutGrid,
-          submenus: []
-        }
-      ]
+          submenus: [],
+        },
+      ],
     },
     {
-      groupLabel: "Contents",
+      groupLabel: 'Contents',
       menus: [
         {
-          href: "/agents",
-          label: "Agents",
-          icon: Users
+          href: '/agents',
+          label: 'Agents',
+          icon: Users,
         },
         {
-          href: "/skunkworx",
-          label: "Skunkworx",
-          icon: Bookmark
+          href: '/skunkworx',
+          label: 'Skunkworx',
+          icon: Bookmark,
         },
         {
-          href: "/stories",
-          label: "Stories",
+          href: '/stories',
+          label: 'Stories',
           icon: SquarePen,
           submenus: [
             {
-              href: "/stories",
-              label: "All Stories"
-            }
-          ]
+              href: '/stories',
+              label: 'All Stories',
+            },
+          ],
         },
         {
-          href: "/trash",
-          label: "Trash",
-          icon: Trash2
-        }
-
-      ]
+          href: '/games',
+          label: 'Games',
+          icon: Gamepad,
+        },
+        {
+          href: '/trash',
+          label: 'Trash',
+          icon: Trash2,
+        },
+      ],
     },
     {
-      groupLabel: "Settings",
+      groupLabel: 'Settings',
       menus: [
-
         {
-          href: "/backups",
-          label: "Backups",
-          icon: DatabaseBackup
-        }
-      ]
-    }
+          href: '/backups',
+          label: 'Backups',
+          icon: DatabaseBackup,
+        },
+      ],
+    },
   ];
 }
