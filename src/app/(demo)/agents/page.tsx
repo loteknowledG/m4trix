@@ -417,20 +417,6 @@ export default function AgentsPage() {
     setAgents(prev => prev.map(agent => (agent.id === id ? { ...agent, ...updates } : agent)));
   };
 
-  const assumeAgent = (agent: Agent) => {
-    setPrompterAgent(agent);
-    setAgents(prev => prev.filter(a => a.id !== agent.id));
-    setShowBackstory(true);
-    toast.success(`You have assumed the role of ${agent.name || 'this agent'}`);
-  };
-
-  const unassumeAgent = () => {
-    if (prompterAgent) {
-      setAgents(prev => [prompterAgent, ...prev]);
-      setPrompterAgent(null);
-    }
-  };
-
   const updatePrompterAgent = (
     updates: Partial<Pick<Agent, 'name' | 'description' | 'avatarUrl' | 'avatarCrop'>>
   ) => {
@@ -1007,14 +993,6 @@ export default function AgentsPage() {
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           Your Persona
                         </p>
-                        {prompterAgent && (
-                          <button
-                            onClick={unassumeAgent}
-                            className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            Unassume
-                          </button>
-                        )}
                       </div>
 
                       <div className="flex gap-2 items-center">
@@ -1239,15 +1217,6 @@ export default function AgentsPage() {
                         </span>
                       )}
                       <div className="ml-auto flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => assumeAgent(agent)}
-                          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
-                          title="Assume this Agent Role"
-                        >
-                          <UserCheck className="h-3.5 w-3.5" />
-                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

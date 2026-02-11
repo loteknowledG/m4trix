@@ -72,7 +72,7 @@ export default function GamesCarousel() {
         {stories.map(story => (
           <CarouselItem key={story.id}>
             <Link href={`/stories/${story.id}`}>
-              <div className="w-[72%] max-w-[380px] aspect-square bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
+              <div className="w-[82%] max-w-[500px] aspect-square bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
                 {previews[story.id] ? (
                   <img
                     src={previews[story.id] || undefined}
@@ -89,8 +89,8 @@ export default function GamesCarousel() {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious className="left-1 top-1/2 -translate-y-1/2 h-12 w-12 bg-black/40 hover:bg-black/60 z-10" />
-      <CarouselNext className="right-1 top-1/2 -translate-y-1/2 h-12 w-12 bg-black/40 hover:bg-black/60 z-10" />
+      <CarouselPrevious className="left-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-black/40 hover:bg-black/60 z-10" />
+      <CarouselNext className="right-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-black/40 hover:bg-black/60 z-10" />
     </Carousel>
   );
 }
