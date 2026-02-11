@@ -1,5 +1,5 @@
 'use client';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ChatWindow,
   type ChatWindowMessage,
@@ -40,6 +40,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { AgentCard } from '@/components/agent-card';
 
 type AgentId = string;
 
@@ -377,24 +378,30 @@ export default function AgentsPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // --- New logic for object-fit: contain ---
     const UI_WORKSPACE = 400;
     const UI_CROP_CIRCLE = 320;
 
-    // Scaling ratio from original high-res pixels to the 400px UI workspace
-    const baseScale = UI_WORKSPACE / Math.min(img.width, img.height);
-    const currentScale = baseScale * crop.zoom;
+    // Calculate how the image is fit into the workspace (object-fit: contain)
+    const scaleToFit = Math.min(UI_WORKSPACE / img.width, UI_WORKSPACE / img.height);
+    const displayWidth = img.width * scaleToFit;
+    const displayHeight = img.height * scaleToFit;
+    const offsetX = (UI_WORKSPACE - displayWidth) / 2;
+    const offsetY = (UI_WORKSPACE - displayHeight) / 2;
 
-    // The portion of the image that was inside the 320px UI circle selection
-    const sourceSize = UI_CROP_CIRCLE / currentScale;
+    // The crop circle in UI coordinates
+    const cropCenterX = UI_WORKSPACE / 2 - crop.x;
+    const cropCenterY = UI_WORKSPACE / 2 - crop.y - 20; // -20px vertical offset (move up)
+    const cropRadius = UI_CROP_CIRCLE / 2 / crop.zoom;
 
-    // Map the UI center displacement back to source coordinates
-    const sourceX = img.width / 2 - crop.x / currentScale;
-    const sourceY = img.height / 2 - crop.y / currentScale;
+    // The source box in the original image
+    const sourceCenterX = (cropCenterX - offsetX) / scaleToFit;
+    const sourceCenterY = (cropCenterY - offsetY) / scaleToFit;
+    const sourceSize = UI_CROP_CIRCLE / crop.zoom / scaleToFit;
 
-    const sx = sourceX - sourceSize / 2;
-    const sy = sourceY - sourceSize / 2;
+    const sx = sourceCenterX - sourceSize / 2;
+    const sy = sourceCenterY - sourceSize / 2;
 
-    // Final extraction box
     ctx.drawImage(img, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
 
     const croppedDataUrl = canvas.toDataURL('image/webp', 0.9);
@@ -993,123 +1000,37 @@ export default function AgentsPage() {
                           Your Persona
                         </p>
                       </div>
-
-                      <div className="flex gap-2 items-center">
-                        <label
-                          className="relative group cursor-pointer"
-                          onClick={e => {
-                            // If avatar already exists, open crop dialog with current settings
-                            if (prompterAgent?.avatarUrl) {
-                              e.preventDefault();
-                              setCroppingImage(prompterAgent.avatarUrl);
-                              setCroppingTarget('user');
-                              setIsGif(prompterAgent.avatarUrl.startsWith('data:image/gif'));
-                              if (prompterAgent.avatarCrop) {
-                                setCrop(prompterAgent.avatarCrop);
-                              } else {
-                                setCrop({ x: 0, y: 0, zoom: 1 });
-                              }
-                            }
-                          }}
-                          onDragOver={e => {
-                            e.preventDefault();
-                            setDragOverId('user');
-                          }}
-                          onDragLeave={() => setDragOverId(null)}
-                          onDrop={e => {
-                            e.preventDefault();
-                            setDragOverId(null);
-                            const file = e.dataTransfer.files[0];
-                            if (file) handleAvatarUpload(file, 'user');
-                          }}
-                        >
-                          <Avatar className="h-10 w-10 shrink-0 border transition-all hover:border-primary/50 overflow-hidden relative">
-                            <AvatarImage
-                              src={prompterAgent?.avatarUrl}
-                              style={
-                                prompterAgent?.avatarCrop
-                                  ? {
-                                      width: '100%',
-                                      height: '100%',
-                                      objectFit: 'cover',
-                                      // 40px avatar / 400px workspace = 0.1 for translation
-                                      // Fine-tuned zoom multiplier + Y-offset correction
-                                      transform: `translate(${
-                                        prompterAgent.avatarCrop.x * 0.1 + 4
-                                      }px, ${prompterAgent.avatarCrop.y * 0.1 + 13.6}px) scale(${
-                                        prompterAgent.avatarCrop.zoom * 1.38
-                                      })`,
-                                    }
-                                  : undefined
-                              }
-                              className={cn(prompterAgent?.avatarCrop && 'max-w-none')}
-                            />
-                            <AvatarFallback>
-                              <User className="h-4 w-4" />
-                            </AvatarFallback>
-                            <div
-                              className={cn(
-                                'absolute inset-0 flex flex-col items-center justify-center bg-black/40 transition-all',
-                                dragOverId === 'user'
-                                  ? 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background scale-105'
-                                  : 'opacity-0 group-hover:opacity-100'
-                              )}
-                            >
-                              <ImagePlus className="h-4 w-4 text-white mb-1" />
-                              {dragOverId === 'user' && (
-                                <span className="text-[8px] text-white font-bold uppercase tracking-tighter">
-                                  Drop
-                                </span>
-                              )}
-                            </div>
-                          </Avatar>
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/*"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (file) handleAvatarUpload(file, 'user');
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
-                        <div className="flex-1">
-                          <Input
-                            className="h-7 text-xs"
-                            placeholder="Your name (shown in messages)"
-                            value={prompterAgent?.name || ''}
-                            onChange={e => {
-                              if (prompterAgent) {
-                                updatePrompterAgent({ name: e.target.value });
-                              } else {
-                                setPrompterAgent({
-                                  id: 'user-agent',
-                                  name: e.target.value,
-                                  description: '',
-                                  avatarUrl: '',
-                                });
-                              }
-                            }}
-                          />
-                          {/* Removed Avatar URL input as we use drag-and-drop/crop UI */}
-                        </div>
-                      </div>
-                      <Textarea
-                        className="min-h-[60px] text-[11px]"
-                        placeholder="Describe your role and how you interact..."
-                        value={prompterAgent?.description || ''}
-                        onChange={e => {
+                      <AgentCard
+                        name={prompterAgent?.name || ''}
+                        description={prompterAgent?.description || ''}
+                        avatarUrl={prompterAgent?.avatarUrl}
+                        avatarCrop={prompterAgent?.avatarCrop}
+                        dragOverId={dragOverId}
+                        onAvatarUpload={file => handleAvatarUpload(file, 'user')}
+                        onNameChange={name => {
                           if (prompterAgent) {
-                            updatePrompterAgent({ description: e.target.value });
+                            updatePrompterAgent({ name });
+                          } else {
+                            setPrompterAgent({
+                              id: 'user-agent',
+                              name,
+                              description: '',
+                              avatarUrl: '',
+                            });
+                          }
+                        }}
+                        onDescriptionChange={description => {
+                          if (prompterAgent) {
+                            updatePrompterAgent({ description });
                           } else {
                             setPrompterAgent({
                               id: 'user-agent',
                               name: '',
-                              description: e.target.value,
+                              description,
                             });
                           }
                         }}
+                        isUser={true}
                       />
                     </div>
 
@@ -1165,185 +1086,45 @@ export default function AgentsPage() {
                 </p>
               </div>
             ) : (
-              agents.map(agent => {
-                const isActive = activeAgentId === agent.id;
-                return (
-                  <div
-                    className={
-                      'flex flex-col gap-1 rounded-lg border px-3 py-2 text-sm transition-colors ' +
-                      (isActive
-                        ? 'border-primary/70 bg-primary/5'
-                        : 'border-border bg-background/60')
+              agents.map(agent => (
+                <AgentCard
+                  key={agent.id}
+                  name={agent.name}
+                  description={agent.description}
+                  avatarUrl={agent.avatarUrl}
+                  avatarCrop={agent.avatarCrop}
+                  dragOverId={dragOverId}
+                  onAvatarUpload={file => handleAvatarUpload(file, agent.id)}
+                  onImport={file => {
+                    if (!file.name.endsWith('.md')) {
+                      toast.error(`File ${file.name} is not a Markdown file.`);
+                      return;
                     }
-                    key={agent.id}
-                  >
-                    <div className="flex items-center justify-between">
-                      {isActive && (
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
-                          Speaking
-                        </span>
-                      )}
-                      <div className="ml-auto flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          asChild
-                          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
-                          title="Import Agent Role (.md)"
-                        >
-                          <label style={{ margin: 0 }}>
-                            <FileUp className="h-3.5 w-3.5" />
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept=".md"
-                              onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                if (!file.name.endsWith('.md')) {
-                                  toast.error(`File ${file.name} is not a Markdown file.`);
-                                  e.target.value = '';
-                                  return;
-                                }
-                                const reader = new FileReader();
-                                reader.onload = ev => {
-                                  const content = ev.target?.result as string;
-                                  if (!content) return;
-                                  const firstHeadingLine = content
-                                    .split(/\r?\n/)
-                                    .find(line => line.trim().startsWith('#'));
-                                  const label = firstHeadingLine
-                                    ? firstHeadingLine.replace(/^#+\s*/, '').trim() || agent.id
-                                    : agent.id;
-                                  updateAgent(agent.id, {
-                                    name: label,
-                                    description: content.trim(),
-                                  });
-                                  toast.success(`Agent \"${label}\" imported successfully!`);
-                                };
-                                reader.readAsText(file);
-                                e.target.value = '';
-                              }}
-                            />
-                          </label>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => exportAgent(agent)}
-                          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
-                          title="Export Agent Skill"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeAgent(agent.id)}
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive transition-colors"
-                          title="Remove Agent"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="mt-1 flex gap-2 items-center">
-                      <label
-                        className="relative group cursor-pointer"
-                        onClick={e => {
-                          // If avatar already exists, open crop dialog with current settings
-                          if (agent.avatarUrl) {
-                            e.preventDefault();
-                            setCroppingImage(agent.avatarUrl);
-                            setCroppingTarget(agent.id);
-                            setIsGif(agent.avatarUrl.startsWith('data:image/gif'));
-                            if (agent.avatarCrop) {
-                              setCrop(agent.avatarCrop);
-                            } else {
-                              setCrop({ x: 0, y: 0, zoom: 1 });
-                            }
-                          }
-                        }}
-                        onDragOver={e => {
-                          e.preventDefault();
-                          setDragOverId(agent.id);
-                        }}
-                        onDragLeave={() => setDragOverId(null)}
-                        onDrop={e => {
-                          e.preventDefault();
-                          setDragOverId(null);
-                          const file = e.dataTransfer.files[0];
-                          if (file) handleAvatarUpload(file, agent.id);
-                        }}
-                      >
-                        <Avatar className="h-10 w-10 shrink-0 border transition-all hover:border-primary/50 overflow-hidden relative">
-                          <AvatarImage
-                            src={agent.avatarUrl}
-                            style={
-                              agent.avatarCrop
-                                ? {
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover',
-                                    // 40px avatar / 400px workspace = 0.1 for translation
-                                    // Fine-tuned zoom multiplier + Y-offset correction
-                                    transform: `translate(${agent.avatarCrop.x * 0.1 + 4}px, ${
-                                      agent.avatarCrop.y * 0.1 + 13.6
-                                    }px) scale(${agent.avatarCrop.zoom * 1.38})`,
-                                  }
-                                : undefined
-                            }
-                            className={cn(agent.avatarCrop && 'max-w-none')}
-                          />
-                          <AvatarFallback>
-                            <User className="h-4 w-4" />
-                          </AvatarFallback>
-                          <div
-                            className={cn(
-                              'absolute inset-0 flex flex-col items-center justify-center bg-black/40 transition-all',
-                              dragOverId === agent.id
-                                ? 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background scale-105'
-                                : 'opacity-0 group-hover:opacity-100'
-                            )}
-                          >
-                            <ImagePlus className="h-4 w-4 text-white mb-1" />
-                            {dragOverId === agent.id && (
-                              <span className="text-[8px] text-white font-bold uppercase tracking-tighter">
-                                Drop
-                              </span>
-                            )}
-                          </div>
-                        </Avatar>
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept="image/*"
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (file) handleAvatarUpload(file, agent.id);
-                            e.target.value = '';
-                          }}
-                        />
-                      </label>
-                      <div className="flex-1">
-                        <Input
-                          className="h-7 text-xs"
-                          placeholder="Agent name (shown in messages)"
-                          value={agent.name}
-                          onChange={e => updateAgent(agent.id, { name: e.target.value })}
-                        />
-                        {/* Removed Avatar URL input as we use drag-and-drop/crop UI */}
-                      </div>
-                    </div>
-                    <Textarea
-                      className="min-h-[60px] text-[11px] mt-1"
-                      placeholder="Describe how this agent should think and speak..."
-                      value={agent.description}
-                      onChange={e => updateAgent(agent.id, { description: e.target.value })}
-                    />
-                  </div>
-                );
-              })
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      const content = ev.target?.result as string;
+                      if (!content) return;
+                      const firstHeadingLine = content
+                        .split(/\r?\n/)
+                        .find(line => line.trim().startsWith('#'));
+                      const label = firstHeadingLine
+                        ? firstHeadingLine.replace(/^#+\s*/, '').trim() || agent.id
+                        : agent.id;
+                      updateAgent(agent.id, {
+                        name: label,
+                        description: content.trim(),
+                      });
+                      toast.success(`Agent "${label}" imported successfully!`);
+                    };
+                    reader.readAsText(file);
+                  }}
+                  onExport={() => exportAgent(agent)}
+                  onDelete={() => removeAgent(agent.id)}
+                  onNameChange={name => updateAgent(agent.id, { name })}
+                  onDescriptionChange={description => updateAgent(agent.id, { description })}
+                  isUser={false}
+                />
+              ))
             )}
           </div>
         </aside>
@@ -1440,11 +1221,12 @@ export default function AgentsPage() {
                 }
               }}
             >
+              {/* Main cropper image (restored) */}
               {croppingImage && (
                 <img
                   src={croppingImage}
                   alt="Crop preview"
-                  className="w-full h-full object-cover max-w-none pointer-events-none"
+                  className="w-full h-full object-contain max-w-none pointer-events-none"
                   style={{
                     transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
                   }}
@@ -1467,11 +1249,9 @@ export default function AgentsPage() {
                       <img
                         src={croppingImage}
                         alt="Preview"
-                        className="w-full h-full object-cover max-w-none"
+                        className="w-full h-full object-contain max-w-none"
                         style={{
-                          transform: `translate(${crop.x * 0.1 + 4}px, ${
-                            crop.y * 0.1 + 13.6
-                          }px) scale(${crop.zoom * 1.38})`,
+                          transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
                         }}
                       />
                     </div>
@@ -1481,15 +1261,6 @@ export default function AgentsPage() {
 
               {/* Circular Mask Overlay */}
               <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
-                <div
-                  className="absolute inset-0 bg-black/60"
-                  style={{
-                    maskImage:
-                      'radial-gradient(circle at center, transparent 160px, black 160.5px)',
-                    WebkitMaskImage:
-                      'radial-gradient(circle at center, transparent 160px, black 160.5px)',
-                  }}
-                />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-[320px] aspect-square rounded-full border border-white/40 shadow-[0_0_0_1000px_rgba(0,0,0,0.3)]" />
                 </div>
@@ -1535,4 +1306,50 @@ export default function AgentsPage() {
       </Dialog>
     </div>
   );
+}
+
+function CropPreviewCanvas({
+  image,
+  crop,
+  size,
+}: {
+  image: string;
+  crop: { x: number; y: number; zoom: number };
+  size: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const img = new window.Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
+      ctx.closePath();
+      ctx.clip();
+      // --- Use the same crop logic as export ---
+      const UI_WORKSPACE = 400;
+      const UI_CROP_CIRCLE = 320;
+      const scaleToFit = Math.min(UI_WORKSPACE / img.width, UI_WORKSPACE / img.height);
+      const displayWidth = img.width * scaleToFit;
+      const displayHeight = img.height * scaleToFit;
+      const offsetX = (UI_WORKSPACE - displayWidth) / 2;
+      const offsetY = (UI_WORKSPACE - displayHeight) / 2;
+      const cropCenterX = UI_WORKSPACE / 2 - crop.x;
+      const cropCenterY = UI_WORKSPACE / 2 - crop.y - 20; // -20px vertical offset (move up)
+      const sourceCenterX = (cropCenterX - offsetX) / scaleToFit;
+      const sourceCenterY = (cropCenterY - offsetY) / scaleToFit;
+      const sourceSize = UI_CROP_CIRCLE / crop.zoom / scaleToFit;
+      const sx = sourceCenterX - sourceSize / 2;
+      const sy = sourceCenterY - sourceSize / 2;
+      ctx.drawImage(img, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
+      ctx.restore();
+    };
+    img.src = image;
+  }, [image, crop, size]);
+  return <canvas ref={canvasRef} width={size} height={size} style={{ borderRadius: '50%' }} />;
 }
