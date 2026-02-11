@@ -1,5 +1,4 @@
 'use client';
-
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChatWindow,
@@ -1147,20 +1146,6 @@ export default function AgentsPage() {
                 </p>
                 <div className="flex items-center gap-1">
                   <Button
-                    onClick={() => setShowImportArea(!showImportArea)}
-                    size="icon"
-                    variant="ghost"
-                    className={cn(
-                      'h-6 w-6 transition-colors',
-                      showImportArea
-                        ? 'text-primary bg-primary/10'
-                        : 'text-muted-foreground hover:text-primary'
-                    )}
-                    title="Import Agents (.md)"
-                  >
-                    <FileUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
                     onClick={addAgent}
                     size="icon"
                     variant="ghost"
@@ -1171,24 +1156,6 @@ export default function AgentsPage() {
                   </Button>
                 </div>
               </div>
-
-              {showImportArea && (
-                <label className="flex animate-in fade-in zoom-in duration-200 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border py-4 transition-colors hover:border-primary/50 hover:bg-primary/5">
-                  <div className="flex flex-col items-center justify-center pt-1 pb-1">
-                    <FileUp className="mb-2 h-5 w-5 text-muted-foreground" />
-                    <p className="text-[10px] text-muted-foreground">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
-                    </p>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".md"
-                    multiple
-                    onChange={handleFileUpload}
-                  />
-                </label>
-              )}
             </div>
 
             {agents.length === 0 ? (
@@ -1217,6 +1184,49 @@ export default function AgentsPage() {
                         </span>
                       )}
                       <div className="ml-auto flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+                          title="Import Agent Role (.md)"
+                        >
+                          <label style={{ margin: 0 }}>
+                            <FileUp className="h-3.5 w-3.5" />
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".md"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (!file.name.endsWith('.md')) {
+                                  toast.error(`File ${file.name} is not a Markdown file.`);
+                                  e.target.value = '';
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = ev => {
+                                  const content = ev.target?.result as string;
+                                  if (!content) return;
+                                  const firstHeadingLine = content
+                                    .split(/\r?\n/)
+                                    .find(line => line.trim().startsWith('#'));
+                                  const label = firstHeadingLine
+                                    ? firstHeadingLine.replace(/^#+\s*/, '').trim() || agent.id
+                                    : agent.id;
+                                  updateAgent(agent.id, {
+                                    name: label,
+                                    description: content.trim(),
+                                  });
+                                  toast.success(`Agent \"${label}\" imported successfully!`);
+                                };
+                                reader.readAsText(file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
