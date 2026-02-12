@@ -1,38 +1,3 @@
-'use client';
-
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { get, set } from 'idb-keyval';
-import { ContentLayout } from '@/components/admin-panel/content-layout';
-import ErrorBoundary from '@/components/error-boundary';
-import { Upload } from 'lucide-react';
-import useSelection from '@/hooks/use-selection';
-import { MomentsProvider } from '@/context/moments-collection';
-import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
-import CollectionOverlay from '@/components/collection-overlay';
-import MomentsGrid from '@/components/moments-grid';
-import { logger } from '@/lib/logger';
-
-type Moment = { id: string; src: string; name?: string };
-
-export default function StoryByIdPage() {
-  const params = useParams();
-  const id = (params as any)?.id as string | undefined;
-
-  const [moments, setMoments] = useState<Moment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [title, setTitle] = useState('');
-  const scope = id ? `story:${id}` : '';
-  const selectedIds = useSelection(s => (scope ? s.selections[scope] || [] : []));
-
-  const toggleSelect = useSelection(s => s.toggle);
-  const clearSelection = useSelection(s => s.clear);
-  const setSelectionStore = useSelection(s => s.set);
-  const dragIndexRef = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const scrollAnimRef = useRef<number | null>(null);
-  const scrollDirectionRef = useRef<number>(0);
-
   useEffect(() => {
     let mounted = true;
     if (!id) {
@@ -74,6 +39,49 @@ export default function StoryByIdPage() {
       mounted = false;
     };
   }, [id]);
+        if (!mounted) return;
+        let loadedMoments: Moment[] = [];
+        if (Array.isArray(stored)) {
+          loadedMoments = stored.map((s: any) => ({
+            id: s.id || s,
+            src: s.src || s,
+            name: s.name,
+          }));
+        } else if (stored && Array.isArray(stored.items)) {
+          loadedMoments = stored.items.map((s: any) => ({
+            id: s.id || s,
+            src: s.src || s,
+            name: s.name,
+          }));
+        }
+        setMoments(loadedMoments);
+
+        // Auto-select (lick) the first moment if none selected
+        if (loadedMoments.length > 0 && (!selectedIds || selectedIds.length === 0)) {
+          setSelectionStore(scope, [loadedMoments[0].id]);
+        }
+
+        // try to get title from stored object or stories metadata
+        let t = stored && stored.title ? stored.title : '';
+        try {
+          const saved =
+            (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
+          const meta = saved.find(m => m.id === id);
+          if (meta && meta.title) t = meta.title;
+        } catch (e) {
+          // ignore
+        }
+        setTitle(t);
+      } catch (err) {
+        logger.error('Failed to load story items', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [id, selectedIds, scope, setSelectionStore]);
 
   // listen for toolbar actions dispatched from navbar
   useEffect(() => {

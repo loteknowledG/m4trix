@@ -1,5 +1,6 @@
 'use client';
 import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
 import {
   ChatWindow,
   type ChatWindowMessage,
@@ -161,40 +162,60 @@ export default function AgentsPage() {
     }
     if (storedProvider) setActiveProvider(storedProvider);
 
-    const storedAgents = window.localStorage.getItem('PLAYGROUND_AGENTS');
-    if (storedAgents) {
-      try {
-        setAgents(JSON.parse(storedAgents));
-      } catch (e) {
-        console.error('Failed to parse stored agents', e);
+    // Migrate from localStorage to idb-keyval if needed
+    (async () => {
+      let agentsVal = await idbGet('PLAYGROUND_AGENTS');
+      if (!agentsVal && typeof window !== 'undefined') {
+        const ls = window.localStorage.getItem('PLAYGROUND_AGENTS');
+        if (ls) {
+          try {
+            agentsVal = JSON.parse(ls);
+            await idbSet('PLAYGROUND_AGENTS', agentsVal);
+            window.localStorage.removeItem('PLAYGROUND_AGENTS');
+          } catch {}
+        }
       }
-    }
+      if (agentsVal) setAgents(agentsVal);
 
-    const storedPrompter = window.localStorage.getItem('PLAYGROUND_PROMPTER');
-    if (storedPrompter) {
-      try {
-        setPrompterAgent(JSON.parse(storedPrompter));
-      } catch (e) {
-        console.error('Failed to parse stored prompter', e);
+      let prompterVal = await idbGet('PLAYGROUND_PROMPTER');
+      if (!prompterVal && typeof window !== 'undefined') {
+        const ls = window.localStorage.getItem('PLAYGROUND_PROMPTER');
+        if (ls) {
+          try {
+            prompterVal = JSON.parse(ls);
+            await idbSet('PLAYGROUND_PROMPTER', prompterVal);
+            window.localStorage.removeItem('PLAYGROUND_PROMPTER');
+          } catch {}
+        }
       }
-    }
+      if (prompterVal) setPrompterAgent(prompterVal);
 
-    const storedStory = window.localStorage.getItem('PLAYGROUND_STORY');
-    if (storedStory) setStory(storedStory);
+      let storyVal = await idbGet('PLAYGROUND_STORY');
+      if (!storyVal && typeof window !== 'undefined') {
+        const ls = window.localStorage.getItem('PLAYGROUND_STORY');
+        if (ls) {
+          storyVal = ls;
+          await idbSet('PLAYGROUND_STORY', storyVal);
+          window.localStorage.removeItem('PLAYGROUND_STORY');
+        }
+      }
+      if (storyVal) setStory(storyVal);
 
-    hasLoaded.current = true;
+      hasLoaded.current = true;
+    })();
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !hasLoaded.current) return;
-
-    window.localStorage.setItem('PLAYGROUND_AGENTS', JSON.stringify(agents));
-    if (prompterAgent) {
-      window.localStorage.setItem('PLAYGROUND_PROMPTER', JSON.stringify(prompterAgent));
-    } else {
-      window.localStorage.removeItem('PLAYGROUND_PROMPTER');
-    }
-    window.localStorage.setItem('PLAYGROUND_STORY', story);
+    (async () => {
+      await idbSet('PLAYGROUND_AGENTS', agents);
+      if (prompterAgent) {
+        await idbSet('PLAYGROUND_PROMPTER', prompterAgent);
+      } else {
+        await idbSet('PLAYGROUND_PROMPTER', null);
+      }
+      await idbSet('PLAYGROUND_STORY', story);
+    })();
   }, [agents, prompterAgent, story]);
 
   useEffect(() => {
