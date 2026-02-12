@@ -1,0 +1,7 @@
+# Exclude large and unnecessary files from Vercel deployment
+node_modules/
+.next/
+src/lotek lounge/
+*.log
+# Only exclude large backup JSONs, not all JSONs
+src/lotek lounge/*.json

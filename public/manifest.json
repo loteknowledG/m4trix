@@ -1,0 +1,21 @@
+{
+  "name": "m4trix",
+  "short_name": "m4trix",
+  "description": "A stunning and functional retractable sidebar for Next.js built on top of shadcn/ui.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#18181b",
+  "theme_color": "#18181b",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
