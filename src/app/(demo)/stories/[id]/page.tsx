@@ -1,75 +1,71 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { get, set } from "idb-keyval";
+import useSelection from "@/hooks/use-selection";
+import { logger } from "@/lib/logger";
+import { ContentLayout } from "@/components/admin-panel/content-layout";
+import ErrorBoundary from "@/components/error-boundary";
+import { MomentsProvider } from "@/context/moments-collection";
+import MomentsGrid from "@/components/moments-grid";
+import CollectionOverlay from "@/components/collection-overlay";
+import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
+import { Upload } from "lucide-react";
+import { useRouter, useParams } from "next/navigation";
+
+type Moment = { id: string; src: string; name?: string };
+
+export default function StoryPage() {
+  const params = useParams();
+  const id = params?.id as string | undefined;
+
+  const [moments, setMoments] = useState<Moment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+
+  const selectedIds = useSelection((s) => s.selections['stories'] || []);
+  const toggleSelect = useSelection((s) => s.toggle);
+  const setSelectionStore = useSelection((s) => s.set);
+  const clearSelection = useSelection((s) => s.clear);
+  const scope = 'stories';
+
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const scrollDirectionRef = useRef<number | null>(null);
+  const scrollAnimRef = useRef<number | null>(null);
+
   useEffect(() => {
     let mounted = true;
     if (!id) {
+      setMoments([]);
       setLoading(false);
-      return;
+      return () => {
+        mounted = false;
+      };
     }
+
     (async () => {
       try {
         const stored = (await get<any>(`story:${id}`)) || null;
         if (!mounted) return;
-        if (Array.isArray(stored)) {
-          setMoments(stored.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name })));
-        } else if (stored && Array.isArray(stored.items)) {
-          setMoments(
-            stored.items.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name }))
-          );
-        } else {
-          setMoments([]);
-        }
 
-        // try to get title from stored object or stories metadata
-        let t = stored && stored.title ? stored.title : '';
-        try {
-          const saved =
-            (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
-          const meta = saved.find(m => m.id === id);
-          if (meta && meta.title) t = meta.title;
-        } catch (e) {
-          // ignore
-        }
-        setTitle(t);
-      } catch (err) {
-        logger.error('Failed to load story items', err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [id]);
-        if (!mounted) return;
         let loadedMoments: Moment[] = [];
         if (Array.isArray(stored)) {
-          loadedMoments = stored.map((s: any) => ({
-            id: s.id || s,
-            src: s.src || s,
-            name: s.name,
-          }));
+          loadedMoments = stored.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name }));
         } else if (stored && Array.isArray(stored.items)) {
-          loadedMoments = stored.items.map((s: any) => ({
-            id: s.id || s,
-            src: s.src || s,
-            name: s.name,
-          }));
+          loadedMoments = stored.items.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name }));
         }
-        setMoments(loadedMoments);
 
-        // Auto-select (lick) the first moment if none selected
-        if (loadedMoments.length > 0 && (!selectedIds || selectedIds.length === 0)) {
-          setSelectionStore(scope, [loadedMoments[0].id]);
-        }
+        setMoments(loadedMoments);
 
         // try to get title from stored object or stories metadata
         let t = stored && stored.title ? stored.title : '';
         try {
-          const saved =
-            (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
-          const meta = saved.find(m => m.id === id);
+          const saved = (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
+          const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
         } catch (e) {
-          // ignore
+          /* ignore */
         }
         setTitle(t);
       } catch (err) {
@@ -78,6 +74,7 @@
         if (mounted) setLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
