@@ -73,6 +73,18 @@ function createWindow() {
 
   if (isDev) win.webContents.openDevTools({ mode: "detach" });
 
+  // Force-close and re-open DevTools in dev so Chromium refreshes its window icon
+  // (some Windows/Chromium combinations cache the DevTools window icon until the
+  // DevTools window is recreated). This only runs in development.
+  if (isDev && win.webContents.isDevToolsOpened()) {
+    try {
+      win.webContents.closeDevTools();
+      setTimeout(() => {
+        if (!win.isDestroyed()) win.webContents.openDevTools({ mode: 'detach' });
+      }, 200);
+    } catch (e) { /* ignore */ }
+  }
+
   // If the renderer fails to load main-frame resources (404s for _next chunks),
   // clear the session cache and attempt to recover. If the dev server was
   // started on a different common port (eg. 3001) try that as a fallback.
