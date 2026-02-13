@@ -43,10 +43,18 @@ function normalizeUrls(items) {
 
 const isDev = process.env.NODE_ENV !== "production";
 
+// Ensure Windows uses the correct AppUserModelID so the taskbar groups and
+// pinned shortcuts reference the right application identity and icon.
+try {
+  app.setAppUserModelId && app.setAppUserModelId('com.m4trix.app');
+} catch (e) { /* ignore on platforms that don't support it */ }
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    // use the repository's red‑M icon for the window/taskbar (falls back if missing)
+    icon: path.join(__dirname, '..', 'src', 'app', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
