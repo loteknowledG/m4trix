@@ -48,15 +48,18 @@ export default function TrashPage() {
       const trash = (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
       const toRestore = trash.filter((t: any) => ids.includes(t.id || t));
       const remaining = trash.filter((t: any) => !ids.includes(t.id || t));
+      // write remaining back to trash
       await set("trash-moments", remaining);
+      // append to heap
       const heap = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
       const newHeap = [...heap, ...toRestore];
       await set("heap-moments", newHeap);
+      // refresh
       clearSelection();
       await load();
       try {
         window.dispatchEvent(new Event("moments-updated"));
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     } catch (e) {
       logger.error("Failed to restore selected moments", e);
     }
@@ -74,7 +77,7 @@ export default function TrashPage() {
       await load();
       try {
         window.dispatchEvent(new Event("moments-updated"));
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     } catch (e) {
       logger.error("Failed to delete selected moments", e);
     }
@@ -85,11 +88,11 @@ export default function TrashPage() {
     const h = () => load();
     try {
       window.addEventListener("moments-updated", h as EventListener);
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
     return () => {
       try {
         window.removeEventListener("moments-updated", h as EventListener);
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     };
   }, []);
 

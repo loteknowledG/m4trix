@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { get } from "idb-keyval";
 import { logger } from "@/lib/logger";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
+// removed unused imports
 import CountBadge from "@/components/ui/count-badge";
 
 type StoryMeta = { id: string; title?: string; count?: number };
@@ -22,6 +23,7 @@ export default function StoriesPage() {
         if (!mounted) return;
         setStories(saved);
 
+        // load preview (first item src) for each story
         const previewEntries = await Promise.all(
           saved.map(async (s) => {
             try {
@@ -75,6 +77,7 @@ export default function StoriesPage() {
                 >
                   <div className="bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center overflow-hidden">
                     {previews[s.id] ? (
+                       
                       <img src={previews[s.id] || undefined} alt={s.title ?? "story"} className="w-full h-auto object-contain" />
                     ) : (
                       <div className="text-sm text-muted-foreground">No preview</div>

@@ -49,16 +49,11 @@ export function getMenuList(): Group[] {
           label: 'Agents',
           icon: Users,
         },
-        // Skunkworx is experimental — hidden by default. Enable with NEXT_PUBLIC_ENABLE_SKUNKWORX=true
-        ...(process.env.NEXT_PUBLIC_ENABLE_SKUNKWORX === 'true'
-          ? [
-              {
-                href: '/skunkworx',
-                label: 'Skunkworx',
-                icon: Bookmark,
-              },
-            ]
-          : []),
+        {
+          href: '/skunkworx',
+          label: 'Skunkworx',
+          icon: Bookmark,
+        },
         {
           href: '/stories',
           label: 'Stories',

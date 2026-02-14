@@ -23,9 +23,11 @@ export default function MomentPage() {
     }
     (async () => {
       try {
+        // support both new and old storage keys for compatibility
         const saved = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
         let found = saved.find((s) => s.id === id) || null;
 
+        // if not in heap, try searching stories for this moment id
         if (!found) {
           try {
             const storiesMeta = (await get<any[]>("stories")) || [];
@@ -37,6 +39,7 @@ export default function MomentPage() {
               else if (stored && Array.isArray(stored.items)) items = stored.items;
               const f = items.find((s) => (s && (s.id || s)) === id);
               if (f) {
+                // normalize to object with id/src
                 if (typeof f === "string") {
                   found = { id: f, src: f };
                 } else {
@@ -46,6 +49,7 @@ export default function MomentPage() {
               }
             }
           } catch (err) {
+            // ignore errors searching stories
           }
         }
 
