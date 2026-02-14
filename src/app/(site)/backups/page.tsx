@@ -30,7 +30,6 @@ function sanitizeAndStringify(raw: string): string {
     const parsed = JSON.parse(raw);
     return JSON.stringify(removeSrc(parsed), null, 2);
   } catch (e) {
-    // fallback: remove simple "src": "..." occurrences to avoid leaking large base64/urls
     try {
       return raw.replace(/"src"\s*:\s*"[^"]*"/g, '"src":"<removed>"');
     } catch (e2) {
@@ -47,13 +46,11 @@ export default function BackupsPage() {
   const [importedText, setImportedText] = useState<string | null>(null);
   const MAX_EXPORT_BYTES = 5 * 1024 * 1024; // 5 MB
 
-
   const handleExport = useCallback(async () => {
     let previewSummary: any = null
     try {
       const heap = (await get("heap-moments")) || (await get("heap-gifs")) || [];
       const trash = (await get("trash-moments")) || (await get("trash-gifs")) || [];
-      // include stories and per-story items
       const savedStories = (await get<{ id: string; title?: string; count?: number }[]>("stories")) || [];
       const storiesWithItems = await Promise.all(
         savedStories.map(async (s) => {
@@ -76,7 +73,7 @@ export default function BackupsPage() {
         trashCount: Array.isArray(trash) ? trash.length : 0,
         storiesCount: Array.isArray(savedStories) ? savedStories.length : 0,
       };
-      // collect any per-item overlay text saved in localStorage
+
       try {
         const overlays: Record<string, any> = {};
         const collectFor = (items: any[] | undefined) => {
@@ -101,9 +98,8 @@ export default function BackupsPage() {
         for (const s of storiesWithItems) collectFor(s.items);
         if (Object.keys(overlays).length > 0) (payload as any).overlays = overlays;
       } catch (e) {
-        // continue without overlays on error
       }
-      // Prepare preview (sanitized) and download (full) strings.
+
       const previewStr = (() => {
         try {
           return JSON.stringify(removeSrc(payload), null, 2);
@@ -116,7 +112,6 @@ export default function BackupsPage() {
       try {
         downloadStr = JSON.stringify(payload, null, 2);
       } catch (err) {
-        // try removing overlays then retry
         if ((payload as any).overlays) {
           const tmp = { ...payload } as any;
           delete tmp.overlays;
@@ -138,23 +133,17 @@ export default function BackupsPage() {
         }
       }
 
-      // Check size of full download; if too large, show trimmed preview and skip download
       try {
         const encoder = new TextEncoder();
         if (downloadStr && encoder.encode(downloadStr).length > MAX_EXPORT_BYTES) {
-          // payload is large — keep a sanitized object for the tree preview and show a trimmed text summary,
-          // but still allow the user to download the full payload to a file.
           setExportedObj(removeSrc(payload));
           setExportedText(previewStr.slice(0, 1024) + "\n\n...export trimmed (too large)...");
           setMessage("Export large: showing trimmed preview but download will proceed");
           setTimeout(() => setMessage(null), 4000);
-          // do not return; proceed to create blob and trigger download
         }
       } catch (e) {
-        // ignore encoding errors
       }
 
-      // Show sanitized preview but download the full payload (downloadStr)
       setExportedObj(removeSrc(payload));
       setExportedText(previewStr);
       const blob = new Blob([downloadStr || previewStr], { type: "application/json;charset=utf-8" });
@@ -174,7 +163,7 @@ export default function BackupsPage() {
           setExportedObj(removeSrc(previewSummary));
           setExportedText(s);
         }
-      } catch (er) { /* ignore */ }
+      } catch (er) { }
       setMessage("Export failed");
       setTimeout(() => setMessage(null), 4000);
     }
@@ -183,7 +172,6 @@ export default function BackupsPage() {
   const handleImport = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
     const f = files[0];
-    // Always read the full file and attempt to parse it (will be sanitized for preview)
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -193,10 +181,9 @@ export default function BackupsPage() {
         } catch (e) {
           try {
             setImportedText(sanitizeAndStringify(String(reader.result || "")));
-          } catch (ee) { /* ignore */ }
+          } catch (ee) { }
         }
 
-        // Handle old flat-array backups (array of heap items)
         let validated: any[] = [];
         let storiesPayload: any[] | null = null;
         let trashPayload: any[] | null = null;
@@ -209,7 +196,6 @@ export default function BackupsPage() {
             name: p.name ?? p.title,
           }));
         } else if (parsed && typeof parsed === "object") {
-          // structured backup: { heap: [...], stories: [{id,title,count,items: [...]}, ...] }
           const heapArr = parsed.moments ?? parsed.heap ?? parsed["heap-gifs"] ?? [];
           if (!Array.isArray(heapArr)) {
             setMessage("Invalid backup file");
@@ -230,7 +216,6 @@ export default function BackupsPage() {
               items: Array.isArray(s.items) ? s.items : [],
             }));
           }
-          // legacy or structured trash payloads
           const trashArr = parsed.trash ?? parsed["trash-moments"] ?? parsed["trash-gifs"] ?? null;
           if (Array.isArray(trashArr)) {
             trashPayload = trashArr.map((p: any) => ({
@@ -239,33 +224,28 @@ export default function BackupsPage() {
               name: p.name ?? p.title,
             }));
           }
-          // if the backup contains overlay data, keep it for later restoration
           overlaysPayload = parsed.overlays ?? parsed.overlay ?? null;
         } else {
           setMessage("Invalid backup file");
           setTimeout(() => setMessage(null), 4000);
           return;
         }
-        // wipe existing IndexedDB data before restoring
         try {
           await clear();
         } catch (e) {
           logger.warn("Failed to clear IndexedDB before import", e);
         }
-        // immediately clear story metadata/submenus and notify UI so submenus disappear before restore
         try {
           await set("stories", []);
           await set("stories-active", null as any);
           try {
             window.dispatchEvent(new CustomEvent("stories-updated", { detail: {} }));
-          } catch (e) { /* ignore in non-browser */ }
+          } catch (e) { }
         } catch (e) {
           logger.warn("Failed to reset stories keys after import", e);
         }
 
-        // restore heap items
         await set("heap-moments", validated);
-        // restore any overlays from the imported payload
         try {
           if (overlaysPayload && typeof overlaysPayload === "object") {
             for (const [key, val] of Object.entries(overlaysPayload)) {
@@ -279,7 +259,6 @@ export default function BackupsPage() {
         } catch (e) {
           logger.warn("Failed to apply overlays from import", e);
         }
-        // restore trash items if present
         if (trashPayload) {
           try {
             await set("trash-moments", trashPayload);
@@ -287,12 +266,10 @@ export default function BackupsPage() {
             logger.warn("Failed to restore trash items", e);
           }
         }
-        // restore stories if present
         if (storiesPayload) {
           const meta = storiesPayload.map(({ id, title, count }) => ({ id, title, count }));
           try {
             await set("stories", meta);
-            // write per-story items
             await Promise.all(
               storiesPayload.map(async (s) => {
                 try {
@@ -304,16 +281,14 @@ export default function BackupsPage() {
             );
             try {
               window.dispatchEvent(new CustomEvent("stories-updated", { detail: {} }));
-            } catch (e) { /* ignore in non-browser */ }
+            } catch (e) { }
           } catch (e) {
             logger.warn("Failed to restore stories metadata", e);
           }
         }
-        // notify app to refresh any in-memory state
         try {
           window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: validated.length } }));
-        } catch (e) { /* ignore in non-browser */ }
-        // don't reload the page; dispatch events above already notify the app
+        } catch (e) { }
         setMessage(`Imported ${validated.length} moments`);
         setTimeout(() => setMessage(null), 4000);
       } catch (err) {
@@ -321,7 +296,7 @@ export default function BackupsPage() {
         setMessage("Import failed");
         try {
           setImportedText(sanitizeAndStringify(String(reader.result || "")));
-        } catch (e) { /* ignore */ }
+        } catch (e) { }
         setTimeout(() => setMessage(null), 4000);
       }
     };
@@ -340,7 +315,6 @@ export default function BackupsPage() {
     }
   };
 
-  // Prefer the parsed sanitized object when available so we can render a tree
   const renderExportPreview = (text: string | null, emptyLabel = "No data") => {
     if (exportedObj) return <JsonTree data={exportedObj} />;
     return renderPreview(text, emptyLabel);
@@ -398,8 +372,3 @@ export default function BackupsPage() {
           <div className="w-full rounded border-0 p-2 bg-slate-900 text-slate-100 max-h-96 overflow-auto">
             {renderPreview(importedText, "No import yet")}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
