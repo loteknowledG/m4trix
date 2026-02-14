@@ -70,6 +70,12 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
+        {process.env.NODE_ENV === 'production' ? (
+          <meta
+            httpEquiv="Content-Security-Policy"
+            content={`default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: https://lh3.googleusercontent.com https://*.googleusercontent.com; connect-src 'self' https://m4trix.vercel.app;`}
+          />
+        ) : null}
         {nonce ? (
           <script
             nonce={nonce}
