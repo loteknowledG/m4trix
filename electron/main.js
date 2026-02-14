@@ -53,6 +53,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 337,
+    minHeight: 400,
     // use the repository's red‑M icon for the window/taskbar (falls back if missing)
     icon: path.join(__dirname, '..', 'src', 'app', 'icon.ico'),
     webPreferences: {
