@@ -14,7 +14,6 @@ test('app enforces min-width on document and wrapper', async ({ page }) => {
   });
   expect(wrapperWidth).toBeGreaterThanOrEqual(337);
 
-  // (optional) menu toggle presence can vary by route; skip UI toggle check here
-  // ensure the page finished loading by checking the container exists
-  await expect(page.locator('.container, .app-min-width-wrapper')).toHaveCount(1);
+  // ensure the page finished loading by waiting for the app wrapper to appear
+  await page.waitForSelector('.app-min-width-wrapper', { timeout: 5000 });
 });
