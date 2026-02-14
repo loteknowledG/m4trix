@@ -1,5 +1,7 @@
 # m4trix: Agent-Based Sitcom Playground
 
+[![E2E — Playwright](https://github.com/loteknowledG/m4trix/actions/workflows/e2e.yml/badge.svg)](https://github.com/loteknowledG/m4trix/actions/workflows/e2e.yml)
+
 ## Project Overview
 
 m4trix is a Next.js application designed as a playground for experimenting with agent-based sitcom environments and entertainment systems. The architecture is local-first, prioritizing user privacy and offline capability.
