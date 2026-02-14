@@ -78,10 +78,13 @@ export default async function RootLayout({
         ) : null}
       </head>
       <body
-        className={`${GeistSans.className} ${SignatureScript.variable} ${SatisfyScript.variable} h-screen overflow-hidden`}
+        className={`${GeistSans.className} ${SignatureScript.variable} ${SatisfyScript.variable} h-screen overflow-y-hidden overflow-x-auto`}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
+          <div className="app-min-width-wrapper">
+            {children}
+            <script suppressHydrationWarning={true} />
+          </div>
         </ThemeProvider>
       </body>
     </html>
