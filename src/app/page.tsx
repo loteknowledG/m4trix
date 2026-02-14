@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import HeapPage from "./(demo)/heap/page";
-import AdminPanelLayout from "@/components/admin-panel/admin-panel-layout";
+import HeapPage from './(site)/heap/page';
+import AdminPanelLayout from '@/components/admin-panel/admin-panel-layout';
 
 export default function HomePage() {
   return (
