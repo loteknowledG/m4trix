@@ -90,11 +90,12 @@
   body,
   #__next {
     height: 100%;
+    min-width: 337px !important; /* root minimum to ensure content can't be smaller */
   }
 
-  /* wrapper that enforces a minimum content width of 260px */
+  /* wrapper that enforces a minimum content width of 337px */
   .app-min-width-wrapper {
-    min-width: 260px;
+    min-width: 337px !important;
     width: 100%;
   }
 
