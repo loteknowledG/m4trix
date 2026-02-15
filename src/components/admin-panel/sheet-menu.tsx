@@ -8,7 +8,8 @@ import {
   SheetHeader,
   SheetContent,
   SheetTrigger,
-  SheetTitle
+  SheetTitle,
+  SheetDescription
 } from "@/components/ui/sheet";
 
 export function SheetMenu() {
@@ -29,6 +30,7 @@ export function SheetMenu() {
             <Link href="/heap" className="flex items-center gap-2">
               <PanelsTopLeft className="w-6 h-6 mr-1" />
               <SheetTitle className="font-bold text-lg">Brand</SheetTitle>
+              <SheetDescription className="sr-only">Site navigation</SheetDescription>
             </Link>
           </Button>
         </SheetHeader>

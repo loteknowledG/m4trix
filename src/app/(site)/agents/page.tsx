@@ -39,6 +39,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { AgentCard } from '@/components/agent-card';
@@ -114,6 +115,11 @@ export default function AgentsPage() {
   const [story, setStory] = useState('');
   const [activeProvider, setActiveProvider] = useState<'zen' | 'google' | 'huggingface'>('zen');
   const [zenApiKey, setZenApiKey] = useState('');
+  const [orchestration, setOrchestration] = useState<'auto' | 'sequential' | 'parallel'>('auto');
+  const [interactionMode, setInteractionMode] = useState<'neutral' | 'cooperative' | 'competitive'>(
+    'neutral'
+  );
+  const [stateless, setStateless] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState('');
   const [hfApiKey, setHfApiKey] = useState('');
   const [zenConnected, setZenConnected] = useState(false);
@@ -147,6 +153,10 @@ export default function AgentsPage() {
       | 'google'
       | 'huggingface'
       | null;
+
+    // Restore previously selected model (if any) before fetching provider models
+    const storedModel = window.sessionStorage.getItem('ACTIVE_MODEL_SESSION');
+    if (storedModel) setModel(storedModel);
 
     if (storedZen) {
       setZenApiKey(storedZen);
@@ -235,8 +245,15 @@ export default function AgentsPage() {
     } else {
       window.sessionStorage.removeItem('HF_API_KEY_SESSION');
     }
+
+    if (model) {
+      window.sessionStorage.setItem('ACTIVE_MODEL_SESSION', model);
+    } else {
+      window.sessionStorage.removeItem('ACTIVE_MODEL_SESSION');
+    }
+
     window.sessionStorage.setItem('ACTIVE_PROVIDER_SESSION', activeProvider);
-  }, [zenApiKey, googleApiKey, hfApiKey, activeProvider]);
+  }, [zenApiKey, googleApiKey, hfApiKey, activeProvider, model]);
 
   const agentsById = useMemo(() => {
     return agents.reduce<Record<AgentId, Agent>>((acc, agent) => {
@@ -257,6 +274,34 @@ export default function AgentsPage() {
       }
       timeoutsRef.current = [];
     }
+  };
+
+  // Restart the current playground "situation": clears the conversation but PRESERVES backstory/prompter.
+  const restartSituation = async () => {
+    const ok = window.confirm(
+      'Restart the conversation? This will clear the chat but keep the backstory and prompter persona.'
+    );
+    if (!ok) return;
+
+    clearScriptTimeouts();
+    setMessages([]);
+    setPrompt('');
+    setError(null);
+    setShowBackstory(false);
+
+    // Preserve persisted story/prompter; do NOT clear IndexedDB/localStorage here.
+    // This keeps the backstory and prompter intact across restarts.
+
+    // ensure the prompt is focused after restart so typing works immediately
+    setTimeout(() => {
+      try {
+        promptInputRef.current?.focus();
+      } catch (e) {
+        /* ignore */
+      }
+    }, 0);
+
+    toast.success('Conversation restarted — backstory preserved');
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -588,6 +633,15 @@ export default function AgentsPage() {
       const selectedModel = modelOptions.find(o => o.id === model);
       const modelProvider = selectedModel?.provider || activeProvider;
 
+      // Send the existing conversation history to the server so agents can
+      // remember previous turns. Do not include the current prompt here
+      // (we add it separately on the server).
+      const historyForApi = messages.map(m =>
+        m.from === 'user'
+          ? { id: m.id, from: 'user', text: m.text }
+          : { id: m.id, from: 'agent', agentId: m.from, text: m.text }
+      );
+
       const temporaryUserMessageId = `user-${Date.now()}`;
       setMessages(prev => [
         ...prev,
@@ -617,6 +671,11 @@ export default function AgentsPage() {
           })),
           story,
           prompterAgent,
+          orchestration,
+          interactionMode,
+          // only attach client-side conversation when not running stateless
+          history: stateless ? undefined : historyForApi,
+          stateless,
           zenApiKey: modelProvider === 'zen' ? zenApiKey : undefined,
           googleApiKey: modelProvider === 'google' ? googleApiKey : undefined,
           hfApiKey: modelProvider === 'huggingface' ? hfApiKey : undefined,
@@ -775,61 +834,106 @@ export default function AgentsPage() {
                         }}
                       />
                     ) : (
-                      <Select
-                        disabled={isRunning || !modelOptions.length}
-                        onValueChange={setModel}
-                        value={model}
-                      >
-                        <SelectTrigger className="h-8 w-[220px] text-xs">
-                          <SelectValue placeholder="Select model" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {modelOptions.length ? (
-                            <>
-                              {modelOptions.some(o => o.provider === 'zen') && (
-                                <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
-                                  OpenCode
-                                </div>
-                              )}
-                              {modelOptions
-                                .filter(o => o.provider === 'zen')
-                                .map(option => (
-                                  <SelectItem key={option.id} value={option.id}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
-                              {modelOptions.some(o => o.provider === 'google') && (
-                                <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                                  Google Gemini
-                                </div>
-                              )}
-                              {modelOptions
-                                .filter(o => o.provider === 'google')
-                                .map(option => (
-                                  <SelectItem key={option.id} value={option.id}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
-                              {modelOptions.some(o => o.provider === 'huggingface') && (
-                                <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                                  Hugging Face
-                                </div>
-                              )}
-                              {modelOptions
-                                .filter(o => o.provider === 'huggingface')
-                                .map(option => (
-                                  <SelectItem key={option.id} value={option.id}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
-                            </>
-                          ) : (
-                            <SelectItem value="__no-models__" disabled>
-                              No models available
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <>
+                        <Select
+                          disabled={isRunning || !modelOptions.length}
+                          onValueChange={setModel}
+                          value={model}
+                        >
+                          <SelectTrigger className="h-8 w-[220px] text-xs">
+                            <SelectValue placeholder="Select model" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {modelOptions.length ? (
+                              <>
+                                {modelOptions.some(o => o.provider === 'zen') && (
+                                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+                                    OpenCode
+                                  </div>
+                                )}
+                                {modelOptions
+                                  .filter(o => o.provider === 'zen')
+                                  .map(option => (
+                                    <SelectItem key={option.id} value={option.id}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                {modelOptions.some(o => o.provider === 'google') && (
+                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                                    Google Gemini
+                                  </div>
+                                )}
+                                {modelOptions
+                                  .filter(o => o.provider === 'google')
+                                  .map(option => (
+                                    <SelectItem key={option.id} value={option.id}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                {modelOptions.some(o => o.provider === 'huggingface') && (
+                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                                    Hugging Face
+                                  </div>
+                                )}
+                                {modelOptions
+                                  .filter(o => o.provider === 'huggingface')
+                                  .map(option => (
+                                    <SelectItem key={option.id} value={option.id}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                              </>
+                            ) : (
+                              <SelectItem value="__no-models__" disabled>
+                                No models available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+
+                        {/* Orchestration selector: Auto / Sequential / Parallel */}
+                        <div className="ml-3">
+                          <Select
+                            value={orchestration}
+                            onValueChange={(v: any) => setOrchestration(v)}
+                          >
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue placeholder="Orchestration" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto</SelectItem>
+                              <SelectItem value="sequential">Sequential</SelectItem>
+                              <SelectItem value="parallel">Parallel</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="ml-2 flex items-center gap-3">
+                          <Select
+                            value={interactionMode}
+                            onValueChange={(v: any) => setInteractionMode(v)}
+                          >
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue placeholder="Interaction" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="neutral">Neutral</SelectItem>
+                              <SelectItem value="cooperative">Cooperative</SelectItem>
+                              <SelectItem value="competitive">Competitive</SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={stateless}
+                              onChange={e => setStateless(e.target.checked)}
+                              className="h-4 w-4 rounded border"
+                            />
+                            <span className="text-[10px]">Stateless agents</span>
+                          </label>
+                        </div>
+                      </>
                     )}
                   </div>
                   {hfConnected && (
@@ -970,7 +1074,7 @@ export default function AgentsPage() {
             </div>
           )}
 
-          <div className="mt-auto border-t bg-background/60 p-4">
+          <div className="mt-auto border-t bg-background/60 p-4 relative z-30">
             <div className="flex flex-col gap-3">
               <div className="relative flex items-end gap-2">
                 <div className="relative flex-1">
@@ -978,7 +1082,9 @@ export default function AgentsPage() {
                     ref={promptInputRef}
                     autoComplete="off"
                     className="min-h-[60px] resize-none pr-12 text-sm shadow-sm"
-                    disabled={isRunning}
+                    // keep the input editable even while agents are running;
+                    // only the send button will remain disabled to prevent duplicate submits
+                    disabled={false}
                     onChange={e => setPrompt(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1005,13 +1111,24 @@ export default function AgentsPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <button
-                  className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setShowBackstory(!showBackstory)}
-                >
-                  <User className="h-3 w-3" />
-                  {showBackstory ? 'Hide Story' : 'Set Story'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowBackstory(!showBackstory)}
+                  >
+                    <User className="h-3 w-3" />
+                    {showBackstory ? 'Hide Story' : 'Set Story'}
+                  </button>
+
+                  <button
+                    className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-destructive hover:text-destructive/80 transition-colors"
+                    onClick={restartSituation}
+                    title="Restart conversation (keeps backstory)"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Restart
+                  </button>
+                </div>
 
                 {showBackstory && (
                   <div className="flex flex-col gap-4">
@@ -1164,6 +1281,9 @@ export default function AgentsPage() {
         <DialogContent className="sm:max-w-[420px] max-h-[95vh] p-0 overflow-hidden flex flex-col bg-zinc-950 border-zinc-800 shadow-2xl">
           <DialogHeader className="p-4 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur-md shrink-0">
             <DialogTitle className="text-sm font-medium text-zinc-100 font-mono tracking-tight uppercase flex items-center gap-2">
+              <DialogDescription className="sr-only">
+                Crop the selected image for avatar
+              </DialogDescription>
               {isGif && (
                 <span className="bg-amber-500/20 text-amber-500 text-[9px] px-1.5 py-0.5 rounded leading-none">
                   GIF

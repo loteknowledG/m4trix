@@ -4,7 +4,9 @@ test('app enforces min-width on document and wrapper', async ({ page }) => {
   await page.goto('/');
 
   // check root/document min-width
-  const rootMin = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('min-width'));
+  const rootMin = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('min-width')
+  );
   expect(rootMin.trim()).toBe('337px');
 
   // ensure wrapper enforces min-width and content width is >= 337

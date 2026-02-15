@@ -13,9 +13,7 @@ export default defineConfig({
     baseURL: process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`,
     trace: 'retain-on-failure',
   },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-  ],
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'pnpm dev',
     url: process.env.APP_URL || 'http://localhost:3000',
