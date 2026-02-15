@@ -119,7 +119,6 @@ export default function AgentsPage() {
   const [interactionMode, setInteractionMode] = useState<'neutral' | 'cooperative' | 'competitive'>(
     'neutral'
   );
-  const [stateless, setStateless] = useState(false);
   const [googleApiKey, setGoogleApiKey] = useState('');
   const [hfApiKey, setHfApiKey] = useState('');
   const [zenConnected, setZenConnected] = useState(false);
@@ -673,9 +672,8 @@ export default function AgentsPage() {
           prompterAgent,
           orchestration,
           interactionMode,
-          // only attach client-side conversation when not running stateless
-          history: stateless ? undefined : historyForApi,
-          stateless,
+          // attach client-side conversation so agents remember prior turns
+          history: historyForApi,
           zenApiKey: modelProvider === 'zen' ? zenApiKey : undefined,
           googleApiKey: modelProvider === 'google' ? googleApiKey : undefined,
           hfApiKey: modelProvider === 'huggingface' ? hfApiKey : undefined,
@@ -922,16 +920,6 @@ export default function AgentsPage() {
                               <SelectItem value="competitive">Competitive</SelectItem>
                             </SelectContent>
                           </Select>
-
-                          <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={stateless}
-                              onChange={e => setStateless(e.target.checked)}
-                              className="h-4 w-4 rounded border"
-                            />
-                            <span className="text-[10px]">Stateless agents</span>
-                          </label>
                         </div>
                       </>
                     )}
