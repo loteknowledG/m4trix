@@ -50,6 +50,11 @@ export function getMenuList(): Group[] {
           icon: Users,
         },
         {
+          href: '/skunkworx',
+          label: 'Skunkworx',
+          icon: Bookmark,
+        },
+        {
           href: '/stories',
           label: 'Stories',
           icon: SquarePen,
