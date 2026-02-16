@@ -288,11 +288,7 @@ export default function AgentsPage() {
 
   // Restart the current playground "situation": clears the conversation but PRESERVES backstory/prompter.
   const restartSituation = async () => {
-    const ok = window.confirm(
-      'Restart the conversation? This will clear the chat but keep the backstory and prompter persona.'
-    );
-    if (!ok) return;
-
+    // Silent restart (no confirmation dialog)
     clearScriptTimeouts();
     setMessages([]);
     setPrompt('');
@@ -521,7 +517,6 @@ export default function AgentsPage() {
         if (typeof targetPos === 'number' && targetPos >= 0 && targetPos < prev.length) {
           const target = prev[targetPos];
           if (target && target.id === messageId) {
-            console.debug('[agents] set final text by pos', { messageId, targetPos });
             const copy = prev.slice();
             copy[targetPos] = { ...copy[targetPos], text: fullText };
             return copy;
@@ -539,7 +534,6 @@ export default function AgentsPage() {
 
         // If placeholder not present yet, append the final message so user sees it
         if (!found) {
-          console.debug('[agents] append final message', { messageId });
           return [...next, { id: messageId, from: 'assistant', text: fullText }];
         }
         return next;
@@ -560,7 +554,6 @@ export default function AgentsPage() {
         if (typeof targetPos === 'number' && targetPos >= 0 && targetPos < prev.length) {
           const target = prev[targetPos];
           if (target && target.id === messageId) {
-            console.debug('[agents] stream update by pos', { messageId, targetPos, current });
             const copy = prev.slice();
             copy[targetPos] = { ...copy[targetPos], text: current };
             return copy;
@@ -578,7 +571,6 @@ export default function AgentsPage() {
 
         // If placeholder not present yet, append the streaming message so user sees progress
         if (!found) {
-          console.debug('[agents] appended streaming placeholder', { messageId, current });
           return [...next, { id: messageId, from: 'assistant', text: current }];
         }
         return next;
@@ -843,22 +835,6 @@ export default function AgentsPage() {
             return true;
           });
 
-          if (__debug) {
-            try {
-              console.debug(
-                '[agents] mapped server ids:',
-                mapped.map(m => m.id)
-              );
-              console.debug('[agents] generated clientIds:', clientIds);
-              console.debug(
-                '[agents] filteredPrev ids:',
-                filteredPrev.map(p => p.id)
-              );
-            } catch (e) {
-              /* ignore */
-            }
-          }
-
           // Build placeholders in server order and record their absolute positions.
           const placeholdersUsingClientIds: ChatMessage[] = [];
           const startIndex = filteredPrev.length;
@@ -898,8 +874,7 @@ export default function AgentsPage() {
           typeof (clientPositions as any)[i] === 'number' ? (clientPositions as any)[i] : undefined;
         if (msg.from !== 'user') {
           const shouldStream = i === lastAgentIndex;
-          if (__debug)
-            console.debug('[agents] streaming', { serverId: msg.id, clientId, targetPos, shouldStream });
+
           await streamMessageText(clientId, msg.text, targetPos, shouldStream);
         }
       }
