@@ -718,12 +718,17 @@ export default function AgentsPage() {
 
       // Replace our temporary user message with the official one from the API
       setMessages(prev => {
-        const filtered = prev.filter(m => m.id !== temporaryUserMessageId);
+        const incomingUserIds = new Set(userMessages.map(u => u.id));
+        const filtered = prev.filter(m => m.id !== temporaryUserMessageId && !incomingUserIds.has(m.id));
         return [...filtered, ...userMessages];
       });
 
       for (const agentMessage of agentMessages) {
-        setMessages(prev => [...prev, { ...agentMessage, text: '' }]);
+        // ensure we don't append duplicates if the transcript already contains this id
+        setMessages(prev => {
+          const filteredPrev = prev.filter(m => m.id !== agentMessage.id);
+          return [...filteredPrev, { ...agentMessage, text: '' }];
+        });
         await streamMessageText(agentMessage.id, agentMessage.text);
       }
     } catch (e) {
