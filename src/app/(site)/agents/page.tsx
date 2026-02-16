@@ -23,14 +23,15 @@ import {
   ImageIcon,
   ImagePlus,
   Loader2,
-  PanelRightClose,
-  PanelRightOpen,
   Plus,
   Send,
   Trash2,
   User,
-  UserCheck,
 } from 'lucide-react';
+import { VscDebugDisconnect } from 'react-icons/vsc';
+import { PiPlugsConnectedLight } from 'react-icons/pi';
+import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from '@/components/ui/sheet';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -762,16 +763,44 @@ export default function AgentsPage() {
   const stickyRef = useRef<HTMLDivElement>(null);
 
   return (
-    <ContentLayout title="Agents">
-      <div className="flex h-full flex-col gap-6 p-6">
-        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="flex items-center gap-3"></div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+    <ContentLayout
+      title="Agents"
+      navRight={
+        <Sheet>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn('ml-2', (zenConnected || googleConnected || hfConnected) ? 'text-emerald-400' : 'text-muted-foreground')}
+                      aria-label={(zenConnected || googleConnected || hfConnected) ? 'Connections — connected' : 'Connections — disconnected'}
+                    >
+                      {(zenConnected || googleConnected || hfConnected) ? (
+                        <PiPlugsConnectedLight className="h-4 w-4" />
+                      ) : (
+                        <VscDebugDisconnect className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </SheetTrigger>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                <p>{(zenConnected || googleConnected || hfConnected) ? 'Connected' : 'Disconnected'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <SheetContent side="top" className="max-h-[60vh] overflow-auto">
+            <SheetHeader>
+              <SheetTitle>Connections</SheetTitle>
+              <SheetDescription>Manage API keys & provider models</SheetDescription>
+            </SheetHeader>
+
             {!zenConnected || !googleConnected || !hfConnected ? (
-              <form className="flex items-center gap-2" onSubmit={connectWithKey}>
+              <form className="flex items-center gap-2 mb-4" onSubmit={connectWithKey}>
                 <Select value={activeProvider} onValueChange={(v: any) => setActiveProvider(v)}>
                   <SelectTrigger className="h-8 w-[120px] text-xs">
                     <SelectValue />
@@ -782,23 +811,12 @@ export default function AgentsPage() {
                     {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
                   </SelectContent>
                 </Select>
+
                 <Input
                   type="password"
                   className="h-8 w-[200px] text-xs"
-                  placeholder={`Paste ${
-                    activeProvider === 'zen'
-                      ? 'OpenCode'
-                      : activeProvider === 'google'
-                      ? 'Google'
-                      : 'Hugging Face'
-                  } key`}
-                  value={
-                    activeProvider === 'zen'
-                      ? zenApiKey
-                      : activeProvider === 'google'
-                      ? googleApiKey
-                      : hfApiKey
-                  }
+                  placeholder={`Paste ${activeProvider === 'zen' ? 'OpenCode' : activeProvider === 'google' ? 'Google' : 'Hugging Face'} key`}
+                  value={activeProvider === 'zen' ? zenApiKey : activeProvider === 'google' ? googleApiKey : hfApiKey}
                   onChange={e => {
                     const val = e.target.value;
                     if (activeProvider === 'zen') setZenApiKey(val);
@@ -806,6 +824,7 @@ export default function AgentsPage() {
                     else setHfApiKey(val);
                   }}
                 />
+
                 <Button disabled={isConnecting} size="sm" type="submit">
                   {isConnecting ? '...' : 'Connect'}
                 </Button>
@@ -813,93 +832,36 @@ export default function AgentsPage() {
             ) : null}
 
             {(zenConnected || googleConnected || hfConnected) && (
-              <div className="flex items-center gap-2">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
                     {useCustomModel ? (
-                      <Input
-                        className="h-8 w-[220px] text-xs"
-                        placeholder="e.g. zai-org/GLM-4.5"
-                        value={customModelId}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            promptInputRef.current?.focus();
-                            toast.success(`Broadcasting to ${customModelId}`);
-                          }
-                        }}
-                        onChange={e => {
-                          setCustomModelId(e.target.value);
-                          setModel(e.target.value);
-                        }}
-                      />
+                      <Input className="h-8 w-full text-xs" placeholder="e.g. zai-org/GLM-4.5" value={customModelId} onChange={e => { setCustomModelId(e.target.value); setModel(e.target.value); }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); promptInputRef.current?.focus(); toast.success(`Broadcasting to ${customModelId}`); } }} />
                     ) : (
-                      <>
-                        <Select
-                          disabled={isRunning || !modelOptions.length}
-                          onValueChange={setModel}
-                          value={model}
-                        >
+                      <div className="flex gap-3">
+                        <Select disabled={isRunning || !modelOptions.length} onValueChange={setModel} value={model}>
                           <SelectTrigger className="h-8 w-[220px] text-xs">
                             <SelectValue placeholder="Select model" />
                           </SelectTrigger>
                           <SelectContent>
                             {modelOptions.length ? (
                               <>
-                                {modelOptions.some(o => o.provider === 'zen') && (
-                                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
-                                    OpenCode
-                                  </div>
-                                )}
-                                {modelOptions
-                                  .filter(o => o.provider === 'zen')
-                                  .map(option => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                {modelOptions.some(o => o.provider === 'google') && (
-                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                                    Google Gemini
-                                  </div>
-                                )}
-                                {modelOptions
-                                  .filter(o => o.provider === 'google')
-                                  .map(option => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                {modelOptions.some(o => o.provider === 'huggingface') && (
-                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                                    Hugging Face
-                                  </div>
-                                )}
-                                {modelOptions
-                                  .filter(o => o.provider === 'huggingface')
-                                  .map(option => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
+                                {modelOptions.some(o => o.provider === 'zen') && <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">OpenCode</div>}
+                                {modelOptions.filter(o => o.provider === 'zen').map(option => (<SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>))}
+                                {modelOptions.some(o => o.provider === 'google') && <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Google Gemini</div>}
+                                {modelOptions.filter(o => o.provider === 'google').map(option => (<SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>))}
+                                {modelOptions.some(o => o.provider === 'huggingface') && <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Hugging Face</div>}
+                                {modelOptions.filter(o => o.provider === 'huggingface').map(option => (<SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>))}
                               </>
                             ) : (
-                              <SelectItem value="__no-models__" disabled>
-                                No models available
-                              </SelectItem>
+                              <SelectItem value="__no-models__" disabled>No models available</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
 
-                        {/* Orchestration selector: Auto / Sequential / Parallel */}
                         <div className="ml-3">
-                          <Select
-                            value={orchestration}
-                            onValueChange={(v: any) => setOrchestration(v)}
-                          >
-                            <SelectTrigger className="h-8 w-[140px] text-xs">
-                              <SelectValue placeholder="Orchestration" />
-                            </SelectTrigger>
+                          <Select value={orchestration} onValueChange={(v: any) => setOrchestration(v)}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Orchestration" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="auto">Auto</SelectItem>
                               <SelectItem value="sequential">Sequential</SelectItem>
@@ -909,13 +871,8 @@ export default function AgentsPage() {
                         </div>
 
                         <div className="ml-2 flex items-center gap-3">
-                          <Select
-                            value={interactionMode}
-                            onValueChange={(v: any) => setInteractionMode(v)}
-                          >
-                            <SelectTrigger className="h-8 w-[140px] text-xs">
-                              <SelectValue placeholder="Interaction" />
-                            </SelectTrigger>
+                          <Select value={interactionMode} onValueChange={(v: any) => setInteractionMode(v)}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Interaction" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="neutral">Neutral</SelectItem>
                               <SelectItem value="cooperative">Cooperative</SelectItem>
@@ -923,79 +880,50 @@ export default function AgentsPage() {
                             </SelectContent>
                           </Select>
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {zenConnected && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                      <span className="text-[11px] font-medium text-muted-foreground">OpenCode</span>
+                      <button onClick={() => { setZenConnected(false); setZenApiKey(''); setModelOptions(m => m.filter(o => o.provider !== 'zen')); }} className="text-[10px] text-muted-foreground hover:text-destructive">×</button>
+                    </div>
+                  )}
+
+                  {googleConnected && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                      <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
+                      <button onClick={() => { setGoogleConnected(false); setGoogleApiKey(''); setModelOptions(m => m.filter(o => o.provider !== 'google')); }} className="text-[10px] text-muted-foreground hover:text-destructive">×</button>
+                    </div>
+                  )}
+
                   {hfConnected && (
-                    <button
-                      type="button"
-                      onClick={() => setUseCustomModel(!useCustomModel)}
-                      className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-dashed border-primary/30 px-2 py-0.5 text-[10px] text-muted-foreground hover:border-primary hover:text-primary transition-all"
-                    >
-                      {useCustomModel
-                        ? '← Back to listed models'
-                        : "Can't find your model? Enter HF ID manually"}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                      <span className="text-[11px] font-medium text-muted-foreground">HF</span>
+                      <button onClick={() => { setHfConnected(false); setHfApiKey(''); setModelOptions(m => m.filter(o => o.provider !== 'huggingface')); }} className="text-[10px] text-muted-foreground hover:text-destructive">×</button>
+                    </div>
                   )}
                 </div>
               </div>
             )}
-          </div>
 
-          {(zenConnected || googleConnected || hfConnected) && (
-            <div className="flex items-center gap-3 border-l pl-4">
-              {zenConnected && (
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  <span className="text-[11px] font-medium text-muted-foreground">OpenCode</span>
-                  <button
-                    onClick={() => {
-                      setZenConnected(false);
-                      setZenApiKey('');
-                      setModelOptions(m => m.filter(o => o.provider !== 'zen'));
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-destructive"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              {googleConnected && (
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
-                  <button
-                    onClick={() => {
-                      setGoogleConnected(false);
-                      setGoogleApiKey('');
-                      setModelOptions(m => m.filter(o => o.provider !== 'google'));
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-destructive"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              {hfConnected && (
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  <span className="text-[11px] font-medium text-muted-foreground">HF</span>
-                  <button
-                    onClick={() => {
-                      setHfConnected(false);
-                      setHfApiKey('');
-                      setModelOptions(m => m.filter(o => o.provider !== 'huggingface'));
-                    }}
-                    className="text-[10px] text-muted-foreground hover:text-destructive"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
+            <div className="mt-6 flex justify-end">
+              <SheetClose asChild>
+                <Button variant="ghost">Close</Button>
+              </SheetClose>
             </div>
-          )}
-        </div>
-      </header>
+          </SheetContent>
+        </Sheet>
+      }
+    >
+      <div className="flex flex-col gap-6 p-6 min-h-0 -mt-4 overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
+
 
       {connectionError && (
         <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
@@ -1026,8 +954,8 @@ export default function AgentsPage() {
             />
           </Button>
         </div>
-        <section className="relative flex min-h-[280px] max-h-[90vh] flex-1 flex-col rounded-xl border bg-background/40 overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
+        <section className="relative flex min-h-[280px] flex-1 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                 Run the demo to see how multiple agents can talk in this UI.
@@ -1071,7 +999,7 @@ export default function AgentsPage() {
                   <Textarea
                     ref={promptInputRef}
                     autoComplete="off"
-                    className="min-h-[60px] resize-none pr-12 text-sm shadow-sm"
+                    className="min-h-[48px] resize-none pr-12 text-sm shadow-sm"
                     // keep the input editable even while agents are running;
                     // only the send button will remain disabled to prevent duplicate submits
                     disabled={false}
@@ -1183,7 +1111,7 @@ export default function AgentsPage() {
         </section>
 
         <aside
-          className={`flex max-h-[90vh] flex-col gap-4 self-start overflow-y-auto rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
+          className={`flex flex-col gap-4 self-stretch overflow-y-auto rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
             sidebarOpen ? 'w-[300px] opacity-100' : 'w-0 p-0 border-0 opacity-0 pointer-events-none'
           }`}
         >
