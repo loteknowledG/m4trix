@@ -1,7 +1,12 @@
-/* Import Mrs Saint Delafield from Google Fonts */
-
-/* If Google Fonts import is blocked, you can self-host a WOFF2 at /public/fonts/MrsSaintDelafield.woff2 */
 @import url('https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&display=swap');
+/* Import Mrs Saint Delafield from Google Fonts */
+/* If Google Fonts import is blocked, you can self-host a WOFF2 at /public/fonts/MrsSaintDelafield.woff2 */
+html,
+body,
+#__next {
+  height: 100%;
+  min-height: 0;
+}
 
 @font-face {
   font-family: 'Mrs Saint Delafield';

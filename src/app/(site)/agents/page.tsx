@@ -2,11 +2,7 @@
 import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
-import {
-  ChatWindow,
-  type ChatWindowMessage,
-  type ChatWindowModel,
-} from '@/components/ai/chat-window';
+import { CustomChatWindow, type CustomChatMessage } from '@/components/ai/custom-chat-window';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -886,32 +882,7 @@ export default function AgentsPage() {
     }
   };
 
-  const chatMessages = useMemo<ChatWindowMessage[]>(
-    () =>
-      messages.map(message => {
-        const isUser = message.from === 'user';
-        const agent = !isUser && message.from !== 'user' ? agentsById[message.from] : null;
-
-        const name = isUser ? prompterAgent?.name || 'You' : agent?.name || 'Agent';
-
-        return {
-          key: message.id,
-          from: isUser ? 'user' : 'assistant',
-          name,
-          avatarUrl: isUser ? prompterAgent?.avatarUrl : agent?.avatarUrl,
-          avatarCrop: isUser ? prompterAgent?.avatarCrop : agent?.avatarCrop,
-          versions: [
-            {
-              id: message.id,
-              content: message.text,
-            },
-          ],
-        };
-      }),
-    [agentsById, messages, prompterAgent]
-  );
-
-  const emptyModels: ChatWindowModel[] = [];
+  /* chat mapping removed — using CustomChatWindow directly */
   const stickyRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -1188,7 +1159,7 @@ export default function AgentsPage() {
       }
     >
       <div
-        className="flex flex-col gap-6 p-6 min-h-0 -mt-4 overflow-auto"
+        className="flex flex-col gap-6 p-6 min-h-0 -mt-4 overflow-hidden"
         style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
       >
         {connectionError && (
@@ -1220,37 +1191,19 @@ export default function AgentsPage() {
               />
             </Button>
           </div>
-          <section className="relative flex min-h-[280px] flex-1 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {messages.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                  Run the demo to see how multiple agents can talk in this UI.
-                </div>
-              ) : (
-                <ChatWindow
-                  messages={chatMessages}
-                  models={emptyModels}
-                  suggestions={[]}
-                  stickyHeight={0}
-                  stickyRef={stickyRef}
-                  text=""
-                  status="ready"
-                  useWebSearch={false}
-                  useMicrophone={false}
-                  model=""
-                  modelSelectorOpen={false}
-                  selectedModelData={undefined}
-                  onSuggestionClick={() => {}}
-                  onSubmit={() => {}}
-                  onTextChange={() => {}}
-                  onToggleWebSearch={() => {}}
-                  onToggleMicrophone={() => {}}
-                  onSelectModel={() => {}}
-                  onModelSelectorOpenChange={() => {}}
-                  showInput={false}
-                  showSuggestions={false}
-                />
-              )}
+          <section className="relative flex flex-1 min-h-0 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
+            <div className="flex flex-col flex-1 min-h-0 h-full">
+              <CustomChatWindow
+                messages={messages.map(m => ({
+                  id: m.id,
+                  from: m.from === 'user' ? 'user' : 'agent',
+                  text: m.text,
+                }))}
+                input={prompt}
+                onInputChange={setPrompt}
+                onSend={() => runDemo(prompt)}
+                disabled={isRunning}
+              />
             </div>
             {error && (
               <div className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
@@ -1261,37 +1214,7 @@ export default function AgentsPage() {
             <div className="mt-auto border-t bg-background/60 p-4 relative z-30">
               <div className="flex flex-col gap-3">
                 <div className="relative flex items-end gap-2">
-                  <div className="relative flex-1">
-                    <Textarea
-                      ref={promptInputRef}
-                      autoComplete="off"
-                      className="min-h-[48px] resize-none pr-12 text-sm shadow-sm"
-                      // keep the input editable even while agents are running;
-                      // only the send button will remain disabled to prevent duplicate submits
-                      disabled={false}
-                      onChange={e => setPrompt(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          runDemo(prompt);
-                        }
-                      }}
-                      placeholder="Message the agent team..."
-                      value={prompt}
-                    />
-                    <Button
-                      className="absolute right-2 bottom-2 h-8 w-8 rounded-full"
-                      disabled={isRunning || !prompt.trim()}
-                      onClick={() => runDemo(prompt)}
-                      size="icon"
-                    >
-                      {isRunning ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
+                  {/* input moved into CustomChatWindow; keep this area for actions/backstory */}
                 </div>
 
                 <div className="flex flex-col gap-2">

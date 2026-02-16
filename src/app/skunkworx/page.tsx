@@ -1,42 +1,46 @@
-"use client"
+'use client';
 
 /**
  * @title React AI Chatbot
  * @credit {"name": "Vercel", "url": "https://ai-sdk.dev/elements", "license": {"name": "Apache License 2.0", "url": "https://www.apache.org/licenses/LICENSE-2.0"}}
  * @description React AI chatbot component showcasing a complete chat interface with messages, model selection, and prompt input
  */
-import { ChatWindow, type ChatWindowMessage, type ChatWindowModel } from "@/components/ai/chat-window"
-import { type PromptInputMessage } from "@/components/ai/prompt-input"
-import { MessageCircle } from "lucide-react"
-import { nanoid } from "nanoid"
-import { useCallback, useLayoutEffect, useRef, useState } from "react"
-import DraggableDialog from "@/components/ui/draggable-dialog"
-import { Button } from "@/components/ui/button"
+import {
+  ChatWindow,
+  type ChatWindowMessage,
+  type ChatWindowModel,
+} from '@/components/ai/chat-window';
+import { type PromptInputMessage } from '@/components/ai/prompt-input';
+import { MessageCircle } from 'lucide-react';
+import { nanoid } from 'nanoid';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import DraggableDialog from '@/components/ui/draggable-dialog';
+import { Button } from '@/components/ui/button';
 // removed unused import to satisfy linter
-import { toast } from "sonner"
+import { toast } from 'sonner';
 
 const initialMessages: ChatWindowMessage[] = [
   {
     key: nanoid(),
-    from: "user",
+    from: 'user',
     versions: [
       {
         id: nanoid(),
-        content: "Can you explain how to use React hooks effectively?",
+        content: 'Can you explain how to use React hooks effectively?',
       },
     ],
   },
   {
     key: nanoid(),
-    from: "assistant",
+    from: 'assistant',
     sources: [
       {
-        href: "https://react.dev/reference/react",
-        title: "React Documentation",
+        href: 'https://react.dev/reference/react',
+        title: 'React Documentation',
       },
       {
-        href: "https://react.dev/reference/react-dom",
-        title: "React DOM Documentation",
+        href: 'https://react.dev/reference/react-dom',
+        title: 'React DOM Documentation',
       },
     ],
     versions: [
@@ -48,12 +52,12 @@ const initialMessages: ChatWindowMessage[] = [
   },
   {
     key: nanoid(),
-    from: "user",
+    from: 'user',
     versions: [
       {
         id: nanoid(),
         content:
-          "Yes, could you explain useCallback and useMemo in more detail? When should I use one over the other?",
+          'Yes, could you explain useCallback and useMemo in more detail? When should I use one over the other?',
       },
       {
         id: nanoid(),
@@ -63,13 +67,13 @@ const initialMessages: ChatWindowMessage[] = [
       {
         id: nanoid(),
         content:
-          "Thanks for the overview! Could you dive deeper into the specific use cases where useCallback and useMemo make the biggest difference in React applications?",
+          'Thanks for the overview! Could you dive deeper into the specific use cases where useCallback and useMemo make the biggest difference in React applications?',
       },
     ],
   },
   {
     key: nanoid(),
-    from: "assistant",
+    from: 'assistant',
     reasoning: {
       content: `The user is asking for a detailed explanation of useCallback and useMemo. I should provide a clear and concise explanation of each hook's purpose and how they differ.
 
@@ -83,60 +87,60 @@ Both hooks help with performance optimization, but they serve different purposes
     versions: [
       {
         id: nanoid(),
-        content: ''
+        content: '',
       },
     ],
   },
-]
+];
 
 const models: ChatWindowModel[] = [
   {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    chef: "OpenAI",
-    chefSlug: "openai",
-    providers: ["openai", "azure"],
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    chef: 'OpenAI',
+    chefSlug: 'openai',
+    providers: ['openai', 'azure'],
   },
   {
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
-    chef: "OpenAI",
-    chefSlug: "openai",
-    providers: ["openai", "azure"],
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
+    chef: 'OpenAI',
+    chefSlug: 'openai',
+    providers: ['openai', 'azure'],
   },
   {
-    id: "claude-opus-4-20250514",
-    name: "Claude 4 Opus",
-    chef: "Anthropic",
-    chefSlug: "anthropic",
-    providers: ["anthropic", "azure", "google", "amazon-bedrock"],
+    id: 'claude-opus-4-20250514',
+    name: 'Claude 4 Opus',
+    chef: 'Anthropic',
+    chefSlug: 'anthropic',
+    providers: ['anthropic', 'azure', 'google', 'amazon-bedrock'],
   },
   {
-    id: "claude-sonnet-4-20250514",
-    name: "Claude 4 Sonnet",
-    chef: "Anthropic",
-    chefSlug: "anthropic",
-    providers: ["anthropic", "azure", "google", "amazon-bedrock"],
+    id: 'claude-sonnet-4-20250514',
+    name: 'Claude 4 Sonnet',
+    chef: 'Anthropic',
+    chefSlug: 'anthropic',
+    providers: ['anthropic', 'azure', 'google', 'amazon-bedrock'],
   },
   {
-    id: "gemini-2.0-flash-exp",
-    name: "Gemini 2.0 Flash",
-    chef: "Google",
-    chefSlug: "google",
-    providers: ["google"],
+    id: 'gemini-2.0-flash-exp',
+    name: 'Gemini 2.0 Flash',
+    chef: 'Google',
+    chefSlug: 'google',
+    providers: ['google'],
   },
-]
+];
 
 const suggestions = [
-  "What are the latest trends in AI?",
-  "How does machine learning work?",
-  "Explain quantum computing",
-  "Best practices for React development",
-  "Tell me about TypeScript benefits",
-  "How to optimize database queries?",
-  "What is the difference between SQL and NoSQL?",
-  "Explain cloud computing basics",
-]
+  'What are the latest trends in AI?',
+  'How does machine learning work?',
+  'Explain quantum computing',
+  'Best practices for React development',
+  'Tell me about TypeScript benefits',
+  'How to optimize database queries?',
+  'What is the difference between SQL and NoSQL?',
+  'Explain cloud computing basics',
+];
 
 const mockResponses = [
   "That's a great question! Let me help you understand this concept better. The key thing to remember is that proper implementation requires careful consideration of the underlying principles and best practices in the field.",
@@ -144,176 +148,156 @@ const mockResponses = [
   "This is an interesting topic that comes up frequently. The solution typically involves understanding the core concepts and applying them in the right context. Here's what I recommend...",
   "Great choice of topic! This is something that many developers encounter. The approach I'd suggest is to start with the fundamentals and then build up to more complex scenarios.",
   "That's definitely worth exploring. From what I can see, the best way to handle this is to consider both the theoretical aspects and practical implementation details.",
-]
+];
 
 export function ChatbotDemo() {
-  const [model, setModel] = useState<string>(models[0].id)
-  const [modelSelectorOpen, setModelSelectorOpen] = useState(false)
-  const [text, setText] = useState<string>("")
-  const [useWebSearch, setUseWebSearch] = useState<boolean>(false)
-  const [useMicrophone, setUseMicrophone] = useState<boolean>(false)
-  const [status, setStatus] = useState<"submitted" | "streaming" | "ready" | "error">("ready")
-  const [messages, setMessages] = useState<ChatWindowMessage[]>(initialMessages)
-  const [, setStreamingMessageId] = useState<string | null>(null)
+  const [model, setModel] = useState<string>(models[0].id);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [text, setText] = useState<string>('');
+  const [useWebSearch, setUseWebSearch] = useState<boolean>(false);
+  const [useMicrophone, setUseMicrophone] = useState<boolean>(false);
+  const [status, setStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready');
+  const [messages, setMessages] = useState<ChatWindowMessage[]>(initialMessages);
+  const [, setStreamingMessageId] = useState<string | null>(null);
 
-  const stickyRef = useRef<HTMLDivElement>(null)
-  const [stickyHeight, setStickyHeight] = useState(0)
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [stickyHeight, setStickyHeight] = useState(0);
 
-  const selectedModelData = models.find((m) => m.id === model)
+  const selectedModelData = models.find(m => m.id === model);
 
   const streamResponse = useCallback(async (messageId: string, content: string) => {
-    setStatus("streaming")
-    setStreamingMessageId(messageId)
+    setStatus('streaming');
+    setStreamingMessageId(messageId);
 
-    const words = content.split(" ")
-    let currentContent = ""
+    const words = content.split(' ');
+    let currentContent = '';
 
     for (let i = 0; i < words.length; i++) {
-      currentContent += (i > 0 ? " " : "") + words[i]
+      currentContent += (i > 0 ? ' ' : '') + words[i];
 
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.versions.some((v) => v.id === messageId)) {
+      setMessages(prev =>
+        prev.map(msg => {
+          if (msg.versions.some(v => v.id === messageId)) {
             return {
               ...msg,
-              versions: msg.versions.map((v) =>
+              versions: msg.versions.map(v =>
                 v.id === messageId ? { ...v, content: currentContent } : v
               ),
-            }
+            };
           }
-          return msg
+          return msg;
         })
-      )
+      );
 
-      await new Promise((resolve) => setTimeout(resolve, Math.random() * 100 + 50))
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
     }
 
-    setStatus("ready")
-    setStreamingMessageId(null)
-  }, [])
+    setStatus('ready');
+    setStreamingMessageId(null);
+  }, []);
 
   const addUserMessage = useCallback(
     (content: string) => {
       const userMessage: ChatWindowMessage = {
         key: `user-${Date.now()}`,
-        from: "user",
+        from: 'user',
         versions: [
           {
             id: `user-${Date.now()}`,
             content,
           },
         ],
-      }
+      };
 
-      setMessages((prev) => [...prev, userMessage])
+      setMessages(prev => [...prev, userMessage]);
 
       setTimeout(() => {
-        const assistantMessageId = `assistant-${Date.now()}`
-        const randomResponse = mockResponses[Math.floor(Math.random() * mockResponses.length)]
+        const assistantMessageId = `assistant-${Date.now()}`;
+        const randomResponse = mockResponses[Math.floor(Math.random() * mockResponses.length)];
 
         const assistantMessage: ChatWindowMessage = {
           key: `assistant-${Date.now()}`,
-          from: "assistant",
+          from: 'assistant',
           versions: [
             {
               id: assistantMessageId,
-              content: "",
+              content: '',
             },
           ],
-        }
+        };
 
-        setMessages((prev) => [...prev, assistantMessage])
-        streamResponse(assistantMessageId, randomResponse)
-      }, 500)
+        setMessages(prev => [...prev, assistantMessage]);
+        streamResponse(assistantMessageId, randomResponse);
+      }, 500);
     },
     [streamResponse]
-  )
+  );
 
   const handleSubmit = (message: PromptInputMessage) => {
-    const hasText = Boolean(message.text)
-    const hasAttachments = Boolean(message.files?.length)
+    const hasText = Boolean(message.text);
+    const hasAttachments = Boolean(message.files?.length);
 
     if (!(hasText || hasAttachments)) {
-      return
+      return;
     }
 
-    setStatus("submitted")
+    setStatus('submitted');
 
     if (message.files?.length) {
-      toast.success("Files attached", {
+      toast.success('Files attached', {
         description: `${message.files.length} file(s) attached to message`,
-      })
+      });
     }
 
-    addUserMessage(message.text || "Sent with attachments")
-    setText("")
-  }
+    addUserMessage(message.text || 'Sent with attachments');
+    setText('');
+  };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setStatus("submitted")
-    addUserMessage(suggestion)
-  }
+    setStatus('submitted');
+    addUserMessage(suggestion);
+  };
 
   useLayoutEffect(() => {
     const measure = () => {
-      const h = stickyRef.current?.offsetHeight ?? 0
-      setStickyHeight(h)
-    }
+      const h = stickyRef.current?.offsetHeight ?? 0;
+      setStickyHeight(h);
+    };
 
-    measure()
-    window.addEventListener("resize", measure)
-    return () => window.removeEventListener("resize", measure)
-  }, [messages])
-
-  // Auto-scrolling is always enabled; rely on StickToBottom default behavior.
-  // Auto-scrolling is always enabled; rely on StickToBottom default behavior.
-
-  const chat = (
-    <ChatWindow
-      messages={messages}
-      models={models}
-      suggestions={suggestions}
-      stickyHeight={stickyHeight}
-      stickyRef={stickyRef}
-      text={text}
-      status={status}
-      useWebSearch={useWebSearch}
-      useMicrophone={useMicrophone}
-      model={model}
-      modelSelectorOpen={modelSelectorOpen}
-      selectedModelData={selectedModelData}
-      onSuggestionClick={handleSuggestionClick}
-      onSubmit={handleSubmit}
-      onTextChange={(value) => setText(value)}
-      onToggleWebSearch={() => setUseWebSearch(!useWebSearch)}
-      onToggleMicrophone={() => setUseMicrophone(!useMicrophone)}
-      onSelectModel={(id) => setModel(id)}
-      onModelSelectorOpenChange={setModelSelectorOpen}
-    />
-  )
-
-  const [modalOpen, setModalOpen] = useState(false)
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [messages]);
 
   return (
-    <>
-      {!modalOpen && chat}
-
-      <Button
-        className="fixed right-6 bottom-6 z-50 shadow-lg"
-        size="icon"
-        variant="default"
-        onClick={() => setModalOpen(true)}
-        aria-label="Open Chat"
-      >
-        <MessageCircle />
-      </Button>
-
-      <DraggableDialog open={modalOpen} onOpenChange={setModalOpen} title={"Skunkworx Chat"}>
-        {chat}
-      </DraggableDialog>
-    </>
-  )
+    <div className="flex flex-col h-full min-h-0 w-full max-w-3xl mx-auto p-4">
+      <div className="flex flex-col flex-1 min-h-0 rounded-xl border bg-background/40 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <ChatWindow
+            messages={messages}
+            models={models}
+            suggestions={suggestions}
+            stickyHeight={stickyHeight}
+            stickyRef={stickyRef}
+            text={text}
+            status={status}
+            useWebSearch={useWebSearch}
+            useMicrophone={useMicrophone}
+            model={model}
+            modelSelectorOpen={modelSelectorOpen}
+            selectedModelData={selectedModelData}
+            onSuggestionClick={handleSuggestionClick}
+            onSubmit={handleSubmit}
+            onTextChange={value => setText(value)}
+            onToggleWebSearch={() => setUseWebSearch(!useWebSearch)}
+            onToggleMicrophone={() => setUseMicrophone(!useMicrophone)}
+            onSelectModel={id => setModel(id)}
+            onModelSelectorOpenChange={setModelSelectorOpen}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export default ChatbotDemo
-
+export default ChatbotDemo;

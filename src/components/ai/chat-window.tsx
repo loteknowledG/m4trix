@@ -1,12 +1,12 @@
-"use client"
+'use client';
 
-import type { ToolUIPart } from "ai"
-import type { SetStateAction, RefObject } from "react"
+import type { ToolUIPart } from 'ai';
+import type { SetStateAction, RefObject } from 'react';
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from "@/components/ai/conversation"
+} from '@/components/ai/conversation';
 import {
   Message,
   MessageBranch,
@@ -18,7 +18,7 @@ import {
   MessageContent,
   MessageHeader,
   MessageResponse,
-} from "@/components/ai/message"
+} from '@/components/ai/message';
 import {
   ModelSelector,
   ModelSelectorContent,
@@ -31,7 +31,7 @@ import {
   ModelSelectorLogoGroup,
   ModelSelectorName,
   ModelSelectorTrigger,
-} from "@/components/ai/model-selector"
+} from '@/components/ai/model-selector';
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -47,70 +47,61 @@ import {
   PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
-} from "@/components/ai/prompt-input"
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@/components/ai/reasoning"
-import {
-  Source,
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from "@/components/ai/sources"
-import { Suggestion, Suggestions } from "@/components/ai/suggestion"
+} from '@/components/ai/prompt-input';
+import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai/reasoning';
+import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai/sources';
+import { Suggestion, Suggestions } from '@/components/ai/suggestion';
 import {
   Attachment,
   AttachmentPreview,
   AttachmentRemove,
   Attachments,
-} from "@/components/ai/attachments"
-import { CheckIcon, GlobeIcon, MicIcon } from "lucide-react"
+} from '@/components/ai/attachments';
+import { CheckIcon, GlobeIcon, MicIcon } from 'lucide-react';
 
 export interface ChatWindowMessage {
-  key: string
-  from: "user" | "assistant"
-  name?: string
-  avatarUrl?: string
-  avatarCrop?: { x: number; y: number; zoom: number }
-  sources?: { href: string; title: string }[]
+  key: string;
+  from: 'user' | 'assistant';
+  name?: string;
+  avatarUrl?: string;
+  avatarCrop?: { x: number; y: number; zoom: number };
+  sources?: { href: string; title: string }[];
   versions: {
-    id: string
-    content: string
-  }[]
+    id: string;
+    content: string;
+  }[];
   reasoning?: {
-    content: string
-    duration: number
-  }
+    content: string;
+    duration: number;
+  };
   tools?: {
-    name: string
-    description: string
-    status: ToolUIPart["state"]
-    parameters: Record<string, unknown>
-    result: string | undefined
-    error: string | undefined
-  }[]
+    name: string;
+    description: string;
+    status: ToolUIPart['state'];
+    parameters: Record<string, unknown>;
+    result: string | undefined;
+    error: string | undefined;
+  }[];
 }
 
 export interface ChatWindowModel {
-  id: string
-  name: string
-  chef: string
-  chefSlug: string
-  providers: string[]
+  id: string;
+  name: string;
+  chef: string;
+  chefSlug: string;
+  providers: string[];
 }
 
 const PromptInputAttachmentsDisplay = () => {
-  const attachments = usePromptInputAttachments()
+  const attachments = usePromptInputAttachments();
 
   if (attachments.files.length === 0) {
-    return null
+    return null;
   }
 
   return (
     <Attachments variant="inline">
-      {attachments.files.map((attachment) => (
+      {attachments.files.map(attachment => (
         <Attachment
           data={attachment}
           key={attachment.id}
@@ -121,32 +112,32 @@ const PromptInputAttachmentsDisplay = () => {
         </Attachment>
       ))}
     </Attachments>
-  )
-}
+  );
+};
 
 export type ChatWindowProps = {
-  messages: ChatWindowMessage[]
-  models: ChatWindowModel[]
-  suggestions: string[]
-  stickyHeight: number
-  stickyRef: RefObject<HTMLDivElement>
-  text: string
-  status: "submitted" | "streaming" | "ready" | "error"
-  useWebSearch: boolean
-  useMicrophone: boolean
-  model: string
-  modelSelectorOpen: boolean
-  selectedModelData: ChatWindowModel | undefined
-  onSuggestionClick: (suggestion: string) => void
-  onSubmit: (message: PromptInputMessage) => void
-  onTextChange: (value: string) => void
-  onToggleWebSearch: () => void
-  onToggleMicrophone: () => void
-  onSelectModel: (id: string) => void
-  onModelSelectorOpenChange: (open: boolean) => void
-  showInput?: boolean
-  showSuggestions?: boolean
-}
+  messages: ChatWindowMessage[];
+  models: ChatWindowModel[];
+  suggestions: string[];
+  stickyHeight: number;
+  stickyRef: RefObject<HTMLDivElement>;
+  text: string;
+  status: 'submitted' | 'streaming' | 'ready' | 'error';
+  useWebSearch: boolean;
+  useMicrophone: boolean;
+  model: string;
+  modelSelectorOpen: boolean;
+  selectedModelData: ChatWindowModel | undefined;
+  onSuggestionClick: (suggestion: string) => void;
+  onSubmit: (message: PromptInputMessage) => void;
+  onTextChange: (value: string) => void;
+  onToggleWebSearch: () => void;
+  onToggleMicrophone: () => void;
+  onSelectModel: (id: string) => void;
+  onModelSelectorOpenChange: (open: boolean) => void;
+  showInput?: boolean;
+  showSuggestions?: boolean;
+};
 
 export function ChatWindow({
   messages,
@@ -171,19 +162,28 @@ export function ChatWindow({
   showInput = true,
   showSuggestions = true,
 }: ChatWindowProps) {
-
   return (
     <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
-      <Conversation style={{ height: `calc(100% - ${stickyHeight}px)` }} className="min-h-0 border-b">
+      <Conversation
+        style={{ height: `calc(100% - ${stickyHeight}px)`, overflowY: 'auto' }}
+        className="flex-1 min-h-0 border-b chat-scrollbar"
+      >
         <ConversationContent className="min-h-0">
           {messages.map(({ versions, ...message }) => (
             <MessageBranch defaultBranch={0} key={message.key}>
               <MessageBranchContent>
-                {versions.map((version) => (
-                  <Message from={message.from} avatarUrl={message.avatarUrl} avatarCrop={message.avatarCrop} key={`${message.key}-${version.id}`}>
+                {versions.map(version => (
+                  <Message
+                    from={message.from}
+                    avatarUrl={message.avatarUrl}
+                    avatarCrop={message.avatarCrop}
+                    key={`${message.key}-${version.id}`}
+                  >
                     <div>
                       {message.name && (
-                        <MessageHeader className={message.from === "user" ? "text-right" : "text-left"}>
+                        <MessageHeader
+                          className={message.from === 'user' ? 'text-right' : 'text-left'}
+                        >
                           {message.name}
                         </MessageHeader>
                       )}
@@ -191,7 +191,7 @@ export function ChatWindow({
                         <Sources>
                           <SourcesTrigger count={message.sources.length} />
                           <SourcesContent>
-                            {message.sources.map((source) => (
+                            {message.sources.map(source => (
                               <Source href={source.href} key={source.href} title={source.title} />
                             ))}
                           </SourcesContent>
@@ -229,7 +229,7 @@ export function ChatWindow({
         >
           {showSuggestions && suggestions.length > 0 && (
             <Suggestions className="px-4">
-              {suggestions.map((suggestion) => (
+              {suggestions.map(suggestion => (
                 <Suggestion
                   key={suggestion}
                   onClick={() => onSuggestionClick(suggestion)}
@@ -261,15 +261,24 @@ export function ChatWindow({
                         <PromptInputActionAddAttachments />
                       </PromptInputActionMenuContent>
                     </PromptInputActionMenu>
-                    <PromptInputButton onClick={onToggleMicrophone} variant={useMicrophone ? "default" : "ghost"}>
+                    <PromptInputButton
+                      onClick={onToggleMicrophone}
+                      variant={useMicrophone ? 'default' : 'ghost'}
+                    >
                       <MicIcon size={16} />
                       <span className="sr-only">Microphone</span>
                     </PromptInputButton>
-                    <PromptInputButton onClick={onToggleWebSearch} variant={useWebSearch ? "default" : "ghost"}>
+                    <PromptInputButton
+                      onClick={onToggleWebSearch}
+                      variant={useWebSearch ? 'default' : 'ghost'}
+                    >
                       <GlobeIcon size={16} />
                       <span>Search</span>
                     </PromptInputButton>
-                    <ModelSelector onOpenChange={onModelSelectorOpenChange} open={modelSelectorOpen}>
+                    <ModelSelector
+                      onOpenChange={onModelSelectorOpenChange}
+                      open={modelSelectorOpen}
+                    >
                       <ModelSelectorTrigger asChild>
                         <PromptInputButton>
                           {selectedModelData?.chefSlug && (
@@ -284,23 +293,23 @@ export function ChatWindow({
                         <ModelSelectorInput placeholder="Search models..." />
                         <ModelSelectorList>
                           <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                          {["OpenAI", "Anthropic", "Google"].map((chef) => (
+                          {['OpenAI', 'Anthropic', 'Google'].map(chef => (
                             <ModelSelectorGroup heading={chef} key={chef}>
                               {models
-                                .filter((m) => m.chef === chef)
-                                .map((m) => (
+                                .filter(m => m.chef === chef)
+                                .map(m => (
                                   <ModelSelectorItem
                                     key={m.id}
                                     onSelect={() => {
-                                      onSelectModel(m.id)
-                                      onModelSelectorOpenChange(false)
+                                      onSelectModel(m.id);
+                                      onModelSelectorOpenChange(false);
                                     }}
                                     value={m.id}
                                   >
                                     <ModelSelectorLogo provider={m.chefSlug} />
                                     <ModelSelectorName>{m.name}</ModelSelectorName>
                                     <ModelSelectorLogoGroup>
-                                      {m.providers.map((provider) => (
+                                      {m.providers.map(provider => (
                                         <ModelSelectorLogo key={provider} provider={provider} />
                                       ))}
                                     </ModelSelectorLogoGroup>
@@ -318,7 +327,7 @@ export function ChatWindow({
                     </ModelSelector>
                   </PromptInputTools>
                   <PromptInputSubmit
-                    disabled={!(text.trim() || status) || status === "streaming"}
+                    disabled={!(text.trim() || status) || status === 'streaming'}
                     status={status}
                   />
                 </PromptInputFooter>
@@ -328,5 +337,5 @@ export function ChatWindow({
         </div>
       )}
     </div>
-  )
+  );
 }
