@@ -1,6 +1,5 @@
 import {
   Users,
-  Bookmark,
   SquarePen,
   LayoutGrid,
   DatabaseBackup,
@@ -48,11 +47,6 @@ export function getMenuList(): Group[] {
           href: '/agents',
           label: 'Agents',
           icon: Users,
-        },
-        {
-          href: '/skunkworx',
-          label: 'Skunkworx',
-          icon: Bookmark,
         },
         {
           href: '/stories',

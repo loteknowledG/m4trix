@@ -1004,7 +1004,7 @@ export default function AgentsPage() {
       )}
 
       <div
-        className={`flex flex-1 overflow-hidden transition-all duration-300 relative ${
+        className={`flex flex-1 overflow-visible transition-all duration-300 relative ${
           sidebarOpen ? 'gap-6' : 'gap-0'
         }`}
       >
@@ -1021,7 +1021,7 @@ export default function AgentsPage() {
             <ChevronLeft
               className={cn(
                 'h-4 w-4 transition-transform duration-500',
-                !sidebarOpen ? 'rotate-180' : 'rotate-0'
+                !sidebarOpen ? 'rotate-0' : 'rotate-180'
               )}
             />
           </Button>
