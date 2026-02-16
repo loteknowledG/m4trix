@@ -31,7 +31,15 @@ import {
 } from 'lucide-react';
 import { VscDebugDisconnect } from 'react-icons/vsc';
 import { PiPlugsConnectedLight } from 'react-icons/pi';
-import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetClose,
+} from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -499,7 +507,48 @@ export default function AgentsPage() {
     }
   };
 
-  const streamMessageText = async (messageId: string, fullText: string) => {
+  // streamMessageText: supports optional incremental streaming when `stream=true`.
+  const streamMessageText = async (
+    messageId: string,
+    fullText: string,
+    targetPos?: number,
+    stream: boolean = false
+  ) => {
+    // If streaming is disabled for this call, write final text atomically.
+    if (!stream) {
+      setMessages(prev => {
+        // Prefer updating by known absolute position (deterministic) when available
+        if (typeof targetPos === 'number' && targetPos >= 0 && targetPos < prev.length) {
+          const target = prev[targetPos];
+          if (target && target.id === messageId) {
+            console.debug('[agents] set final text by pos', { messageId, targetPos });
+            const copy = prev.slice();
+            copy[targetPos] = { ...copy[targetPos], text: fullText };
+            return copy;
+          }
+        }
+
+        let found = false;
+        const next = prev.map(msg => {
+          if (msg.id === messageId) {
+            found = true;
+            return { ...msg, text: fullText };
+          }
+          return msg;
+        });
+
+        // If placeholder not present yet, append the final message so user sees it
+        if (!found) {
+          console.debug('[agents] append final message', { messageId });
+          return [...next, { id: messageId, from: 'assistant', text: fullText }];
+        }
+        return next;
+      });
+
+      return;
+    }
+
+    // Incremental streaming (only used when `stream === true`)
     const words = fullText.split(' ');
     let current = '';
 
@@ -507,6 +556,17 @@ export default function AgentsPage() {
       current += (i > 0 ? ' ' : '') + words[i];
 
       setMessages(prev => {
+        // Prefer updating by known absolute position (deterministic) when available
+        if (typeof targetPos === 'number' && targetPos >= 0 && targetPos < prev.length) {
+          const target = prev[targetPos];
+          if (target && target.id === messageId) {
+            console.debug('[agents] stream update by pos', { messageId, targetPos, current });
+            const copy = prev.slice();
+            copy[targetPos] = { ...copy[targetPos], text: current };
+            return copy;
+          }
+        }
+
         let found = false;
         const next = prev.map(msg => {
           if (msg.id === messageId) {
@@ -518,6 +578,7 @@ export default function AgentsPage() {
 
         // If placeholder not present yet, append the streaming message so user sees progress
         if (!found) {
+          console.debug('[agents] appended streaming placeholder', { messageId, current });
           return [...next, { id: messageId, from: 'assistant', text: current }];
         }
         return next;
@@ -729,7 +790,11 @@ export default function AgentsPage() {
 
       // Keep server order: map incoming messages and insert placeholders for agents
       const incomingIds = new Set(mapped.map(m => m.id));
-      const placeholders: ChatMessage[] = mapped.map(m => ({ id: m.id, from: m.from, text: m.from === 'user' ? m.text : '' }));
+      const placeholders: ChatMessage[] = mapped.map(m => ({
+        id: m.id,
+        from: m.from,
+        text: m.from === 'user' ? m.text : '',
+      }));
 
       // Ensure unique client-side IDs for every incoming server message to avoid
       // accidental id collisions with existing messages or repeated server ids.
@@ -743,27 +808,19 @@ export default function AgentsPage() {
 
       // create a client id for each mapped entry (avoid collisions with existing prev ids)
       // note: we will also remove any prev messages that share the same server id
-      // to avoid duplicates from prior runs.
+      // to avoid duplicates from prior runs. Capture positions where placeholders
+      // are inserted so streaming updates can target slots deterministically.
+      const clientPositions: number[] = [];
+      const __debug = true;
+
       flushSync(() => {
         setMessages(prev => {
           prev.forEach(m => prevIds.add(m.id));
 
-          // build client ids, preferring to reuse an existing client id if it
-          // already exists in `prev` for the same server id. This avoids creating
-          // duplicate copies of messages that were already rendered.
           const reuseExisting: boolean[] = [];
-          for (const m of mapped) {
+          for (let i = 0; i < mapped.length; i++) {
+            const m = mapped[i];
             const base = m.id;
-            // if a client message with the same id already exists, reuse it
-            if (prevIds.has(base)) {
-              clientIds.push(base);
-              seenClientIds.add(base);
-              reuseExisting.push(true);
-              // ensure serverIdCounts increment so duplicates within mapped get suffixed
-              serverIdCounts[base] = (serverIdCounts[base] || 0) + 1;
-              continue;
-            }
-
             serverIdCounts[base] = (serverIdCounts[base] || 0) + 1;
             let candidate = serverIdCounts[base] === 1 ? base : `${base}-${serverIdCounts[base]}`;
             while (seenClientIds.has(candidate) || prevIds.has(candidate)) {
@@ -775,33 +832,75 @@ export default function AgentsPage() {
             reuseExisting.push(false);
           }
 
-          // keep existing messages (don't delete old server ids). only remove the
-          // temporary user placeholder — this prevents earlier messages from being
-          // rewritten when a new server response reuses ids.
-          const filteredPrev = prev.filter(m => m.id !== temporaryUserMessageId);
+          // Remove the temporary user placeholder and any prior client messages
+          // that correspond to the same server ids returned in this response.
+          const serverBases = new Set(mapped.map(m => m.id));
+          const filteredPrev = prev.filter(m => {
+            if (m.id === temporaryUserMessageId) return false;
+            for (const base of serverBases) {
+              if (m.id === base || m.id.startsWith(`${base}-`)) return false;
+            }
+            return true;
+          });
 
-          // insert placeholders using clientIds (preserves server order). If a
-          // server id was already present in prev (reuseExisting), do NOT add a
-          // new placeholder — we will stream into the existing entry instead.
-          const placeholdersUsingClientIds: ChatMessage[] = mapped
-            .map((m, idx) => ({ m, idx }))
-            .filter(({ idx }) => !reuseExisting[idx])
-            .map(({ m, idx }) => ({
+          if (__debug) {
+            try {
+              console.debug(
+                '[agents] mapped server ids:',
+                mapped.map(m => m.id)
+              );
+              console.debug('[agents] generated clientIds:', clientIds);
+              console.debug(
+                '[agents] filteredPrev ids:',
+                filteredPrev.map(p => p.id)
+              );
+            } catch (e) {
+              /* ignore */
+            }
+          }
+
+          // Build placeholders in server order and record their absolute positions.
+          const placeholdersUsingClientIds: ChatMessage[] = [];
+          const startIndex = filteredPrev.length;
+          let placeholderCounter = 0;
+
+          for (let idx = 0; idx < mapped.length; idx++) {
+            if (reuseExisting[idx]) {
+              const existingIndex = prev.findIndex(p => p.id === clientIds[idx]);
+              clientPositions[idx] = existingIndex >= 0 ? existingIndex : -1;
+              continue;
+            }
+
+            const placeholder: ChatMessage = {
               id: clientIds[idx],
-              from: m.from,
-              text: m.from === 'user' ? m.text : '',
-            }));
+              from: mapped[idx].from,
+              text: mapped[idx].from === 'user' ? mapped[idx].text : '',
+            };
+
+            placeholdersUsingClientIds.push(placeholder);
+            clientPositions[idx] = startIndex + placeholderCounter;
+            placeholderCounter += 1;
+          }
 
           return [...filteredPrev, ...placeholdersUsingClientIds];
         });
       });
 
       // Stream agent messages in the exact order returned by the server using clientIds
+      // Only apply incremental streaming to the last agent message; all others
+      // are written immediately (final text) to avoid earlier rewrites.
+      const lastAgentIndex = mapped.reduce((acc, m, idx) => (m.from !== 'user' ? idx : acc), -1);
+
       for (let i = 0; i < mapped.length; i++) {
         const msg = mapped[i];
         const clientId = clientIds[i];
+        const targetPos =
+          typeof (clientPositions as any)[i] === 'number' ? (clientPositions as any)[i] : undefined;
         if (msg.from !== 'user') {
-          await streamMessageText(clientId, msg.text);
+          const shouldStream = i === lastAgentIndex;
+          if (__debug)
+            console.debug('[agents] streaming', { serverId: msg.id, clientId, targetPos, shouldStream });
+          await streamMessageText(clientId, msg.text, targetPos, shouldStream);
         }
       }
     } catch (e) {
@@ -853,10 +952,19 @@ export default function AgentsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={cn('ml-2', (zenConnected || googleConnected || hfConnected) ? 'text-emerald-400' : 'text-muted-foreground')}
-                      aria-label={(zenConnected || googleConnected || hfConnected) ? 'Connections — connected' : 'Connections — disconnected'}
+                      className={cn(
+                        'ml-2',
+                        zenConnected || googleConnected || hfConnected
+                          ? 'text-emerald-400'
+                          : 'text-muted-foreground'
+                      )}
+                      aria-label={
+                        zenConnected || googleConnected || hfConnected
+                          ? 'Connections — connected'
+                          : 'Connections — disconnected'
+                      }
                     >
-                      {(zenConnected || googleConnected || hfConnected) ? (
+                      {zenConnected || googleConnected || hfConnected ? (
                         <PiPlugsConnectedLight className="h-4 w-4" />
                       ) : (
                         <VscDebugDisconnect className="h-4 w-4" />
@@ -866,7 +974,9 @@ export default function AgentsPage() {
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>
-                <p>{(zenConnected || googleConnected || hfConnected) ? 'Connected' : 'Disconnected'}</p>
+                <p>
+                  {zenConnected || googleConnected || hfConnected ? 'Connected' : 'Disconnected'}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -893,8 +1003,20 @@ export default function AgentsPage() {
                 <Input
                   type="password"
                   className="h-8 w-[200px] text-xs"
-                  placeholder={`Paste ${activeProvider === 'zen' ? 'OpenCode' : activeProvider === 'google' ? 'Google' : 'Hugging Face'} key`}
-                  value={activeProvider === 'zen' ? zenApiKey : activeProvider === 'google' ? googleApiKey : hfApiKey}
+                  placeholder={`Paste ${
+                    activeProvider === 'zen'
+                      ? 'OpenCode'
+                      : activeProvider === 'google'
+                      ? 'Google'
+                      : 'Hugging Face'
+                  } key`}
+                  value={
+                    activeProvider === 'zen'
+                      ? zenApiKey
+                      : activeProvider === 'google'
+                      ? googleApiKey
+                      : hfApiKey
+                  }
                   onChange={e => {
                     const val = e.target.value;
                     if (activeProvider === 'zen') setZenApiKey(val);
@@ -914,32 +1036,88 @@ export default function AgentsPage() {
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
                     {useCustomModel ? (
-                      <Input className="h-8 w-full text-xs" placeholder="e.g. zai-org/GLM-4.5" value={customModelId} onChange={e => { setCustomModelId(e.target.value); setModel(e.target.value); }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); promptInputRef.current?.focus(); toast.success(`Broadcasting to ${customModelId}`); } }} />
+                      <Input
+                        className="h-8 w-full text-xs"
+                        placeholder="e.g. zai-org/GLM-4.5"
+                        value={customModelId}
+                        onChange={e => {
+                          setCustomModelId(e.target.value);
+                          setModel(e.target.value);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            promptInputRef.current?.focus();
+                            toast.success(`Broadcasting to ${customModelId}`);
+                          }
+                        }}
+                      />
                     ) : (
                       <div className="flex gap-3">
-                        <Select disabled={isRunning || !modelOptions.length} onValueChange={setModel} value={model}>
+                        <Select
+                          disabled={isRunning || !modelOptions.length}
+                          onValueChange={setModel}
+                          value={model}
+                        >
                           <SelectTrigger className="h-8 w-[220px] text-xs">
                             <SelectValue placeholder="Select model" />
                           </SelectTrigger>
                           <SelectContent>
                             {modelOptions.length ? (
                               <>
-                                {modelOptions.some(o => o.provider === 'zen') && <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">OpenCode</div>}
-                                {modelOptions.filter(o => o.provider === 'zen').map(option => (<SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>))}
-                                {modelOptions.some(o => o.provider === 'google') && <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Google Gemini</div>}
-                                {modelOptions.filter(o => o.provider === 'google').map(option => (<SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>))}
-                                {modelOptions.some(o => o.provider === 'huggingface') && <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">Hugging Face</div>}
-                                {modelOptions.filter(o => o.provider === 'huggingface').map(option => (<SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>))}
+                                {modelOptions.some(o => o.provider === 'zen') && (
+                                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+                                    OpenCode
+                                  </div>
+                                )}
+                                {modelOptions
+                                  .filter(o => o.provider === 'zen')
+                                  .map(option => (
+                                    <SelectItem key={option.id} value={option.id}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                {modelOptions.some(o => o.provider === 'google') && (
+                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                                    Google Gemini
+                                  </div>
+                                )}
+                                {modelOptions
+                                  .filter(o => o.provider === 'google')
+                                  .map(option => (
+                                    <SelectItem key={option.id} value={option.id}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                {modelOptions.some(o => o.provider === 'huggingface') && (
+                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                                    Hugging Face
+                                  </div>
+                                )}
+                                {modelOptions
+                                  .filter(o => o.provider === 'huggingface')
+                                  .map(option => (
+                                    <SelectItem key={option.id} value={option.id}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
                               </>
                             ) : (
-                              <SelectItem value="__no-models__" disabled>No models available</SelectItem>
+                              <SelectItem value="__no-models__" disabled>
+                                No models available
+                              </SelectItem>
                             )}
                           </SelectContent>
                         </Select>
 
                         <div className="ml-3">
-                          <Select value={orchestration} onValueChange={(v: any) => setOrchestration(v)}>
-                            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Orchestration" /></SelectTrigger>
+                          <Select
+                            value={orchestration}
+                            onValueChange={(v: any) => setOrchestration(v)}
+                          >
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue placeholder="Orchestration" />
+                            </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="auto">Auto</SelectItem>
                               <SelectItem value="sequential">Sequential</SelectItem>
@@ -949,8 +1127,13 @@ export default function AgentsPage() {
                         </div>
 
                         <div className="ml-2 flex items-center gap-3">
-                          <Select value={interactionMode} onValueChange={(v: any) => setInteractionMode(v)}>
-                            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Interaction" /></SelectTrigger>
+                          <Select
+                            value={interactionMode}
+                            onValueChange={(v: any) => setInteractionMode(v)}
+                          >
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue placeholder="Interaction" />
+                            </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="neutral">Neutral</SelectItem>
                               <SelectItem value="cooperative">Cooperative</SelectItem>
@@ -967,8 +1150,19 @@ export default function AgentsPage() {
                   {zenConnected && (
                     <div className="flex items-center gap-1.5">
                       <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                      <span className="text-[11px] font-medium text-muted-foreground">OpenCode</span>
-                      <button onClick={() => { setZenConnected(false); setZenApiKey(''); setModelOptions(m => m.filter(o => o.provider !== 'zen')); }} className="text-[10px] text-muted-foreground hover:text-destructive">×</button>
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        OpenCode
+                      </span>
+                      <button
+                        onClick={() => {
+                          setZenConnected(false);
+                          setZenApiKey('');
+                          setModelOptions(m => m.filter(o => o.provider !== 'zen'));
+                        }}
+                        className="text-[10px] text-muted-foreground hover:text-destructive"
+                      >
+                        ×
+                      </button>
                     </div>
                   )}
 
@@ -976,7 +1170,16 @@ export default function AgentsPage() {
                     <div className="flex items-center gap-1.5">
                       <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                       <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
-                      <button onClick={() => { setGoogleConnected(false); setGoogleApiKey(''); setModelOptions(m => m.filter(o => o.provider !== 'google')); }} className="text-[10px] text-muted-foreground hover:text-destructive">×</button>
+                      <button
+                        onClick={() => {
+                          setGoogleConnected(false);
+                          setGoogleApiKey('');
+                          setModelOptions(m => m.filter(o => o.provider !== 'google'));
+                        }}
+                        className="text-[10px] text-muted-foreground hover:text-destructive"
+                      >
+                        ×
+                      </button>
                     </div>
                   )}
 
@@ -984,7 +1187,16 @@ export default function AgentsPage() {
                     <div className="flex items-center gap-1.5">
                       <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                       <span className="text-[11px] font-medium text-muted-foreground">HF</span>
-                      <button onClick={() => { setHfConnected(false); setHfApiKey(''); setModelOptions(m => m.filter(o => o.provider !== 'huggingface')); }} className="text-[10px] text-muted-foreground hover:text-destructive">×</button>
+                      <button
+                        onClick={() => {
+                          setHfConnected(false);
+                          setHfApiKey('');
+                          setModelOptions(m => m.filter(o => o.provider !== 'huggingface'));
+                        }}
+                        className="text-[10px] text-muted-foreground hover:text-destructive"
+                      >
+                        ×
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1000,449 +1212,452 @@ export default function AgentsPage() {
         </Sheet>
       }
     >
-      <div className="flex flex-col gap-6 p-6 min-h-0 -mt-4 overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
-
-
-      {connectionError && (
-        <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-          {connectionError}
-        </div>
-      )}
-
       <div
-        className={`flex flex-1 overflow-visible transition-all duration-300 relative ${
-          sidebarOpen ? 'gap-6' : 'gap-0'
-        }`}
+        className="flex flex-col gap-6 p-6 min-h-0 -mt-4 overflow-auto"
+        style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
       >
+        {connectionError && (
+          <div className="mx-auto w-full max-w-2xl rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+            {connectionError}
+          </div>
+        )}
+
         <div
-          className="absolute z-50 top-1/2 -translate-y-1/2 transition-all duration-300"
-          style={{ right: sidebarOpen ? '284px' : '-16px' }}
-        >
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="h-8 w-8 rounded-full shadow-md bg-background hover:bg-accent"
-          >
-            <ChevronLeft
-              className={cn(
-                'h-4 w-4 transition-transform duration-500',
-                !sidebarOpen ? 'rotate-0' : 'rotate-180'
-              )}
-            />
-          </Button>
-        </div>
-        <section className="relative flex min-h-[280px] flex-1 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {messages.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                Run the demo to see how multiple agents can talk in this UI.
-              </div>
-            ) : (
-              <ChatWindow
-                messages={chatMessages}
-                models={emptyModels}
-                suggestions={[]}
-                stickyHeight={0}
-                stickyRef={stickyRef}
-                text=""
-                status="ready"
-                useWebSearch={false}
-                useMicrophone={false}
-                model=""
-                modelSelectorOpen={false}
-                selectedModelData={undefined}
-                onSuggestionClick={() => {}}
-                onSubmit={() => {}}
-                onTextChange={() => {}}
-                onToggleWebSearch={() => {}}
-                onToggleMicrophone={() => {}}
-                onSelectModel={() => {}}
-                onModelSelectorOpenChange={() => {}}
-                showInput={false}
-                showSuggestions={false}
-              />
-            )}
-          </div>
-          {error && (
-            <div className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          )}
-
-          <div className="mt-auto border-t bg-background/60 p-4 relative z-30">
-            <div className="flex flex-col gap-3">
-              <div className="relative flex items-end gap-2">
-                <div className="relative flex-1">
-                  <Textarea
-                    ref={promptInputRef}
-                    autoComplete="off"
-                    className="min-h-[48px] resize-none pr-12 text-sm shadow-sm"
-                    // keep the input editable even while agents are running;
-                    // only the send button will remain disabled to prevent duplicate submits
-                    disabled={false}
-                    onChange={e => setPrompt(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        runDemo(prompt);
-                      }
-                    }}
-                    placeholder="Message the agent team..."
-                    value={prompt}
-                  />
-                  <Button
-                    className="absolute right-2 bottom-2 h-8 w-8 rounded-full"
-                    disabled={isRunning || !prompt.trim()}
-                    onClick={() => runDemo(prompt)}
-                    size="icon"
-                  >
-                    {isRunning ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={() => setShowBackstory(!showBackstory)}
-                  >
-                    <User className="h-3 w-3" />
-                    {showBackstory ? 'Hide Story' : 'Set Story'}
-                  </button>
-
-                  <button
-                    className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-destructive hover:text-destructive/80 transition-colors"
-                    onClick={restartSituation}
-                    title="Restart conversation (keeps backstory)"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Restart
-                  </button>
-                </div>
-
-                {showBackstory && (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Your Persona
-                        </p>
-                      </div>
-                      <AgentCard
-                        name={prompterAgent?.name || ''}
-                        description={prompterAgent?.description || ''}
-                        avatarUrl={prompterAgent?.avatarUrl}
-                        avatarCrop={prompterAgent?.avatarCrop}
-                        dragOverId={dragOverId}
-                        onAvatarUpload={file => handleAvatarUpload(file, 'user')}
-                        onNameChange={name => {
-                          if (prompterAgent) {
-                            updatePrompterAgent({ name });
-                          } else {
-                            setPrompterAgent({
-                              id: 'user-agent',
-                              name,
-                              description: '',
-                              avatarUrl: '',
-                            });
-                          }
-                        }}
-                        onDescriptionChange={description => {
-                          if (prompterAgent) {
-                            updatePrompterAgent({ description });
-                          } else {
-                            setPrompterAgent({
-                              id: 'user-agent',
-                              name: '',
-                              description,
-                            });
-                          }
-                        }}
-                        isUser={true}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Global Story Context
-                      </p>
-                      <Textarea
-                        autoComplete="off"
-                        className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
-                        disabled={isRunning}
-                        onChange={e => setStory(e.target.value)}
-                        placeholder="Provide global story context or character details for the agents..."
-                        value={story}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <aside
-          className={`flex flex-col gap-4 self-stretch overflow-y-auto rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
-            sidebarOpen ? 'w-[300px] opacity-100' : 'w-0 p-0 border-0 opacity-0 pointer-events-none'
+          className={`flex flex-1 overflow-visible transition-all duration-300 relative ${
+            sidebarOpen ? 'gap-6' : 'gap-0'
           }`}
         >
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Agents
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    onClick={addAgent}
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
-                    title="Add New Agent"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {agents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                <p className="text-[11px] text-muted-foreground">
-                  No agents in the team. Import or add one to get started!
-                </p>
-              </div>
-            ) : (
-              agents.map(agent => (
-                <AgentCard
-                  key={agent.id}
-                  name={agent.name}
-                  description={agent.description}
-                  avatarUrl={agent.avatarUrl}
-                  avatarCrop={agent.avatarCrop}
-                  dragOverId={dragOverId}
-                  onAvatarUpload={file => handleAvatarUpload(file, agent.id)}
-                  onImport={file => {
-                    if (!file.name.endsWith('.md')) {
-                      toast.error(`File ${file.name} is not a Markdown file.`);
-                      return;
-                    }
-                    const reader = new FileReader();
-                    reader.onload = ev => {
-                      const content = ev.target?.result as string;
-                      if (!content) return;
-                      const firstHeadingLine = content
-                        .split(/\r?\n/)
-                        .find(line => line.trim().startsWith('#'));
-                      const label = firstHeadingLine
-                        ? firstHeadingLine.replace(/^#+\s*/, '').trim() || agent.id
-                        : agent.id;
-                      updateAgent(agent.id, {
-                        name: label,
-                        description: content.trim(),
-                      });
-                      toast.success(`Agent "${label}" imported successfully!`);
-                    };
-                    reader.readAsText(file);
-                  }}
-                  onExport={() => exportAgent(agent)}
-                  onDelete={() => removeAgent(agent.id)}
-                  onNameChange={name => updateAgent(agent.id, { name })}
-                  onDescriptionChange={description => updateAgent(agent.id, { description })}
-                  isUser={false}
-                />
-              ))
-            )}
-          </div>
-        </aside>
-      </div>
-
-      <Dialog
-        open={!!croppingImage}
-        onOpenChange={open => {
-          if (!open) {
-            setCroppingImage(null);
-            setCroppingTarget(null);
-            setIsGif(false);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[420px] max-h-[95vh] p-0 overflow-hidden flex flex-col bg-zinc-950 border-zinc-800 shadow-2xl">
-          <DialogHeader className="p-4 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur-md shrink-0">
-            <DialogTitle className="text-sm font-medium text-zinc-100 font-mono tracking-tight uppercase flex items-center gap-2">
-              <DialogDescription className="sr-only">
-                Crop the selected image for avatar
-              </DialogDescription>
-              {isGif && (
-                <span className="bg-amber-500/20 text-amber-500 text-[9px] px-1.5 py-0.5 rounded leading-none">
-                  GIF
-                </span>
-              )}
-              Crop Avatar
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto relative bg-zinc-950 flex justify-center py-8">
-            <div
-              className={cn(
-                'relative aspect-square w-[400px] h-[400px] shrink-0 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden select-none touch-none',
-                isHoveringEdge ? 'cursor-nwse-resize' : 'cursor-move'
-              )}
-              onPointerMove={e => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                const dist = Math.sqrt(
-                  Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
-                );
-                setIsHoveringEdge(dist > 145 && dist < 180);
-              }}
-              onWheel={e => {
-                e.preventDefault();
-                const zoomSpeed = 0.001;
-                const newZoom = Math.min(Math.max(crop.zoom - e.deltaY * zoomSpeed, 1), 10);
-                setCrop(prev => ({ ...prev, zoom: newZoom }));
-              }}
-              onPointerDown={e => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                const distCenter = Math.sqrt(
-                  Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
-                );
-
-                // Zoom mode if grabbing the white edge (160px +/- 15px)
-                if (distCenter > 145 && distCenter < 180) {
-                  const startDist = distCenter;
-                  const startZoom = crop.zoom;
-                  const onPointerMove = (moveEvent: PointerEvent) => {
-                    const newDist = Math.sqrt(
-                      Math.pow(moveEvent.clientX - centerX, 2) +
-                        Math.pow(moveEvent.clientY - centerY, 2)
-                    );
-                    // Drag away = Circle gets BIGGER = Area covers MORE = Zoom OUT
-                    const ratio = newDist / startDist;
-                    const newZoom = Math.min(Math.max(startZoom / ratio, 1), 10);
-                    setCrop(prev => ({ ...prev, zoom: newZoom }));
-                  };
-                  const onPointerUp = () => {
-                    window.removeEventListener('pointermove', onPointerMove);
-                    window.removeEventListener('pointerup', onPointerUp);
-                  };
-                  window.addEventListener('pointermove', onPointerMove);
-                  window.addEventListener('pointerup', onPointerUp);
-                } else {
-                  // Pan mode everywhere else
-                  const startX = e.clientX - crop.x;
-                  const startY = e.clientY - crop.y;
-                  const onPointerMove = (moveEvent: PointerEvent) => {
-                    setCrop(prev => ({
-                      ...prev,
-                      x: moveEvent.clientX - startX,
-                      y: moveEvent.clientY - startY,
-                    }));
-                  };
-                  const onPointerUp = () => {
-                    window.removeEventListener('pointermove', onPointerMove);
-                    window.removeEventListener('pointerup', onPointerUp);
-                  };
-                  window.addEventListener('pointermove', onPointerMove);
-                  window.addEventListener('pointerup', onPointerUp);
-                }
-              }}
+          <div
+            className="absolute z-50 top-1/2 -translate-y-1/2 transition-all duration-300"
+            style={{ right: sidebarOpen ? '284px' : '-16px' }}
+          >
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="h-8 w-8 rounded-full shadow-md bg-background hover:bg-accent"
             >
-              {/* Main cropper image (restored) */}
-              {croppingImage && (
-                <img
-                  src={croppingImage}
-                  alt="Crop preview"
-                  className="w-full h-full object-contain max-w-none pointer-events-none"
-                  style={{
-                    transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
-                  }}
+              <ChevronLeft
+                className={cn(
+                  'h-4 w-4 transition-transform duration-500',
+                  !sidebarOpen ? 'rotate-0' : 'rotate-180'
+                )}
+              />
+            </Button>
+          </div>
+          <section className="relative flex min-h-[280px] flex-1 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {messages.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  Run the demo to see how multiple agents can talk in this UI.
+                </div>
+              ) : (
+                <ChatWindow
+                  messages={chatMessages}
+                  models={emptyModels}
+                  suggestions={[]}
+                  stickyHeight={0}
+                  stickyRef={stickyRef}
+                  text=""
+                  status="ready"
+                  useWebSearch={false}
+                  useMicrophone={false}
+                  model=""
+                  modelSelectorOpen={false}
+                  selectedModelData={undefined}
+                  onSuggestionClick={() => {}}
+                  onSubmit={() => {}}
+                  onTextChange={() => {}}
+                  onToggleWebSearch={() => {}}
+                  onToggleMicrophone={() => {}}
+                  onSelectModel={() => {}}
+                  onModelSelectorOpenChange={() => {}}
+                  showInput={false}
+                  showSuggestions={false}
                 />
               )}
-
-              {/* Zoom Indicator Badge */}
-              <div className="absolute top-4 right-4 z-30 pointer-events-none">
-                <div className="bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-mono text-white/80 shadow-xl">
-                  {Math.round(crop.zoom * 100)}%
-                </div>
+            </div>
+            {error && (
+              <div className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+                {error}
               </div>
+            )}
 
-              {/* Live Avatar Preview */}
-              {croppingImage && (
-                <div className="absolute top-4 left-4 z-30 pointer-events-none">
-                  <div className="bg-black/60 backdrop-blur-md border border-white/20 p-2 rounded">
-                    <div className="text-[8px] text-white/60 mb-1 text-center">Preview</div>
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 border border-white/20">
-                      <img
-                        src={croppingImage}
-                        alt="Preview"
-                        className="w-full h-full object-contain max-w-none"
-                        style={{
-                          transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
-                        }}
-                      />
-                    </div>
+            <div className="mt-auto border-t bg-background/60 p-4 relative z-30">
+              <div className="flex flex-col gap-3">
+                <div className="relative flex items-end gap-2">
+                  <div className="relative flex-1">
+                    <Textarea
+                      ref={promptInputRef}
+                      autoComplete="off"
+                      className="min-h-[48px] resize-none pr-12 text-sm shadow-sm"
+                      // keep the input editable even while agents are running;
+                      // only the send button will remain disabled to prevent duplicate submits
+                      disabled={false}
+                      onChange={e => setPrompt(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          runDemo(prompt);
+                        }
+                      }}
+                      placeholder="Message the agent team..."
+                      value={prompt}
+                    />
+                    <Button
+                      className="absolute right-2 bottom-2 h-8 w-8 rounded-full"
+                      disabled={isRunning || !prompt.trim()}
+                      onClick={() => runDemo(prompt)}
+                      size="icon"
+                    >
+                      {isRunning ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
                 </div>
-              )}
 
-              {/* Circular Mask Overlay */}
-              <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-[320px] aspect-square rounded-full border border-white/40 shadow-[0_0_0_1000px_rgba(0,0,0,0.3)]" />
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setShowBackstory(!showBackstory)}
+                    >
+                      <User className="h-3 w-3" />
+                      {showBackstory ? 'Hide Story' : 'Set Story'}
+                    </button>
+
+                    <button
+                      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-destructive hover:text-destructive/80 transition-colors"
+                      onClick={restartSituation}
+                      title="Restart conversation (keeps backstory)"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Restart
+                    </button>
+                  </div>
+
+                  {showBackstory && (
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Your Persona
+                          </p>
+                        </div>
+                        <AgentCard
+                          name={prompterAgent?.name || ''}
+                          description={prompterAgent?.description || ''}
+                          avatarUrl={prompterAgent?.avatarUrl}
+                          avatarCrop={prompterAgent?.avatarCrop}
+                          dragOverId={dragOverId}
+                          onAvatarUpload={file => handleAvatarUpload(file, 'user')}
+                          onNameChange={name => {
+                            if (prompterAgent) {
+                              updatePrompterAgent({ name });
+                            } else {
+                              setPrompterAgent({
+                                id: 'user-agent',
+                                name,
+                                description: '',
+                                avatarUrl: '',
+                              });
+                            }
+                          }}
+                          onDescriptionChange={description => {
+                            if (prompterAgent) {
+                              updatePrompterAgent({ description });
+                            } else {
+                              setPrompterAgent({
+                                id: 'user-agent',
+                                name: '',
+                                description,
+                              });
+                            }
+                          }}
+                          isUser={true}
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Global Story Context
+                        </p>
+                        <Textarea
+                          autoComplete="off"
+                          className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
+                          disabled={isRunning}
+                          onChange={e => setStory(e.target.value)}
+                          placeholder="Provide global story context or character details for the agents..."
+                          value={story}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="p-6 bg-zinc-950 border-t border-zinc-900 shrink-0">
-            <DialogFooter className="flex items-center gap-2 sm:gap-0 justify-between">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                onClick={() => {
-                  setCroppingImage(null);
-                  setIsGif(false);
+          <aside
+            className={`flex flex-col gap-4 self-stretch overflow-y-auto rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
+              sidebarOpen
+                ? 'w-[300px] opacity-100'
+                : 'w-0 p-0 border-0 opacity-0 pointer-events-none'
+            }`}
+          >
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Agents
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      onClick={addAgent}
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+                      title="Add New Agent"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {agents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                  <p className="text-[11px] text-muted-foreground">
+                    No agents in the team. Import or add one to get started!
+                  </p>
+                </div>
+              ) : (
+                agents.map(agent => (
+                  <AgentCard
+                    key={agent.id}
+                    name={agent.name}
+                    description={agent.description}
+                    avatarUrl={agent.avatarUrl}
+                    avatarCrop={agent.avatarCrop}
+                    dragOverId={dragOverId}
+                    onAvatarUpload={file => handleAvatarUpload(file, agent.id)}
+                    onImport={file => {
+                      if (!file.name.endsWith('.md')) {
+                        toast.error(`File ${file.name} is not a Markdown file.`);
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const content = ev.target?.result as string;
+                        if (!content) return;
+                        const firstHeadingLine = content
+                          .split(/\r?\n/)
+                          .find(line => line.trim().startsWith('#'));
+                        const label = firstHeadingLine
+                          ? firstHeadingLine.replace(/^#+\s*/, '').trim() || agent.id
+                          : agent.id;
+                        updateAgent(agent.id, {
+                          name: label,
+                          description: content.trim(),
+                        });
+                        toast.success(`Agent "${label}" imported successfully!`);
+                      };
+                      reader.readAsText(file);
+                    }}
+                    onExport={() => exportAgent(agent)}
+                    onDelete={() => removeAgent(agent.id)}
+                    onNameChange={name => updateAgent(agent.id, { name })}
+                    onDescriptionChange={description => updateAgent(agent.id, { description })}
+                    isUser={false}
+                  />
+                ))
+              )}
+            </div>
+          </aside>
+        </div>
+
+        <Dialog
+          open={!!croppingImage}
+          onOpenChange={open => {
+            if (!open) {
+              setCroppingImage(null);
+              setCroppingTarget(null);
+              setIsGif(false);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[420px] max-h-[95vh] p-0 overflow-hidden flex flex-col bg-zinc-950 border-zinc-800 shadow-2xl">
+            <DialogHeader className="p-4 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur-md shrink-0">
+              <DialogTitle className="text-sm font-medium text-zinc-100 font-mono tracking-tight uppercase flex items-center gap-2">
+                <DialogDescription className="sr-only">
+                  Crop the selected image for avatar
+                </DialogDescription>
+                {isGif && (
+                  <span className="bg-amber-500/20 text-amber-500 text-[9px] px-1.5 py-0.5 rounded leading-none">
+                    GIF
+                  </span>
+                )}
+                Crop Avatar
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto relative bg-zinc-950 flex justify-center py-8">
+              <div
+                className={cn(
+                  'relative aspect-square w-[400px] h-[400px] shrink-0 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden select-none touch-none',
+                  isHoveringEdge ? 'cursor-nwse-resize' : 'cursor-move'
+                )}
+                onPointerMove={e => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const centerX = rect.left + rect.width / 2;
+                  const centerY = rect.top + rect.height / 2;
+                  const dist = Math.sqrt(
+                    Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
+                  );
+                  setIsHoveringEdge(dist > 145 && dist < 180);
+                }}
+                onWheel={e => {
+                  e.preventDefault();
+                  const zoomSpeed = 0.001;
+                  const newZoom = Math.min(Math.max(crop.zoom - e.deltaY * zoomSpeed, 1), 10);
+                  setCrop(prev => ({ ...prev, zoom: newZoom }));
+                }}
+                onPointerDown={e => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const centerX = rect.left + rect.width / 2;
+                  const centerY = rect.top + rect.height / 2;
+                  const distCenter = Math.sqrt(
+                    Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
+                  );
+
+                  // Zoom mode if grabbing the white edge (160px +/- 15px)
+                  if (distCenter > 145 && distCenter < 180) {
+                    const startDist = distCenter;
+                    const startZoom = crop.zoom;
+                    const onPointerMove = (moveEvent: PointerEvent) => {
+                      const newDist = Math.sqrt(
+                        Math.pow(moveEvent.clientX - centerX, 2) +
+                          Math.pow(moveEvent.clientY - centerY, 2)
+                      );
+                      // Drag away = Circle gets BIGGER = Area covers MORE = Zoom OUT
+                      const ratio = newDist / startDist;
+                      const newZoom = Math.min(Math.max(startZoom / ratio, 1), 10);
+                      setCrop(prev => ({ ...prev, zoom: newZoom }));
+                    };
+                    const onPointerUp = () => {
+                      window.removeEventListener('pointermove', onPointerMove);
+                      window.removeEventListener('pointerup', onPointerUp);
+                    };
+                    window.addEventListener('pointermove', onPointerMove);
+                    window.addEventListener('pointerup', onPointerUp);
+                  } else {
+                    // Pan mode everywhere else
+                    const startX = e.clientX - crop.x;
+                    const startY = e.clientY - crop.y;
+                    const onPointerMove = (moveEvent: PointerEvent) => {
+                      setCrop(prev => ({
+                        ...prev,
+                        x: moveEvent.clientX - startX,
+                        y: moveEvent.clientY - startY,
+                      }));
+                    };
+                    const onPointerUp = () => {
+                      window.removeEventListener('pointermove', onPointerMove);
+                      window.removeEventListener('pointerup', onPointerUp);
+                    };
+                    window.addEventListener('pointermove', onPointerMove);
+                    window.addEventListener('pointerup', onPointerUp);
+                  }
                 }}
               >
-                Cancel
-              </Button>
-              <div className="flex items-center gap-2">
-                {isGif && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
-                    onClick={applyGifImmediately}
-                  >
-                    Skip Crop
-                  </Button>
+                {/* Main cropper image (restored) */}
+                {croppingImage && (
+                  <img
+                    src={croppingImage}
+                    alt="Crop preview"
+                    className="w-full h-full object-contain max-w-none pointer-events-none"
+                    style={{
+                      transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
+                    }}
+                  />
                 )}
-                <Button
-                  size="sm"
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4"
-                  onClick={handleApplyCrop}
-                >
-                  {isGif ? 'Apply Animated Crop' : 'Apply Crop'}
-                </Button>
+
+                {/* Zoom Indicator Badge */}
+                <div className="absolute top-4 right-4 z-30 pointer-events-none">
+                  <div className="bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-mono text-white/80 shadow-xl">
+                    {Math.round(crop.zoom * 100)}%
+                  </div>
+                </div>
+
+                {/* Live Avatar Preview */}
+                {croppingImage && (
+                  <div className="absolute top-4 left-4 z-30 pointer-events-none">
+                    <div className="bg-black/60 backdrop-blur-md border border-white/20 p-2 rounded">
+                      <div className="text-[8px] text-white/60 mb-1 text-center">Preview</div>
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 border border-white/20">
+                        <img
+                          src={croppingImage}
+                          alt="Preview"
+                          className="w-full h-full object-contain max-w-none"
+                          style={{
+                            transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Circular Mask Overlay */}
+                <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-[320px] aspect-square rounded-full border border-white/40 shadow-[0_0_0_1000px_rgba(0,0,0,0.3)]" />
+                  </div>
+                </div>
               </div>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  </ContentLayout>
+            </div>
+
+            <div className="p-6 bg-zinc-950 border-t border-zinc-900 shrink-0">
+              <DialogFooter className="flex items-center gap-2 sm:gap-0 justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                  onClick={() => {
+                    setCroppingImage(null);
+                    setIsGif(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <div className="flex items-center gap-2">
+                  {isGif && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
+                      onClick={applyGifImmediately}
+                    >
+                      Skip Crop
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4"
+                    onClick={handleApplyCrop}
+                  >
+                    {isGif ? 'Apply Animated Crop' : 'Apply Crop'}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </ContentLayout>
   );
 }
 
