@@ -43,6 +43,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { AgentCard } from '@/components/agent-card';
+import { ContentLayout } from '@/components/admin-panel/content-layout';
 
 type AgentId = string;
 
@@ -761,8 +762,9 @@ export default function AgentsPage() {
   const stickyRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <ContentLayout title="Agents">
+      <div className="flex h-full flex-col gap-6 p-6">
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-3"></div>
         </div>
@@ -1434,6 +1436,7 @@ export default function AgentsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  </ContentLayout>
   );
 }
 
