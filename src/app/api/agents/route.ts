@@ -77,6 +77,13 @@ export type AgentsRequest = {
    */
   history?: OrchestratedMessage[];
   /**
+   * Prompter mode controls how the user's input should be interpreted by agents.
+   * - "tell": the prompter is speaking (dialogue)
+   * - "do": the prompter is describing actions
+   * - "think": expand the sentence into a detailed story
+   */
+  prompterMode?: 'tell' | 'do' | 'think';
+  /**
    * Orchestration mode for this run. "auto" lets the server decide
    * (default). "sequential" forces turn-taking; "parallel" runs
    * all agents independently.
@@ -212,6 +219,8 @@ async function callProvider(
     providerName: string;
     story?: string;
     prompterAgent?: Agent;
+    /** Controls how the prompter's input is interpreted by the model */
+    prompterMode?: 'tell' | 'do' | 'think';
     /** running transcript so the agent can see prior user/agent messages */
     history?: OrchestratedMessage[];
     /** allow caller to override temperature for deterministic replies */
@@ -227,6 +236,7 @@ async function callProvider(
     providerName,
     story,
     prompterAgent,
+    prompterMode,
     history,
     temperature,
     interactionMode,
@@ -238,6 +248,21 @@ async function callProvider(
   if (story) context += `The global story context is: ${story}. `;
   if (prompterAgent)
     context += `The user is playing the role of ${prompterAgent.name}: ${prompterAgent.description}. `;
+
+  // Apply mode-specific guidance derived from `prompterMode` (tell | do | think)
+  let prompterModeNote = '';
+  if (prompterMode === 'tell') {
+    prompterModeNote =
+      "Treat the user input as the prompter speaking in-character (dialogue). Interpret first-person lines as the prompter's voice and respond accordingly.";
+  } else if (prompterMode === 'do') {
+    prompterModeNote =
+      'Treat the user input as a description of actions. Focus replies on concrete steps, execution details, and expected outcomes.';
+  } else if (prompterMode === 'think') {
+    prompterModeNote =
+      'Treat the user input as a seed sentence to expand into a detailed, vivid narrative. When appropriate, expand the sentence into a short scene with sensory detail and internal thoughts.';
+  }
+
+  if (prompterModeNote) context += `${prompterModeNote} `;
 
   // Stronger persona enforcement so agents reliably "stay in character"
   let personaModeNote = '';
@@ -384,6 +409,7 @@ async function callOpenCodeForAgent(
   modelOverride?: string,
   story?: string,
   prompterAgent?: Agent,
+  prompterMode?: 'tell' | 'do' | 'think',
   zenApiKeyOverride?: string,
   history?: OrchestratedMessage[],
   temperature?: number,
@@ -409,6 +435,7 @@ async function callOpenCodeForAgent(
     providerName: 'Zen',
     story,
     prompterAgent,
+    prompterMode,
     history,
     temperature,
     interactionMode,
@@ -421,6 +448,7 @@ async function callGoogleAIForAgent(
   modelOverride?: string,
   story?: string,
   prompterAgent?: Agent,
+  prompterMode?: 'tell' | 'do' | 'think',
   googleApiKeyOverride?: string,
   history?: OrchestratedMessage[],
   temperature?: number,
@@ -446,6 +474,7 @@ async function callGoogleAIForAgent(
     providerName: 'Google Gemini',
     story,
     prompterAgent,
+    prompterMode,
     history,
     temperature,
     interactionMode,
@@ -458,6 +487,7 @@ async function callHuggingFaceForAgent(
   modelOverride?: string,
   story?: string,
   prompterAgent?: Agent,
+  prompterMode?: 'tell' | 'do' | 'think',
   hfApiKeyOverride?: string,
   history?: OrchestratedMessage[],
   temperature?: number,
@@ -479,6 +509,7 @@ async function callHuggingFaceForAgent(
     providerName: 'Hugging Face',
     story,
     prompterAgent,
+    prompterMode,
     history,
     temperature,
     interactionMode,
@@ -524,10 +555,12 @@ function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
 async function buildModelTranscript(
   prompt: string,
   agents: Agent[],
-  apiKeys: { zenApiKey?: string; googleApiKey?: string; hfApiKey?: string },
+  apiKeys: { zenApiKey?: string; googleApiKey?: string; hfApiKey?: string; nvidiaApiKey?: string },
   modelOverride?: string,
   story?: string,
   prompterAgent?: Agent,
+  // Prompter mode (tell | do | think) — influences how models interpret the user's input
+  prompterMode?: 'tell' | 'do' | 'think',
   // Optional initial conversation history provided by the client.
   initialHistory?: OrchestratedMessage[],
   orchestration: 'sequential' | 'parallel' = 'sequential',
@@ -622,6 +655,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.googleApiKey,
               undefined,
               0.3,
@@ -634,6 +668,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.hfApiKey,
               undefined,
               0.3,
@@ -645,6 +680,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.zenApiKey,
               undefined,
               0.3,
@@ -730,6 +766,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.googleApiKey,
               messages,
               0.3,
@@ -742,6 +779,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.hfApiKey,
               messages,
               0.3,
@@ -753,6 +791,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.zenApiKey,
               messages,
               0.3,
@@ -817,6 +856,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.googleApiKey,
               messages,
               0.3,
@@ -829,6 +869,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.hfApiKey,
               messages,
               0.3,
@@ -840,6 +881,7 @@ async function buildModelTranscript(
               modelOverride,
               story,
               prompterAgent,
+              prompterMode,
               apiKeys.zenApiKey,
               messages,
               0.3,
@@ -1087,6 +1129,10 @@ export async function POST(req: NextRequest) {
       typeof (body as any).googleApiKey === 'string' && (body as any).googleApiKey.trim()
         ? (body as any).googleApiKey.trim()
         : undefined;
+    const nvidiaApiKeyOverride =
+      typeof (body as any).nvidiaApiKey === 'string' && (body as any).nvidiaApiKey.trim()
+        ? (body as any).nvidiaApiKey.trim()
+        : undefined;
     const hfApiKeyOverride =
       typeof (body as any).hfApiKey === 'string' && (body as any).hfApiKey.trim()
         ? (body as any).hfApiKey.trim()
@@ -1148,13 +1194,14 @@ export async function POST(req: NextRequest) {
       (googleApiKeyOverride || process.env.GOOGLE_GENERATIVE_AI_API_KEY) &&
         (modelOverride || googleModelFromEnv || true) // Fallback to a default if not set
     );
+    const hasNvidiaConfig = Boolean(nvidiaApiKeyOverride || process.env.NVIDIA_API_KEY);
     const hasHFConfig = Boolean(hfApiKeyOverride || process.env.HUGGINGFACE_API_KEY);
 
     let messages: OrchestratedMessage[];
     let mode: AgentsResponse['mode'] = 'demo';
     let error: string | undefined;
 
-    if (!hasZenConfig && !hasGoogleConfig && !hasHFConfig) {
+    if (!hasZenConfig && !hasGoogleConfig && !hasNvidiaConfig && !hasHFConfig) {
       messages = buildDemoTranscript(prompt);
     } else {
       try {
@@ -1164,11 +1211,13 @@ export async function POST(req: NextRequest) {
           {
             zenApiKey: zenApiKeyOverride,
             googleApiKey: googleApiKeyOverride,
+            nvidiaApiKey: nvidiaApiKeyOverride,
             hfApiKey: hfApiKeyOverride,
           },
           modelOverride,
           story,
           body.prompterAgent,
+          body.prompterMode as any,
           // pass client-side conversation history unless stateless
           Array.isArray((body as any).history) && !(body as any).stateless
             ? (body as any).history

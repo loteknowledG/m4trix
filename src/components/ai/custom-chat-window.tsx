@@ -1,6 +1,13 @@
 import React, { useRef, useEffect } from 'react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { User as UserIcon } from 'lucide-react';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from '@/components/ui/select';
 
 export interface CustomChatMessage {
   id: string;
@@ -16,6 +23,12 @@ interface CustomChatWindowProps {
   onInputChange: (v: string) => void;
   onSend: () => void;
   disabled?: boolean;
+  // Optional icon to use for the send button (renders an icon button when provided)
+  sendIcon?: React.ReactNode;
+  sendIconAriaLabel?: string;
+  // Optional compact prompter-mode selector (no visible label) rendered above the send control
+  prompterMode?: 'tell' | 'do' | 'think';
+  onPrompterModeChange?: (v: 'tell' | 'do' | 'think') => void;
 }
 
 export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
@@ -24,6 +37,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   onInputChange,
   onSend,
   disabled,
+  sendIcon,
+  sendIconAriaLabel,
+  prompterMode,
+  onPrompterModeChange,
 }) => {
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -128,13 +145,44 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
             disabled={disabled}
             placeholder="Type your message..."
           />
-          <button
-            className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
-            onClick={onSend}
-            disabled={disabled || !input.trim()}
-          >
-            Send
-          </button>
+
+          {/* right-side compact controls: small prompter-mode selector above send */}
+          <div className="flex flex-col items-end gap-2">
+            {prompterMode !== undefined && onPrompterModeChange && (
+              <Select
+                value={prompterMode}
+                onValueChange={(v: string) => onPrompterModeChange(v as 'tell' | 'do' | 'think')}
+              >
+                <SelectTrigger aria-label="Prompter mode" className="h-7 w-20 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tell">Tell</SelectItem>
+                  <SelectItem value="do">Do</SelectItem>
+                  <SelectItem value="think">Think</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {sendIcon ? (
+              <button
+                className="rounded-md bg-primary text-primary-foreground p-2 disabled:opacity-50"
+                onClick={onSend}
+                disabled={disabled || !input.trim()}
+                aria-label={sendIconAriaLabel ?? 'Send message'}
+              >
+                {sendIcon}
+              </button>
+            ) : (
+              <button
+                className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
+                onClick={onSend}
+                disabled={disabled || !input.trim()}
+              >
+                Send
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

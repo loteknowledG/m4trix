@@ -22,6 +22,7 @@ import {
   Loader2,
   Plus,
   Send,
+  Plug,
   Trash2,
   User,
 } from 'lucide-react';
@@ -85,7 +86,7 @@ type AgentsResponse = {
 type ModelOption = {
   id: string;
   label: string;
-  provider: 'zen' | 'google' | 'huggingface';
+  provider: 'zen' | 'google' | 'huggingface' | 'nvidia';
 };
 
 const AGENTS: Agent[] = [
@@ -120,7 +121,9 @@ export default function AgentsPage() {
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [model, setModel] = useState<string>('');
   const [story, setStory] = useState('');
-  const [activeProvider, setActiveProvider] = useState<'zen' | 'google' | 'huggingface'>('zen');
+  const [activeProvider, setActiveProvider] = useState<'zen' | 'google' | 'huggingface' | 'nvidia'>(
+    'zen'
+  );
 
   // sidebar & persona refs to ensure user can scroll/focus the Global Story textarea
   const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
@@ -133,14 +136,34 @@ export default function AgentsPage() {
   );
   const [googleApiKey, setGoogleApiKey] = useState('');
   const [hfApiKey, setHfApiKey] = useState('');
+  const [nvidiaApiKey, setNvidiaApiKey] = useState('');
   const [zenConnected, setZenConnected] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [hfConnected, setHfConnected] = useState(false);
+  const [nvidiaConnected, setNvidiaConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // UX helpers: encode required order via disabled states
+  const hasKeyForActiveProvider = (
+    (activeProvider === 'zen' ? zenApiKey : activeProvider === 'google' ? googleApiKey : activeProvider === 'nvidia' ? nvidiaApiKey : hfApiKey) || ''
+  ).trim().length > 0;
+  const anyConnected = zenConnected || googleConnected || hfConnected || nvidiaConnected;
+  // true when the currently selected provider is already connected — used to lock row 2
+  const activeProviderConnected =
+    activeProvider === 'zen'
+      ? zenConnected
+      : activeProvider === 'google'
+      ? googleConnected
+      : activeProvider === 'nvidia'
+      ? nvidiaConnected
+      : hfConnected;
+
   const [showBackstory, setShowBackstory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [prompterAgent, setPrompterAgent] = useState<Agent | null>(null);
+  // Prompter mode controls how the prompter should frame user input for agents
+  const [prompterMode, setPrompterMode] = useState<'tell' | 'do' | 'think'>('tell');
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [isHoveringEdge, setIsHoveringEdge] = useState(false);
   const [customModelId, setCustomModelId] = useState('');
@@ -159,10 +182,12 @@ export default function AgentsPage() {
     const storedZen = window.sessionStorage.getItem('ZEN_API_KEY_SESSION');
     const storedGoogle = window.sessionStorage.getItem('GOOGLE_API_KEY_SESSION');
     const storedHf = window.sessionStorage.getItem('HF_API_KEY_SESSION');
+    const storedNvidia = window.sessionStorage.getItem('NVIDIA_API_KEY_SESSION');
     const storedProvider = window.sessionStorage.getItem('ACTIVE_PROVIDER_SESSION') as
       | 'zen'
       | 'google'
       | 'huggingface'
+      | 'nvidia'
       | null;
 
     // Restore previously selected model (if any) before fetching provider models
@@ -180,6 +205,10 @@ export default function AgentsPage() {
     if (storedHf) {
       setHfApiKey(storedHf);
       validateAndFetchModels('huggingface', storedHf);
+    }
+    if (storedNvidia) {
+      setNvidiaApiKey(storedNvidia);
+      validateAndFetchModels('nvidia', storedNvidia);
     }
     if (storedProvider) setActiveProvider(storedProvider);
 
@@ -210,6 +239,10 @@ export default function AgentsPage() {
         }
       }
       if (prompterVal) setPrompterAgent(prompterVal);
+
+      // restore persisted prompter mode (tell | do | think)
+      const prompterModeVal = await idbGet('PLAYGROUND_PROMPTER_MODE');
+      if (prompterModeVal) setPrompterMode(prompterModeVal as 'tell' | 'do' | 'think');
 
       let storyVal = await idbGet('PLAYGROUND_STORY');
       if (!storyVal && typeof window !== 'undefined') {
@@ -250,8 +283,10 @@ export default function AgentsPage() {
         await idbSet('PLAYGROUND_PROMPTER', null);
       }
       await idbSet('PLAYGROUND_STORY', story);
+      // persist prompter UI mode
+      await idbSet('PLAYGROUND_PROMPTER_MODE', prompterMode);
     })();
-  }, [agents, prompterAgent, story]);
+  }, [agents, prompterAgent, story, prompterMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -270,6 +305,11 @@ export default function AgentsPage() {
     } else {
       window.sessionStorage.removeItem('HF_API_KEY_SESSION');
     }
+    if (nvidiaApiKey) {
+      window.sessionStorage.setItem('NVIDIA_API_KEY_SESSION', nvidiaApiKey);
+    } else {
+      window.sessionStorage.removeItem('NVIDIA_API_KEY_SESSION');
+    }
 
     if (model) {
       window.sessionStorage.setItem('ACTIVE_MODEL_SESSION', model);
@@ -278,7 +318,7 @@ export default function AgentsPage() {
     }
 
     window.sessionStorage.setItem('ACTIVE_PROVIDER_SESSION', activeProvider);
-  }, [zenApiKey, googleApiKey, hfApiKey, activeProvider, model]);
+  }, [zenApiKey, googleApiKey, hfApiKey, nvidiaApiKey, activeProvider, model]);
 
   const agentsById = useMemo(() => {
     return agents.reduce<Record<AgentId, Agent>>((acc, agent) => {
@@ -476,9 +516,10 @@ export default function AgentsPage() {
     const offsetX = (UI_WORKSPACE - displayWidth) / 2;
     const offsetY = (UI_WORKSPACE - displayHeight) / 2;
 
-    // The crop circle in UI coordinates
-    const cropCenterX = UI_WORKSPACE / 2 - crop.x;
-    const cropCenterY = UI_WORKSPACE / 2 - crop.y - 20; // -20px vertical offset (move up)
+    // The crop circle in UI coordinates (account for CSS transform: translate(...) scale(...))
+    // translate() is applied before scale(), so the visual translation is scaled by crop.zoom.
+    const cropCenterX = UI_WORKSPACE / 2 - crop.x * crop.zoom;
+    const cropCenterY = UI_WORKSPACE / 2 - crop.y * crop.zoom - 20; // -20px vertical offset (move up)
     const cropRadius = UI_CROP_CIRCLE / 2 / crop.zoom;
 
     // The source box in the original image
@@ -596,7 +637,7 @@ export default function AgentsPage() {
   };
 
   const validateAndFetchModels = async (
-    provider: 'zen' | 'google' | 'huggingface',
+    provider: 'zen' | 'google' | 'huggingface' | 'nvidia',
     keyToUse: string
   ) => {
     const trimmedKey = keyToUse.trim();
@@ -610,6 +651,8 @@ export default function AgentsPage() {
         headers['x-zen-api-key'] = trimmedKey;
       } else if (provider === 'google') {
         headers['x-google-api-key'] = trimmedKey;
+      } else if (provider === 'nvidia') {
+        headers['x-nvidia-api-key'] = trimmedKey;
       } else {
         headers['x-hf-api-key'] = trimmedKey;
       }
@@ -633,23 +676,24 @@ export default function AgentsPage() {
         ? payload.models
         : [];
 
-      const options: (ModelOption & { provider: 'zen' | 'google' | 'huggingface' })[] = rawModels
-        .map((m: any) => {
-          const id =
-            (typeof m?.id === 'string' && m.id) ||
-            (typeof m?.model_id === 'string' && m.model_id) ||
-            (typeof m?.name === 'string' && m.name);
+      const options: (ModelOption & { provider: 'zen' | 'google' | 'huggingface' | 'nvidia' })[] =
+        rawModels
+          .map((m: any) => {
+            const id =
+              (typeof m?.id === 'string' && m.id) ||
+              (typeof m?.model_id === 'string' && m.model_id) ||
+              (typeof m?.name === 'string' && m.name);
 
-          if (!id) return null;
+            if (!id) return null;
 
-          const label =
-            (typeof m?.display_name === 'string' && m.display_name) ||
-            (typeof m?.name === 'string' && m.name) ||
-            id;
+            const label =
+              (typeof m?.display_name === 'string' && m.display_name) ||
+              (typeof m?.name === 'string' && m.name) ||
+              id;
 
-          return { id, label, provider };
-        })
-        .filter((m: any): m is any => Boolean(m));
+            return { id, label, provider };
+          })
+          .filter((m: any): m is any => Boolean(m));
 
       setModelOptions(prev => {
         // Filter out existing models for the same provider to avoid duplicates
@@ -658,18 +702,44 @@ export default function AgentsPage() {
         return combined;
       });
 
-      if (options.length && !model) {
+      // Auto-select the first returned model when:
+      // - no model is selected yet, OR
+      // - the user was actively connecting the same provider (quick UX win)
+      if (options.length && (!model || activeProvider === provider)) {
         setModel(options[0]!.id);
       }
 
       if (provider === 'zen') setZenConnected(true);
       else if (provider === 'google') setGoogleConnected(true);
+      else if (provider === 'nvidia') setNvidiaConnected(true);
       else setHfConnected(true);
+
+      // show clear toast feedback so users know the provider connected and how many models returned
+      const providerLabel =
+        provider === 'zen'
+          ? 'OpenCode'
+          : provider === 'google'
+          ? 'Google Gemini'
+          : provider === 'nvidia'
+          ? 'NVIDIA'
+          : 'Hugging Face';
+
+      if (options.length) {
+        toast.success(
+          `${providerLabel} connected — ${options.length} model${
+            options.length > 1 ? 's' : ''
+          } loaded`
+        );
+      } else {
+        toast.success(`${providerLabel} connected — no models returned`);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : `Failed to validate ${provider} API key.`;
       setConnectionError(msg);
+      toast.error(msg);
       if (provider === 'zen') setZenConnected(false);
       else if (provider === 'google') setGoogleConnected(false);
+      else if (provider === 'nvidia') setNvidiaConnected(false);
       else setHfConnected(false);
     } finally {
       setIsConnecting(false);
@@ -681,7 +751,13 @@ export default function AgentsPage() {
       event.preventDefault();
     }
     const key =
-      activeProvider === 'zen' ? zenApiKey : activeProvider === 'google' ? googleApiKey : hfApiKey;
+      activeProvider === 'zen'
+        ? zenApiKey
+        : activeProvider === 'google'
+        ? googleApiKey
+        : activeProvider === 'nvidia'
+        ? nvidiaApiKey
+        : hfApiKey;
     await validateAndFetchModels(activeProvider, key);
   };
 
@@ -754,12 +830,14 @@ export default function AgentsPage() {
           })),
           story,
           prompterAgent,
-          orchestration,
-          interactionMode,
+          prompterMode,
+          orchestration: 'auto',
+          interactionMode: 'neutral',
           // attach client-side conversation so agents remember prior turns
           history: historyForApi,
           zenApiKey: modelProvider === 'zen' ? zenApiKey : undefined,
           googleApiKey: modelProvider === 'google' ? googleApiKey : undefined,
+          nvidiaApiKey: modelProvider === 'nvidia' ? nvidiaApiKey : undefined,
           hfApiKey: modelProvider === 'huggingface' ? hfApiKey : undefined,
         }),
       });
@@ -919,17 +997,17 @@ export default function AgentsPage() {
                       size="icon"
                       className={cn(
                         'ml-2',
-                        zenConnected || googleConnected || hfConnected
+                        zenConnected || googleConnected || hfConnected || nvidiaConnected
                           ? 'text-emerald-400'
                           : 'text-muted-foreground'
                       )}
                       aria-label={
-                        zenConnected || googleConnected || hfConnected
+                        zenConnected || googleConnected || hfConnected || nvidiaConnected
                           ? 'Connections — connected'
                           : 'Connections — disconnected'
                       }
                     >
-                      {zenConnected || googleConnected || hfConnected ? (
+                      {zenConnected || googleConnected || hfConnected || nvidiaConnected ? (
                         <PiPlugsConnectedLight className="h-4 w-4" />
                       ) : (
                         <VscDebugDisconnect className="h-4 w-4" />
@@ -940,7 +1018,9 @@ export default function AgentsPage() {
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>
                 <p>
-                  {zenConnected || googleConnected || hfConnected ? 'Connected' : 'Disconnected'}
+                  {zenConnected || googleConnected || hfConnected || nvidiaConnected
+                    ? 'Connected'
+                    : 'Disconnected'}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -949,54 +1029,294 @@ export default function AgentsPage() {
           <SheetContent side="top" className="max-h-[60vh] overflow-auto">
             <SheetHeader>
               <SheetTitle>Connections</SheetTitle>
-              <SheetDescription>Manage API keys & provider models</SheetDescription>
             </SheetHeader>
 
-            {!zenConnected || !googleConnected || !hfConnected ? (
-              <form className="flex items-center gap-2 mb-4" onSubmit={connectWithKey}>
-                <Select value={activeProvider} onValueChange={(v: any) => setActiveProvider(v)}>
-                  <SelectTrigger className="h-8 w-[120px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {!zenConnected && <SelectItem value="zen">OpenCode</SelectItem>}
-                    {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
-                    {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
-                  </SelectContent>
-                </Select>
+            {!zenConnected || !googleConnected || !hfConnected || !nvidiaConnected ? (
+              <form
+                className="grid gap-3 grid-cols-1 sm:grid-cols-4 mb-4"
+                onSubmit={connectWithKey}
+              >
+                <div className="w-full sm:col-span-1 flex items-center gap-3">
+                  <Select value={activeProvider} onValueChange={(v: any) => setActiveProvider(v)}>
+                    <SelectTrigger className="h-8 w-full sm:w-auto sm:min-w-[120px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!zenConnected && <SelectItem value="zen">OpenCode</SelectItem>}
+                      {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
+                      {!nvidiaConnected && <SelectItem value="nvidia">NVIDIA</SelectItem>}
+                      {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
+                    </SelectContent>
+                  </Select>
 
-                <Input
-                  type="password"
-                  className="h-8 w-[200px] text-xs"
-                  placeholder={`Paste ${
-                    activeProvider === 'zen'
-                      ? 'OpenCode'
-                      : activeProvider === 'google'
-                      ? 'Google'
-                      : 'Hugging Face'
-                  } key`}
-                  value={
-                    activeProvider === 'zen'
-                      ? zenApiKey
-                      : activeProvider === 'google'
-                      ? googleApiKey
-                      : hfApiKey
-                  }
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (activeProvider === 'zen') setZenApiKey(val);
-                    else if (activeProvider === 'google') setGoogleApiKey(val);
-                    else setHfApiKey(val);
-                  }}
-                />
+                  {/* compact badges — visible on sm+ and flush to the right of the provider select */}
+                  {(zenConnected || googleConnected || hfConnected || nvidiaConnected) && (
+                    <div className="hidden sm:inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background/5 text-xs">
+                      {zenConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">OpenCode</span>
+                          <button
+                            onClick={() => {
+                              setZenConnected(false);
+                              setZenApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'zen'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
 
-                <Button disabled={isConnecting} size="sm" type="submit">
-                  {isConnecting ? '...' : 'Connect'}
-                </Button>
+                      {nvidiaConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">NVIDIA</span>
+                          <button
+                            onClick={() => {
+                              setNvidiaConnected(false);
+                              setNvidiaApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'nvidia'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      {googleConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">Gemini</span>
+                          <button
+                            onClick={() => {
+                              setGoogleConnected(false);
+                              setGoogleApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'google'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      {hfConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">HF</span>
+                          <button
+                            onClick={() => {
+                              setHfConnected(false);
+                              setHfApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'huggingface'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {(zenConnected || googleConnected || hfConnected || nvidiaConnected) && (
+                  <div className="w-full sm:col-span-3 sm:col-start-2 sm:row-start-1 flex justify-end sm:hidden">
+                    <div className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background/5 text-xs">
+                      {zenConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">OpenCode</span>
+                          <button
+                            onClick={() => {
+                              setZenConnected(false);
+                              setZenApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'zen'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      {nvidiaConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">NVIDIA</span>
+                          <button
+                            onClick={() => {
+                              setNvidiaConnected(false);
+                              setNvidiaApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'nvidia'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      {googleConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">Gemini</span>
+                          <button
+                            onClick={() => {
+                              setGoogleConnected(false);
+                              setGoogleApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'google'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      {hfConnected && (
+                        <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span className="text-[10px] text-muted-foreground">HF</span>
+                          <button
+                            onClick={() => {
+                              setHfConnected(false);
+                              setHfApiKey('');
+                              setModelOptions(m => m.filter(o => o.provider !== 'huggingface'));
+                            }}
+                            className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="w-full sm:col-span-3 sm:row-start-2 sm:col-start-1 flex items-start gap-3">
+                  <Input
+                    type="password"
+                    disabled={activeProviderConnected}
+                    className="h-8 w-full sm:w-auto sm:min-w-[220px] text-xs"
+                    placeholder={
+                      activeProviderConnected
+                        ? 'Connected'
+                        : `Paste ${
+                            activeProvider === 'zen'
+                              ? 'OpenCode'
+                              : activeProvider === 'google'
+                              ? 'Google'
+                              : activeProvider === 'nvidia'
+                              ? 'NVIDIA'
+                              : 'Hugging Face'
+                          } key`
+                    }
+                    value={
+                      activeProvider === 'zen'
+                        ? zenApiKey
+                        : activeProvider === 'google'
+                        ? googleApiKey
+                        : activeProvider === 'nvidia'
+                        ? nvidiaApiKey
+                        : hfApiKey
+                    }
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (activeProvider === 'zen') setZenApiKey(val);
+                      else if (activeProvider === 'google') setGoogleApiKey(val);
+                      else if (activeProvider === 'nvidia') setNvidiaApiKey(val);
+                      else setHfApiKey(val);
+                    }}
+                  />
+
+                  <Button
+                    disabled={isConnecting || !hasKeyForActiveProvider || activeProviderConnected}
+                    size="sm"
+                    type="submit"
+                    className="h-8 w-8 p-0 inline-flex items-center justify-center"
+                    aria-label="Connect"
+                    title={activeProviderConnected ? 'Provider connected — change provider to edit' : 'Connect'}
+                  >
+                    {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                <div className="w-full sm:col-span-4 sm:row-start-3">
+                  <Select value={model} onValueChange={setModel}>
+                    <SelectTrigger className="h-8 w-full sm:w-auto sm:min-w-[160px] text-xs">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {modelOptions.length ? (
+                        <>
+                          {modelOptions.some(o => o.provider === 'zen') && (
+                            <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+                              OpenCode
+                            </div>
+                          )}
+                          {modelOptions
+                            .filter(o => o.provider === 'zen')
+                            .map(option => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+
+                          {modelOptions.some(o => o.provider === 'google') && (
+                            <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                              Google Gemini
+                            </div>
+                          )}
+                          {modelOptions
+                            .filter(o => o.provider === 'google')
+                            .map(option => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+
+                          {modelOptions.some(o => o.provider === 'nvidia') && (
+                            <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                              NVIDIA
+                            </div>
+                          )}
+                          {modelOptions
+                            .filter(o => o.provider === 'nvidia')
+                            .map(option => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+
+                          {modelOptions.some(o => o.provider === 'huggingface') && (
+                            <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                              Hugging Face
+                            </div>
+                          )}
+                          {modelOptions
+                            .filter(o => o.provider === 'huggingface')
+                            .map(option => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                        </>
+                      ) : (
+                        <SelectItem value="__no-models__" disabled>
+                          No models available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </form>
             ) : null}
 
-            {(zenConnected || googleConnected || hfConnected) && (
+            {(zenConnected || googleConnected || hfConnected || nvidiaConnected) && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
@@ -1017,162 +1337,88 @@ export default function AgentsPage() {
                           }
                         }}
                       />
-                    ) : (
-                      <div className="flex gap-3">
-                        <Select
-                          disabled={isRunning || !modelOptions.length}
-                          onValueChange={setModel}
-                          value={model}
-                        >
-                          <SelectTrigger className="h-8 w-[220px] text-xs">
-                            <SelectValue placeholder="Select model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {modelOptions.length ? (
-                              <>
-                                {modelOptions.some(o => o.provider === 'zen') && (
-                                  <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
-                                    OpenCode
-                                  </div>
-                                )}
-                                {modelOptions
-                                  .filter(o => o.provider === 'zen')
-                                  .map(option => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                {modelOptions.some(o => o.provider === 'google') && (
-                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                                    Google Gemini
-                                  </div>
-                                )}
-                                {modelOptions
-                                  .filter(o => o.provider === 'google')
-                                  .map(option => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                {modelOptions.some(o => o.provider === 'huggingface') && (
-                                  <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                                    Hugging Face
-                                  </div>
-                                )}
-                                {modelOptions
-                                  .filter(o => o.provider === 'huggingface')
-                                  .map(option => (
-                                    <SelectItem key={option.id} value={option.id}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                              </>
-                            ) : (
-                              <SelectItem value="__no-models__" disabled>
-                                No models available
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-
-                        <div className="ml-3">
-                          <Select
-                            value={orchestration}
-                            onValueChange={(v: any) => setOrchestration(v)}
-                          >
-                            <SelectTrigger className="h-8 w-[140px] text-xs">
-                              <SelectValue placeholder="Orchestration" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="auto">Auto</SelectItem>
-                              <SelectItem value="sequential">Sequential</SelectItem>
-                              <SelectItem value="parallel">Parallel</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="ml-2 flex items-center gap-3">
-                          <Select
-                            value={interactionMode}
-                            onValueChange={(v: any) => setInteractionMode(v)}
-                          >
-                            <SelectTrigger className="h-8 w-[140px] text-xs">
-                              <SelectValue placeholder="Interaction" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="neutral">Neutral</SelectItem>
-                              <SelectItem value="cooperative">Cooperative</SelectItem>
-                              <SelectItem value="competitive">Competitive</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
+                    ) : null }
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  {zenConnected && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        OpenCode
-                      </span>
-                      <button
-                        onClick={() => {
-                          setZenConnected(false);
-                          setZenApiKey('');
-                          setModelOptions(m => m.filter(o => o.provider !== 'zen'));
-                        }}
-                        className="text-[10px] text-muted-foreground hover:text-destructive"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
+                {!(
+                  !zenConnected || !googleConnected || !hfConnected || !nvidiaConnected
+                ) && (
+                  <div className="flex items-center gap-3">
+                    {zenConnected && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          OpenCode
+                        </span>
+                        <button
+                          onClick={() => {
+                            setZenConnected(false);
+                            setZenApiKey('');
+                            setModelOptions(m => m.filter(o => o.provider !== 'zen'));
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
 
-                  {googleConnected && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                      <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
-                      <button
-                        onClick={() => {
-                          setGoogleConnected(false);
-                          setGoogleApiKey('');
-                          setModelOptions(m => m.filter(o => o.provider !== 'google'));
-                        }}
-                        className="text-[10px] text-muted-foreground hover:text-destructive"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
+                    {googleConnected && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
+                        <button
+                          onClick={() => {
+                            setGoogleConnected(false);
+                            setGoogleApiKey('');
+                            setModelOptions(m => m.filter(o => o.provider !== 'google'));
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
 
-                  {hfConnected && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                      <span className="text-[11px] font-medium text-muted-foreground">HF</span>
-                      <button
-                        onClick={() => {
-                          setHfConnected(false);
-                          setHfApiKey('');
-                          setModelOptions(m => m.filter(o => o.provider !== 'huggingface'));
-                        }}
-                        className="text-[10px] text-muted-foreground hover:text-destructive"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    {nvidiaConnected && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-[11px] font-medium text-muted-foreground">NVIDIA</span>
+                        <button
+                          onClick={() => {
+                            setNvidiaConnected(false);
+                            setNvidiaApiKey('');
+                            setModelOptions(m => m.filter(o => o.provider !== 'nvidia'));
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+
+                    {hfConnected && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-[11px] font-medium text-muted-foreground">HF</span>
+                        <button
+                          onClick={() => {
+                            setHfConnected(false);
+                            setHfApiKey('');
+                            setModelOptions(m => m.filter(o => o.provider !== 'huggingface'));
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="mt-6 flex justify-end">
-              <SheetClose asChild>
-                <Button variant="ghost">Close</Button>
-              </SheetClose>
-            </div>
           </SheetContent>
         </Sheet>
       }
@@ -1229,6 +1475,9 @@ export default function AgentsPage() {
                 onInputChange={setPrompt}
                 onSend={() => runDemo(prompt)}
                 disabled={isRunning}
+                sendIcon={<Send className="h-4 w-4" />}
+                prompterMode={prompterMode}
+                onPrompterModeChange={v => setPrompterMode(v)}
               />
             </div>
             {error && (
@@ -1619,8 +1868,8 @@ function CropPreviewCanvas({
       const displayHeight = img.height * scaleToFit;
       const offsetX = (UI_WORKSPACE - displayWidth) / 2;
       const offsetY = (UI_WORKSPACE - displayHeight) / 2;
-      const cropCenterX = UI_WORKSPACE / 2 - crop.x;
-      const cropCenterY = UI_WORKSPACE / 2 - crop.y - 20; // -20px vertical offset (move up)
+      const cropCenterX = UI_WORKSPACE / 2 - crop.x * crop.zoom;
+      const cropCenterY = UI_WORKSPACE / 2 - crop.y * crop.zoom - 20; // -20px vertical offset (move up)
       const sourceCenterX = (cropCenterX - offsetX) / scaleToFit;
       const sourceCenterY = (cropCenterY - offsetY) / scaleToFit;
       const sourceSize = UI_CROP_CIRCLE / crop.zoom / scaleToFit;
