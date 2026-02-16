@@ -1,5 +1,6 @@
 'use client';
 import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import {
   ChatWindow,
@@ -505,9 +506,22 @@ export default function AgentsPage() {
     for (let i = 0; i < words.length; i++) {
       current += (i > 0 ? ' ' : '') + words[i];
 
-      setMessages(prev =>
-        prev.map(msg => (msg.id === messageId ? { ...msg, text: current } : msg))
-      );
+      setMessages(prev => {
+        let found = false;
+        const next = prev.map(msg => {
+          if (msg.id === messageId) {
+            found = true;
+            return { ...msg, text: current };
+          }
+          return msg;
+        });
+
+        // If placeholder not present yet, append the streaming message so user sees progress
+        if (!found) {
+          return [...next, { id: messageId, from: 'assistant', text: current }];
+        }
+        return next;
+      });
 
       await new Promise(resolve => setTimeout(resolve, Math.random() * 60 + 20));
     }
@@ -713,23 +727,24 @@ export default function AgentsPage() {
         };
       });
 
-      const userMessages = mapped.filter(m => m.from === 'user');
-      const agentMessages = mapped.filter(m => m.from !== 'user');
+      // Keep server order: map incoming messages and insert placeholders for agents
+      const incomingIds = new Set(mapped.map(m => m.id));
+      const placeholders: ChatMessage[] = mapped.map(m => ({ id: m.id, from: m.from, text: m.from === 'user' ? m.text : '' }));
 
-      // Replace our temporary user message with the official one from the API
-      setMessages(prev => {
-        const incomingUserIds = new Set(userMessages.map(u => u.id));
-        const filtered = prev.filter(m => m.id !== temporaryUserMessageId && !incomingUserIds.has(m.id));
-        return [...filtered, ...userMessages];
+      // Synchronously insert placeholders so subsequent streaming updates target
+      // the placeholders (prevents rewriting older messages during streaming).
+      flushSync(() => {
+        setMessages(prev => {
+          const filteredPrev = prev.filter(m => m.id !== temporaryUserMessageId && !incomingIds.has(m.id));
+          return [...filteredPrev, ...placeholders];
+        });
       });
 
-      for (const agentMessage of agentMessages) {
-        // ensure we don't append duplicates if the transcript already contains this id
-        setMessages(prev => {
-          const filteredPrev = prev.filter(m => m.id !== agentMessage.id);
-          return [...filteredPrev, { ...agentMessage, text: '' }];
-        });
-        await streamMessageText(agentMessage.id, agentMessage.text);
+      // Stream agent messages in the exact order returned by the server
+      for (const msg of mapped) {
+        if (msg.from !== 'user') {
+          await streamMessageText(msg.id, msg.text);
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Something went wrong';
