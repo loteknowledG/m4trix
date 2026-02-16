@@ -121,6 +121,11 @@ export default function AgentsPage() {
   const [model, setModel] = useState<string>('');
   const [story, setStory] = useState('');
   const [activeProvider, setActiveProvider] = useState<'zen' | 'google' | 'huggingface'>('zen');
+
+  // sidebar & persona refs to ensure user can scroll/focus the Global Story textarea
+  const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
+  const personaRef = useRef<HTMLDivElement | null>(null);
+  const storyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [zenApiKey, setZenApiKey] = useState('');
   const [orchestration, setOrchestration] = useState<'auto' | 'sequential' | 'parallel'>('auto');
   const [interactionMode, setInteractionMode] = useState<'neutral' | 'cooperative' | 'competitive'>(
@@ -220,6 +225,20 @@ export default function AgentsPage() {
       hasLoaded.current = true;
     })();
   }, []);
+
+  // if persona/story panel is opened, scroll it into view and focus the textarea
+  useEffect(() => {
+    if (!showBackstory) return;
+    const container = sidebarScrollRef.current;
+    const persona = personaRef.current;
+    const textarea = storyTextareaRef.current;
+    if (container && persona) {
+      const top = persona.offsetTop - 12;
+      container.scrollTo({ top, behavior: 'smooth' });
+    }
+    // focus the textarea after scrolling
+    setTimeout(() => textarea?.focus(), 250);
+  }, [showBackstory]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !hasLoaded.current) return;
@@ -1194,11 +1213,18 @@ export default function AgentsPage() {
           <section className="relative flex flex-1 min-h-0 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
             <div className="flex flex-col flex-1 min-h-0 h-full">
               <CustomChatWindow
-                messages={messages.map(m => ({
-                  id: m.id,
-                  from: m.from === 'user' ? 'user' : 'agent',
-                  text: m.text,
-                }))}
+                messages={messages.map(m => {
+                  const isUser = m.from === 'user';
+                  const avatarUrl = isUser
+                    ? prompterAgent?.avatarUrl
+                    : agentsById[m.from as string]?.avatarUrl;
+                  return {
+                    id: m.id,
+                    from: isUser ? 'user' : 'agent',
+                    text: m.text,
+                    avatarUrl,
+                  };
+                })}
                 input={prompt}
                 onInputChange={setPrompt}
                 onSend={() => runDemo(prompt)}
@@ -1210,103 +1236,20 @@ export default function AgentsPage() {
                 {error}
               </div>
             )}
-
-            <div className="mt-auto border-t bg-background/60 p-4 relative z-30">
-              <div className="flex flex-col gap-3">
-                <div className="relative flex items-end gap-2">
-                  {/* input moved into CustomChatWindow; keep this area for actions/backstory */}
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => setShowBackstory(!showBackstory)}
-                    >
-                      <User className="h-3 w-3" />
-                      {showBackstory ? 'Hide Story' : 'Set Story'}
-                    </button>
-
-                    <button
-                      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-destructive hover:text-destructive/80 transition-colors"
-                      onClick={restartSituation}
-                      title="Restart conversation (keeps backstory)"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Restart
-                    </button>
-                  </div>
-
-                  {showBackstory && (
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Your Persona
-                          </p>
-                        </div>
-                        <AgentCard
-                          name={prompterAgent?.name || ''}
-                          description={prompterAgent?.description || ''}
-                          avatarUrl={prompterAgent?.avatarUrl}
-                          avatarCrop={prompterAgent?.avatarCrop}
-                          dragOverId={dragOverId}
-                          onAvatarUpload={file => handleAvatarUpload(file, 'user')}
-                          onNameChange={name => {
-                            if (prompterAgent) {
-                              updatePrompterAgent({ name });
-                            } else {
-                              setPrompterAgent({
-                                id: 'user-agent',
-                                name,
-                                description: '',
-                                avatarUrl: '',
-                              });
-                            }
-                          }}
-                          onDescriptionChange={description => {
-                            if (prompterAgent) {
-                              updatePrompterAgent({ description });
-                            } else {
-                              setPrompterAgent({
-                                id: 'user-agent',
-                                name: '',
-                                description,
-                              });
-                            }
-                          }}
-                          isUser={true}
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Global Story Context
-                        </p>
-                        <Textarea
-                          autoComplete="off"
-                          className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
-                          disabled={isRunning}
-                          onChange={e => setStory(e.target.value)}
-                          placeholder="Provide global story context or character details for the agents..."
-                          value={story}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </section>
 
           <aside
-            className={`flex flex-col gap-4 self-stretch overflow-y-auto rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
+            style={{ maxHeight: 'calc(100vh - var(--app-header-height, 56px) - 48px)' }}
+            className={`flex flex-col gap-4 self-stretch h-full min-h-0 overflow-hidden rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out ${
               sidebarOpen
                 ? 'w-[300px] opacity-100'
                 : 'w-0 p-0 border-0 opacity-0 pointer-events-none'
             }`}
           >
-            <div className="flex flex-col gap-3">
+            <div
+              ref={sidebarScrollRef}
+              className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
+            >
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1373,6 +1316,92 @@ export default function AgentsPage() {
                   />
                 ))
               )}
+
+              {/* Persona & Story (moved from main area) */}
+              <div ref={personaRef} className="mt-6 border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Persona
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setShowBackstory(!showBackstory)}
+                    >
+                      <User className="h-3 w-3" />
+                      {showBackstory ? 'Hide Story' : 'Set Story'}
+                    </button>
+
+                    <button
+                      className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-destructive hover:text-destructive/80 transition-colors"
+                      onClick={restartSituation}
+                      title="Restart conversation (keeps backstory)"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Restart
+                    </button>
+                  </div>
+                </div>
+
+                {showBackstory && (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Your Persona
+                        </p>
+                      </div>
+                      <AgentCard
+                        name={prompterAgent?.name || ''}
+                        description={prompterAgent?.description || ''}
+                        avatarUrl={prompterAgent?.avatarUrl}
+                        avatarCrop={prompterAgent?.avatarCrop}
+                        dragOverId={dragOverId}
+                        onAvatarUpload={file => handleAvatarUpload(file, 'user')}
+                        onNameChange={name => {
+                          if (prompterAgent) {
+                            updatePrompterAgent({ name });
+                          } else {
+                            setPrompterAgent({
+                              id: 'user-agent',
+                              name,
+                              description: '',
+                              avatarUrl: '',
+                            });
+                          }
+                        }}
+                        onDescriptionChange={description => {
+                          if (prompterAgent) {
+                            updatePrompterAgent({ description });
+                          } else {
+                            setPrompterAgent({
+                              id: 'user-agent',
+                              name: '',
+                              description,
+                            });
+                          }
+                        }}
+                        isUser={true}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Global Story Context
+                      </p>
+                      <Textarea
+                        ref={storyTextareaRef}
+                        autoComplete="off"
+                        className="min-h-[80px] bg-muted/30 text-[11px] placeholder:italic"
+                        disabled={isRunning}
+                        onChange={e => setStory(e.target.value)}
+                        placeholder="Provide global story context or character details for the agents..."
+                        value={story}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </aside>
         </div>

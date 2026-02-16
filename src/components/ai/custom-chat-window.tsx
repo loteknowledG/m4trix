@@ -1,4 +1,6 @@
 import React, { useRef, useEffect } from 'react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { User as UserIcon } from 'lucide-react';
 
 export interface CustomChatMessage {
   id: string;
@@ -68,8 +70,22 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
           messages.map(msg => (
             <div
               key={msg.id}
-              className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex items-end ${
+                msg.from === 'user' ? 'justify-end' : 'justify-start'
+              } gap-3`}
             >
+              {msg.from === 'agent' && (
+                <Avatar className="h-8 w-8 shrink-0 overflow-hidden">
+                  {msg.avatarUrl ? (
+                    <AvatarImage src={msg.avatarUrl} />
+                  ) : (
+                    <AvatarFallback>
+                      <UserIcon className="h-4 w-4" />
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+              )}
+
               <div
                 className={`rounded-xl px-4 py-3 max-w-[70%] shadow text-sm whitespace-pre-line ${
                   msg.from === 'user'
@@ -79,6 +95,18 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               >
                 {msg.text}
               </div>
+
+              {msg.from === 'user' && (
+                <Avatar className="h-8 w-8 shrink-0 overflow-hidden">
+                  {msg.avatarUrl ? (
+                    <AvatarImage src={msg.avatarUrl} />
+                  ) : (
+                    <AvatarFallback>
+                      <UserIcon className="h-4 w-4" />
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+              )}
             </div>
           ))
         )}
