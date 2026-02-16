@@ -145,9 +145,16 @@ export default function AgentsPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   // UX helpers: encode required order via disabled states
-  const hasKeyForActiveProvider = (
-    (activeProvider === 'zen' ? zenApiKey : activeProvider === 'google' ? googleApiKey : activeProvider === 'nvidia' ? nvidiaApiKey : hfApiKey) || ''
-  ).trim().length > 0;
+  const hasKeyForActiveProvider =
+    (
+      (activeProvider === 'zen'
+        ? zenApiKey
+        : activeProvider === 'google'
+        ? googleApiKey
+        : activeProvider === 'nvidia'
+        ? nvidiaApiKey
+        : hfApiKey) || ''
+    ).trim().length > 0;
   const anyConnected = zenConnected || googleConnected || hfConnected || nvidiaConnected;
   // true when the currently selected provider is already connected — used to lock row 2
   const activeProviderConnected =
@@ -1239,9 +1246,17 @@ export default function AgentsPage() {
                     type="submit"
                     className="h-8 w-8 p-0 inline-flex items-center justify-center"
                     aria-label="Connect"
-                    title={activeProviderConnected ? 'Provider connected — change provider to edit' : 'Connect'}
+                    title={
+                      activeProviderConnected
+                        ? 'Provider connected — change provider to edit'
+                        : 'Connect'
+                    }
                   >
-                    {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
+                    {isConnecting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plug className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
 
@@ -1337,13 +1352,11 @@ export default function AgentsPage() {
                           }
                         }}
                       />
-                    ) : null }
+                    ) : null}
                   </div>
                 </div>
 
-                {!(
-                  !zenConnected || !googleConnected || !hfConnected || !nvidiaConnected
-                ) && (
+                {!(!zenConnected || !googleConnected || !hfConnected || !nvidiaConnected) && (
                   <div className="flex items-center gap-3">
                     {zenConnected && (
                       <div className="flex items-center gap-1.5">
@@ -1367,7 +1380,9 @@ export default function AgentsPage() {
                     {googleConnected && (
                       <div className="flex items-center gap-1.5">
                         <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                        <span className="text-[11px] font-medium text-muted-foreground">Gemini</span>
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          Gemini
+                        </span>
                         <button
                           onClick={() => {
                             setGoogleConnected(false);
@@ -1384,7 +1399,9 @@ export default function AgentsPage() {
                     {nvidiaConnected && (
                       <div className="flex items-center gap-1.5">
                         <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                        <span className="text-[11px] font-medium text-muted-foreground">NVIDIA</span>
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          NVIDIA
+                        </span>
                         <button
                           onClick={() => {
                             setNvidiaConnected(false);
@@ -1418,7 +1435,6 @@ export default function AgentsPage() {
                 )}
               </div>
             )}
-
           </SheetContent>
         </Sheet>
       }
@@ -1767,25 +1783,6 @@ export default function AgentsPage() {
                     {Math.round(crop.zoom * 100)}%
                   </div>
                 </div>
-
-                {/* Live Avatar Preview */}
-                {croppingImage && (
-                  <div className="absolute top-4 left-4 z-30 pointer-events-none">
-                    <div className="bg-black/60 backdrop-blur-md border border-white/20 p-2 rounded">
-                      <div className="text-[8px] text-white/60 mb-1 text-center">Preview</div>
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 border border-white/20">
-                        <img
-                          src={croppingImage}
-                          alt="Preview"
-                          className="w-full h-full object-contain max-w-none"
-                          style={{
-                            transform: `translate(${crop.x}px, ${crop.y}px) scale(${crop.zoom})`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Circular Mask Overlay */}
                 <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">

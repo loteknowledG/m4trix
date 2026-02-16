@@ -89,8 +89,10 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                       // The offset in the cropper UI (including -20px vertical offset)
                       // Flip the crop sign so UI drag direction matches final avatar result
                       const offsetX = avatarCrop.x * scale;
-                      const offsetY = (avatarCrop.y - 20) * scale;
-                      const zoom = avatarCrop.zoom;
+                      const offsetY = avatarCrop.y * scale;
+                      // Slightly increase displayed avatar zoom so the final avatar appears closer.
+                      const ZOOM_ADJUST = 1.38; // match message avatar scaling
+                      const zoom = avatarCrop.zoom * ZOOM_ADJUST;
                       return {
                         width: '100%',
                         height: '100%',
