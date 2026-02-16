@@ -731,19 +731,77 @@ export default function AgentsPage() {
       const incomingIds = new Set(mapped.map(m => m.id));
       const placeholders: ChatMessage[] = mapped.map(m => ({ id: m.id, from: m.from, text: m.from === 'user' ? m.text : '' }));
 
-      // Synchronously insert placeholders so subsequent streaming updates target
-      // the placeholders (prevents rewriting older messages during streaming).
+      // Ensure unique client-side IDs for every incoming server message to avoid
+      // accidental id collisions with existing messages or repeated server ids.
+      const prevIds = new Set<string>();
+      // collect existing message ids synchronously
+      // (we'll read them inside setMessages below)
+
+      const serverIdCounts: Record<string, number> = {};
+      const seenClientIds = new Set<string>();
+      const clientIds: string[] = [];
+
+      // create a client id for each mapped entry (avoid collisions with existing prev ids)
+      // note: we will also remove any prev messages that share the same server id
+      // to avoid duplicates from prior runs.
       flushSync(() => {
         setMessages(prev => {
-          const filteredPrev = prev.filter(m => m.id !== temporaryUserMessageId && !incomingIds.has(m.id));
-          return [...filteredPrev, ...placeholders];
+          prev.forEach(m => prevIds.add(m.id));
+
+          // build client ids, preferring to reuse an existing client id if it
+          // already exists in `prev` for the same server id. This avoids creating
+          // duplicate copies of messages that were already rendered.
+          const reuseExisting: boolean[] = [];
+          for (const m of mapped) {
+            const base = m.id;
+            // if a client message with the same id already exists, reuse it
+            if (prevIds.has(base)) {
+              clientIds.push(base);
+              seenClientIds.add(base);
+              reuseExisting.push(true);
+              // ensure serverIdCounts increment so duplicates within mapped get suffixed
+              serverIdCounts[base] = (serverIdCounts[base] || 0) + 1;
+              continue;
+            }
+
+            serverIdCounts[base] = (serverIdCounts[base] || 0) + 1;
+            let candidate = serverIdCounts[base] === 1 ? base : `${base}-${serverIdCounts[base]}`;
+            while (seenClientIds.has(candidate) || prevIds.has(candidate)) {
+              serverIdCounts[base] = serverIdCounts[base] + 1;
+              candidate = `${base}-${serverIdCounts[base]}`;
+            }
+            seenClientIds.add(candidate);
+            clientIds.push(candidate);
+            reuseExisting.push(false);
+          }
+
+          // keep existing messages (don't delete old server ids). only remove the
+          // temporary user placeholder — this prevents earlier messages from being
+          // rewritten when a new server response reuses ids.
+          const filteredPrev = prev.filter(m => m.id !== temporaryUserMessageId);
+
+          // insert placeholders using clientIds (preserves server order). If a
+          // server id was already present in prev (reuseExisting), do NOT add a
+          // new placeholder — we will stream into the existing entry instead.
+          const placeholdersUsingClientIds: ChatMessage[] = mapped
+            .map((m, idx) => ({ m, idx }))
+            .filter(({ idx }) => !reuseExisting[idx])
+            .map(({ m, idx }) => ({
+              id: clientIds[idx],
+              from: m.from,
+              text: m.from === 'user' ? m.text : '',
+            }));
+
+          return [...filteredPrev, ...placeholdersUsingClientIds];
         });
       });
 
-      // Stream agent messages in the exact order returned by the server
-      for (const msg of mapped) {
+      // Stream agent messages in the exact order returned by the server using clientIds
+      for (let i = 0; i < mapped.length; i++) {
+        const msg = mapped[i];
+        const clientId = clientIds[i];
         if (msg.from !== 'user') {
-          await streamMessageText(msg.id, msg.text);
+          await streamMessageText(clientId, msg.text);
         }
       }
     } catch (e) {
