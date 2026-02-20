@@ -1586,7 +1586,7 @@ export default function AgentsPage() {
               <div ref={personaRef} className="mt-6 border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Persona
+                    Prompter
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -1645,6 +1645,10 @@ export default function AgentsPage() {
                               description,
                             });
                           }
+                        }}
+                        onRemove={() => {
+                          setPrompterAgent(null);
+                          toast.success('Persona removed');
                         }}
                         isUser={true}
                       />

@@ -67,9 +67,9 @@ export type AgentsRequest = {
    */
   story?: string;
   /**
-   * Optional agent persona for the prompter.
+   * Optional agent persona for the coordinator (user acting as a role).
    */
-  prompterAgent?: Agent;
+  coordinatorAgent?: Agent;
   /**
    * Optional conversation history (client-side). When provided and
    * `stateless` is false, this will be used to seed the running
@@ -77,12 +77,12 @@ export type AgentsRequest = {
    */
   history?: OrchestratedMessage[];
   /**
-   * Prompter mode controls how the user's input should be interpreted by agents.
-   * - "tell": the prompter is speaking (dialogue)
-   * - "do": the prompter is describing actions
+   * Coordinator mode controls how the user's input should be interpreted by agents.
+   * - "tell": the coordinator is speaking (dialogue)
+   * - "do": the coordinator is describing actions
    * - "think": expand the sentence into a detailed story
    */
-  prompterMode?: 'tell' | 'do' | 'think';
+  coordinatorMode?: 'tell' | 'do' | 'think';
   /**
    * Orchestration mode for this run. "auto" lets the server decide
    * (default). "sequential" forces turn-taking; "parallel" runs
@@ -209,6 +209,17 @@ function decideOrchestrationAuto(prompt: string, agents: Agent[]): 'sequential' 
   return looksLikeAgentToAgentInstruction(prompt, agents) ? 'sequential' : 'parallel';
 }
 
+// configuration for how many history entries we feed back to models when the
+// client requests prior turns.  We slice the shared transcript, not maintain
+// separate queues per agent.
+const HISTORY_LIMIT = 6;
+
+function sliceHistory(fullHistory?: OrchestratedMessage[]): OrchestratedMessage[] | undefined {
+  if (!Array.isArray(fullHistory) || fullHistory.length === 0) return undefined;
+  const start = Math.max(0, fullHistory.length - HISTORY_LIMIT);
+  return fullHistory.slice(start);
+}
+
 async function callProvider(
   prompt: string,
   agent: Agent,
@@ -218,9 +229,9 @@ async function callProvider(
     model: string;
     providerName: string;
     story?: string;
-    prompterAgent?: Agent;
-    /** Controls how the prompter's input is interpreted by the model */
-    prompterMode?: 'tell' | 'do' | 'think';
+    coordinatorAgent?: Agent;
+    /** Controls how the coordinator's input is interpreted by the model */
+    coordinatorMode?: 'tell' | 'do' | 'think';
     /** running transcript so the agent can see prior user/agent messages */
     history?: OrchestratedMessage[];
     /** allow caller to override temperature for deterministic replies */
@@ -235,34 +246,38 @@ async function callProvider(
     model,
     providerName,
     story,
-    prompterAgent,
-    prompterMode,
+    coordinatorAgent,
+    coordinatorMode,
     history,
     temperature,
     interactionMode,
   } = options;
 
+  // note: history trimming is handled by the caller rather than the provider.
+  // the older implementation kept a tiny per-agent queue; we now simply slice
+  // the most recent messages from the shared transcript before sending them.
+
   const systemPromptBase = `You are ${agent.name}. ${agent.description}`.trim();
 
   let context = '';
   if (story) context += `The global story context is: ${story}. `;
-  if (prompterAgent)
-    context += `The user is playing the role of ${prompterAgent.name}: ${prompterAgent.description}. `;
+  if (coordinatorAgent)
+    context += `The user is playing the role of ${coordinatorAgent.name}: ${coordinatorAgent.description}. `;
 
-  // Apply mode-specific guidance derived from `prompterMode` (tell | do | think)
-  let prompterModeNote = '';
-  if (prompterMode === 'tell') {
-    prompterModeNote =
-      "Treat the user input as the prompter speaking in-character (dialogue). Interpret first-person lines as the prompter's voice and respond accordingly.";
-  } else if (prompterMode === 'do') {
-    prompterModeNote =
+  // Apply mode-specific guidance derived from `coordinatorMode` (tell | do | think)
+  let coordinatorModeNote = '';
+  if (coordinatorMode === 'tell') {
+    coordinatorModeNote =
+      "Treat the user input as the coordinator speaking in-character (dialogue). Interpret first-person lines as the coordinator's voice and respond accordingly.";
+  } else if (coordinatorMode === 'do') {
+    coordinatorModeNote =
       'Treat the user input as a description of actions. Focus replies on concrete steps, execution details, and expected outcomes.';
-  } else if (prompterMode === 'think') {
-    prompterModeNote =
+  } else if (coordinatorMode === 'think') {
+    coordinatorModeNote =
       'Treat the user input as a seed sentence to expand into a detailed, vivid narrative. When appropriate, expand the sentence into a short scene with sensory detail and internal thoughts.';
   }
 
-  if (prompterModeNote) context += `${prompterModeNote} `;
+  if (coordinatorModeNote) context += `${coordinatorModeNote} `;
 
   // Stronger persona enforcement so agents reliably "stay in character"
   let personaModeNote = '';
@@ -370,7 +385,7 @@ async function callProvider(
   // Sanitization: ensure agents do NOT impersonate the prompter/user
   try {
     const prompterName =
-      prompterAgent && typeof prompterAgent.name === 'string' ? prompterAgent.name.trim() : '';
+      coordinatorAgent && typeof coordinatorAgent.name === 'string' ? coordinatorAgent.name.trim() : '';
     if (prompterName) {
       const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
       const namePattern = escapeRegExp(prompterName);
@@ -408,8 +423,8 @@ async function callOpenCodeForAgent(
   agent: Agent,
   modelOverride?: string,
   story?: string,
-  prompterAgent?: Agent,
-  prompterMode?: 'tell' | 'do' | 'think',
+  coordinatorAgent?: Agent,
+  coordinatorMode?: 'tell' | 'do' | 'think',
   zenApiKeyOverride?: string,
   history?: OrchestratedMessage[],
   temperature?: number,
@@ -434,8 +449,8 @@ async function callOpenCodeForAgent(
     model: zenModelToUse!,
     providerName: 'Zen',
     story,
-    prompterAgent,
-    prompterMode,
+    coordinatorAgent,
+    coordinatorMode,
     history,
     temperature,
     interactionMode,
@@ -447,8 +462,8 @@ async function callGoogleAIForAgent(
   agent: Agent,
   modelOverride?: string,
   story?: string,
-  prompterAgent?: Agent,
-  prompterMode?: 'tell' | 'do' | 'think',
+  coordinatorAgent?: Agent,
+  coordinatorMode?: 'tell' | 'do' | 'think',
   googleApiKeyOverride?: string,
   history?: OrchestratedMessage[],
   temperature?: number,
@@ -473,8 +488,8 @@ async function callGoogleAIForAgent(
     model: googleModelToUse!,
     providerName: 'Google Gemini',
     story,
-    prompterAgent,
-    prompterMode,
+    coordinatorAgent,
+    coordinatorMode,
     history,
     temperature,
     interactionMode,
@@ -486,8 +501,8 @@ async function callHuggingFaceForAgent(
   agent: Agent,
   modelOverride?: string,
   story?: string,
-  prompterAgent?: Agent,
-  prompterMode?: 'tell' | 'do' | 'think',
+  coordinatorAgent?: Agent,
+  coordinatorMode?: 'tell' | 'do' | 'think',
   hfApiKeyOverride?: string,
   history?: OrchestratedMessage[],
   temperature?: number,
@@ -508,8 +523,8 @@ async function callHuggingFaceForAgent(
     model: hfModelToUse,
     providerName: 'Hugging Face',
     story,
-    prompterAgent,
-    prompterMode,
+    coordinatorAgent,
+    coordinatorMode,
     history,
     temperature,
     interactionMode,
@@ -558,9 +573,9 @@ async function buildModelTranscript(
   apiKeys: { zenApiKey?: string; googleApiKey?: string; hfApiKey?: string; nvidiaApiKey?: string },
   modelOverride?: string,
   story?: string,
-  prompterAgent?: Agent,
+  coordinatorAgent?: Agent,
   // Prompter mode (tell | do | think) — influences how models interpret the user's input
-  prompterMode?: 'tell' | 'do' | 'think',
+  coordinatorMode?: 'tell' | 'do' | 'think',
   // Optional initial conversation history provided by the client.
   initialHistory?: OrchestratedMessage[],
   orchestration: 'sequential' | 'parallel' = 'sequential',
@@ -648,16 +663,20 @@ async function buildModelTranscript(
     // Parallel: call all agents at once; they only see the user's prompt.
     const agentReplies = await Promise.all(
       agents.map(async agent => {
+        // If the client requested history, give every agent the last N
+        // entries of the shared transcript.  No more per-agent queues.
+        const historyForAgent = includeHistory ? sliceHistory(messages) : undefined;
+
         const text = isGoogle
           ? await callGoogleAIForAgent(
               prompt,
               agent,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.googleApiKey,
-              undefined,
+              historyForAgent,
               0.3,
               interactionMode
             )
@@ -667,10 +686,10 @@ async function buildModelTranscript(
               agent,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.hfApiKey,
-              undefined,
+              historyForAgent,
               0.3,
               interactionMode
             )
@@ -679,10 +698,10 @@ async function buildModelTranscript(
               agent,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.zenApiKey,
-              undefined,
+              historyForAgent,
               0.3,
               interactionMode
             );
@@ -706,9 +725,9 @@ async function buildModelTranscript(
             if (!target) {
               // if the mention looks like the prompter name, flag impersonation
               if (
-                prompterAgent &&
-                prompterAgent.name &&
-                prompterAgent.name.toLowerCase().includes(name)
+                coordinatorAgent &&
+                coordinatorAgent.name &&
+                coordinatorAgent.name.toLowerCase().includes(name)
               ) {
                 return { impersonatesPrompter: true, cleaned: after || raw };
               }
@@ -716,8 +735,8 @@ async function buildModelTranscript(
             }
             // disallow speaking as the prompter even if name matches
             if (
-              prompterAgent &&
-              (target.name === prompterAgent.name || target.id === (prompterAgent.id as any))
+              coordinatorAgent &&
+              (target.name === coordinatorAgent.name || target.id === (coordinatorAgent.id as any))
             ) {
               return { impersonatesPrompter: true, cleaned: after || raw };
             }
@@ -765,8 +784,8 @@ async function buildModelTranscript(
               critic,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.googleApiKey,
               messages,
               0.3,
@@ -778,8 +797,8 @@ async function buildModelTranscript(
               critic,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.hfApiKey,
               messages,
               0.3,
@@ -790,8 +809,8 @@ async function buildModelTranscript(
               critic,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.zenApiKey,
               messages,
               0.3,
@@ -817,8 +836,8 @@ async function buildModelTranscript(
               .replace(/^\s*@?[A-Za-z0-9\- ]{2,40}\s*[:\-–—]?\s*/, '')
               .trim();
             if (
-              prompterAgent &&
-              (target.name === prompterAgent.name || target.id === (prompterAgent.id as any))
+              coordinatorAgent &&
+              (target.name === coordinatorAgent.name || target.id === (coordinatorAgent.id as any))
             ) {
               messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text: cleaned });
             } else {
@@ -855,8 +874,8 @@ async function buildModelTranscript(
               summarizer,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.googleApiKey,
               messages,
               0.3,
@@ -868,8 +887,8 @@ async function buildModelTranscript(
               summarizer,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.hfApiKey,
               messages,
               0.3,
@@ -880,8 +899,8 @@ async function buildModelTranscript(
               summarizer,
               modelOverride,
               story,
-              prompterAgent,
-              prompterMode,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.zenApiKey,
               messages,
               0.3,
@@ -903,8 +922,8 @@ async function buildModelTranscript(
               .replace(/^\s*@?[A-Za-z0-9\- ]{2,40}\s*[:\-–—]?\s*/, '')
               .trim();
             if (
-              prompterAgent &&
-              (target.name === prompterAgent.name || target.id === (prompterAgent.id as any))
+              coordinatorAgent &&
+              (target.name === coordinatorAgent.name || target.id === (coordinatorAgent.id as any))
             ) {
               messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text: cleaned });
             } else {
@@ -937,14 +956,17 @@ async function buildModelTranscript(
     // Sequential: each agent sees the running transcript and may reference or
     // instruct earlier agents.
     for (const agent of agents) {
-      const historyArg = includeHistory ? messages : undefined;
+      // sequential runs also honour includeHistory by slicing the transcript
+      // to the most recent entries.  Every agent sees the same slice.
+      const historyArg = includeHistory ? sliceHistory(messages) : undefined;
       const raw = isGoogle
         ? await callGoogleAIForAgent(
             prompt,
             agent,
             modelOverride,
             story,
-            prompterAgent,
+            coordinatorAgent,
+            coordinatorMode,
             apiKeys.googleApiKey,
             historyArg,
             0.3,
@@ -956,7 +978,8 @@ async function buildModelTranscript(
             agent,
             modelOverride,
             story,
-            prompterAgent,
+            coordinatorAgent,
+            coordinatorMode,
             apiKeys.hfApiKey,
             historyArg,
             0.3,
@@ -967,7 +990,8 @@ async function buildModelTranscript(
             agent,
             modelOverride,
             story,
-            prompterAgent,
+            coordinatorAgent,
+            coordinatorMode,
             apiKeys.zenApiKey,
             historyArg,
             0.3,
@@ -991,8 +1015,8 @@ async function buildModelTranscript(
         if (target) {
           // If the agent is speaking as the prompter, treat that line as a user message
           if (
-            prompterAgent &&
-            (target.name === prompterAgent.name || target.id === (prompterAgent.id as any))
+            coordinatorAgent &&
+            (target.name === coordinatorAgent.name || target.id === (coordinatorAgent.id as any))
           ) {
             const userText = messageText.replace(mentionMatch[0], '').trim();
             messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text: userText });
@@ -1025,7 +1049,8 @@ async function buildModelTranscript(
               agent,
               modelOverride,
               story,
-              prompterAgent,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.googleApiKey,
               messages,
               0.25,
@@ -1037,7 +1062,8 @@ async function buildModelTranscript(
               agent,
               modelOverride,
               story,
-              prompterAgent,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.hfApiKey,
               messages,
               0.25,
@@ -1048,7 +1074,8 @@ async function buildModelTranscript(
               agent,
               modelOverride,
               story,
-              prompterAgent,
+              coordinatorAgent,
+              coordinatorMode,
               apiKeys.zenApiKey,
               messages,
               0.25,
@@ -1070,8 +1097,8 @@ async function buildModelTranscript(
           if (
             target &&
             !(
-              prompterAgent &&
-              (target.name === prompterAgent.name || target.id === (prompterAgent.id as any))
+              coordinatorAgent &&
+              (target.name === coordinatorAgent.name || target.id === (coordinatorAgent.id as any))
             )
           ) {
             const cleaned = refinedSanitized
@@ -1216,8 +1243,8 @@ export async function POST(req: NextRequest) {
           },
           modelOverride,
           story,
-          body.prompterAgent,
-          body.prompterMode as any,
+          body.coordinatorAgent,
+          body.coordinatorMode as any,
           // pass client-side conversation history unless stateless
           Array.isArray((body as any).history) && !(body as any).stateless
             ? (body as any).history

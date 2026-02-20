@@ -46,12 +46,31 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
 
+  // background gif state
+  const [bgGifUrl, setBgGifUrl] = React.useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // keep list scrolled to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // apply gif background style if set
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) {
+      if (bgGifUrl) {
+        el.style.backgroundImage = `url(${bgGifUrl})`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundRepeat = 'no-repeat';
+        el.style.backgroundPosition = 'center';
+      } else {
+        el.style.backgroundImage = '';
+      }
+    }
+  }, [bgGifUrl]);
 
   // ensure the message list is height-constrained (parent height - footer height)
   useEffect(() => {
@@ -164,24 +183,50 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               </Select>
             )}
 
-            {sendIcon ? (
+            <div className="flex items-center gap-2">
               <button
                 className="rounded-md bg-primary text-primary-foreground p-2 disabled:opacity-50"
-                onClick={onSend}
-                disabled={disabled || !input.trim()}
-                aria-label={sendIconAriaLabel ?? 'Send message'}
+                onClick={() => fileInputRef.current?.click()}
+                title="Choose background GIF"
+                type="button"
               >
-                {sendIcon}
+                🖼️
               </button>
-            ) : (
-              <button
-                className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
-                onClick={onSend}
-                disabled={disabled || !input.trim()}
-              >
-                Send
-              </button>
-            )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/gif"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const url = URL.createObjectURL(file);
+                    setBgGifUrl(url);
+                  }
+                  // reset
+                  e.target.value = '';
+                }}
+              />
+
+              {sendIcon ? (
+                <button
+                  className="rounded-md bg-primary text-primary-foreground p-2 disabled:opacity-50"
+                  onClick={onSend}
+                  disabled={disabled || !input.trim()}
+                  aria-label={sendIconAriaLabel ?? 'Send message'}
+                >
+                  {sendIcon}
+                </button>
+              ) : (
+                <button
+                  className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
+                  onClick={onSend}
+                  disabled={disabled || !input.trim()}
+                >
+                  Send
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
