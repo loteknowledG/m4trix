@@ -72,7 +72,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             if (file && onAvatarUpload) onAvatarUpload(file);
           }}
         >
-          <Avatar className="h-10 w-10 shrink-0 border transition-all hover:border-primary/50 overflow-hidden relative">
+          <Avatar className="h-8 w-8 shrink-0 border transition-all hover:border-primary/50 relative">
             <AvatarImage
               src={avatarUrl}
               style={
@@ -81,7 +81,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                       // Match the crop/export logic from the cropper (object-fit: contain, -20px offset)
                       const UI_WORKSPACE = 400;
                       const UI_CROP_CIRCLE = 320;
-                      const AVATAR_SIZE = 40; // px, matches .h-10.w-10
+                      const AVATAR_SIZE = 32; // px, matches .h-8.w-8
                       // Assume the avatar image is a square crop of 256x256 exported
                       const EXPORT_SIZE = 256;
                       // The crop circle is mapped to the avatar size

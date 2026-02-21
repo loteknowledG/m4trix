@@ -57,6 +57,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     }
   }, [messages]);
 
+  // Ref for the textarea input
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   // apply gif background style if set
   useEffect(() => {
     const el = scrollRef.current;
@@ -111,7 +114,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               } gap-3`}
             >
               {msg.from === 'agent' && (
-                <Avatar className="h-8 w-8 shrink-0 overflow-hidden">
+                <Avatar noContainer className="h-8 w-8 shrink-0">
                   {msg.avatarUrl ? (
                     <AvatarImage src={msg.avatarUrl} />
                   ) : (
@@ -133,7 +136,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               </div>
 
               {msg.from === 'user' && (
-                <Avatar className="h-8 w-8 shrink-0 overflow-hidden">
+                <Avatar noContainer className="h-8 w-8 shrink-0">
                   {msg.avatarUrl ? (
                     <AvatarImage src={msg.avatarUrl} />
                   ) : (
@@ -151,6 +154,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
       <div ref={footerRef} className="flex-none bg-zinc-950/90 border-t border-zinc-800 p-4">
         <div className="flex gap-2 items-end">
           <textarea
+            ref={textareaRef}
             className="flex-1 resize-none rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-primary/40"
             rows={2}
             value={input}
@@ -159,6 +163,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 onSend();
+                // Refocus the textarea after sending
+                setTimeout(() => {
+                  textareaRef.current?.focus();
+                }, 0);
               }
             }}
             disabled={disabled}
@@ -185,7 +193,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
 
             <div className="flex items-center gap-2">
               <button
-                className="rounded-md bg-primary text-primary-foreground p-2 disabled:opacity-50"
+                className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
                 onClick={() => fileInputRef.current?.click()}
                 title="Choose background GIF"
                 type="button"
