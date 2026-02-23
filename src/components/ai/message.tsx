@@ -35,7 +35,7 @@ export const Message = ({
     {...props}
   >
     {avatarUrl && (
-      <Avatar noContainer className="h-8 w-8 shrink-0">
+      <Avatar className="h-8 w-8 shrink-0">
         <AvatarImage
           src={avatarUrl}
           style={
@@ -83,9 +83,10 @@ export const MessageContent = ({ children, className, ...props }: MessageContent
     className={cn(
       'is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm',
       'group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground',
-      'group-[.is-assistant]:text-foreground',
+      'group-[.is-assistant]:rounded-lg group-[.is-assistant]:bg-muted group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:text-foreground',
       className
     )}
+    style={{ opacity: 0.88 }}
     {...props}
   >
     {children}

@@ -45,6 +45,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
+  // textarea for user input
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // background gif state
   const [bgGifUrl, setBgGifUrl] = React.useState<string | null>(null);
@@ -56,9 +58,6 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  // Ref for the textarea input
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // apply gif background style if set
   useEffect(() => {
@@ -114,7 +113,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               } gap-3`}
             >
               {msg.from === 'agent' && (
-                <Avatar noContainer className="h-8 w-8 shrink-0">
+                <Avatar className="h-8 w-8 shrink-0">
                   {msg.avatarUrl ? (
                     <AvatarImage src={msg.avatarUrl} />
                   ) : (
@@ -128,8 +127,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               <div
                 className={`rounded-xl px-4 py-3 max-w-[70%] shadow text-sm whitespace-pre-line ${
                   msg.from === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-foreground'
+                    ? 'bg-primary/66 text-primary-foreground'
+                    : 'bg-muted/66 text-foreground'
                 }`}
               >
                 {msg.text}

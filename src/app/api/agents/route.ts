@@ -767,7 +767,8 @@ async function buildModelTranscript(
         // message attributed to the prompter/user
         messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text });
       } else {
-        messages.push({ id: `${baseId}-${agent.id}`, from: 'agent', agentId: agent.id, text });
+        // include current messages.length so each agent utterance gets a unique id
+        messages.push({ id: `${baseId}-${agent.id}-${messages.length}`, from: 'agent', agentId: agent.id, text });
       }
     }
 
@@ -842,7 +843,7 @@ async function buildModelTranscript(
               messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text: cleaned });
             } else {
               messages.push({
-                id: `${baseId}-${target.id}-eval`,
+                id: `${baseId}-${target.id}-eval-${messages.length}`,
                 from: 'agent',
                 agentId: target.id,
                 text: cleaned,
@@ -850,7 +851,7 @@ async function buildModelTranscript(
             }
           } else {
             messages.push({
-              id: `${baseId}-${critic.id}-eval`,
+              id: `${baseId}-${critic.id}-eval-${messages.length}`,
               from: 'agent',
               agentId: critic.id,
               text: critSanitized,
@@ -858,7 +859,7 @@ async function buildModelTranscript(
           }
         } else {
           messages.push({
-            id: `${baseId}-${critic.id}-eval`,
+            id: `${baseId}-${critic.id}-eval-${messages.length}`,
             from: 'agent',
             agentId: critic.id,
             text: critSanitized,
@@ -928,7 +929,7 @@ async function buildModelTranscript(
               messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text: cleaned });
             } else {
               messages.push({
-                id: `${baseId}-${target.id}-eval`,
+                id: `${baseId}-${target.id}-eval-${messages.length}`,
                 from: 'agent',
                 agentId: target.id,
                 text: cleaned,
@@ -936,7 +937,7 @@ async function buildModelTranscript(
             }
           } else {
             messages.push({
-              id: `${baseId}-${summarizer.id}-eval`,
+              id: `${baseId}-${summarizer.id}-eval-${messages.length}`,
               from: 'agent',
               agentId: summarizer.id,
               text: sumSanitized,
@@ -944,7 +945,7 @@ async function buildModelTranscript(
           }
         } else {
           messages.push({
-            id: `${baseId}-${summarizer.id}-eval`,
+            id: `${baseId}-${summarizer.id}-eval-${messages.length}`,
             from: 'agent',
             agentId: summarizer.id,
             text: sumSanitized,
@@ -1105,14 +1106,14 @@ async function buildModelTranscript(
               .replace(/^\s*@?[A-Za-z0-9\- ]{2,40}\s*[:\-–—]?\s*/, '')
               .trim();
             messages.push({
-              id: `${baseId}-${target.id}-rev1`,
+              id: `${baseId}-${target.id}-rev1-${messages.length}`,
               from: 'agent',
               agentId: target.id,
               text: cleaned,
             });
           } else {
             messages.push({
-              id: `${baseId}-${agent.id}-rev1`,
+              id: `${baseId}-${agent.id}-rev1-${messages.length}`,
               from: 'agent',
               agentId: agent.id,
               text: refinedSanitized,
@@ -1120,7 +1121,7 @@ async function buildModelTranscript(
           }
         } else {
           messages.push({
-            id: `${baseId}-${agent.id}-rev1`,
+            id: `${baseId}-${agent.id}-rev1-${messages.length}-${messages.length}`,
             from: 'agent',
             agentId: agent.id,
             text: refinedSanitized,
