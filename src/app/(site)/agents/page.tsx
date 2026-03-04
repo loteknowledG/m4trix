@@ -372,39 +372,64 @@ export default function AgentsPage() {
     toast.success('Conversation restarted — backstory preserved');
   };
 
+  const isMarkdownFile = (file: File) => file.name.toLowerCase().endsWith('.md');
+
+  const readTextFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve((e.target?.result as string) || '');
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+      reader.readAsText(file);
+    });
+
+  const parseImportedMarkdown = (content: string, fallbackLabel: string) => {
+    const firstHeadingLine = content.split(/\r?\n/).find(line => line.trim().startsWith('#'));
+    const label = firstHeadingLine
+      ? firstHeadingLine.replace(/^#+\s*/, '').trim() || fallbackLabel
+      : fallbackLabel;
+
+    return {
+      label,
+      description: content.trim(),
+    };
+  };
+
+  const loadImportedMarkdown = async (file: File, fallbackLabel: string) => {
+    if (!isMarkdownFile(file)) {
+      toast.error(`File ${file.name} is not a Markdown file.`);
+      return null;
+    }
+
+    try {
+      const content = await readTextFile(file);
+      if (!content) return null;
+      return parseImportedMarkdown(content, fallbackLabel);
+    } catch {
+      toast.error(`Failed to import ${file.name}.`);
+      return null;
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
     for (const file of Array.from(files)) {
-      if (!file.name.endsWith('.md')) {
-        toast.error(`File ${file.name} is not a Markdown file.`);
-        continue;
-      }
+      const id = file.name.replace(/\.md$/i, '');
+      const imported = await loadImportedMarkdown(file, id);
+      if (!imported) continue;
 
-      const reader = new FileReader();
-      reader.onload = e => {
-        const content = e.target?.result as string;
-        if (!content) return;
-
-        const id = file.name.replace(/\.md$/, '');
-        const firstHeadingLine = content.split(/\r?\n/).find(line => line.trim().startsWith('#'));
-
-        const label = firstHeadingLine ? firstHeadingLine.replace(/^#+\s*/, '').trim() || id : id;
-
-        const newAgent: Agent = {
-          id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name: label,
-          description: content.trim(),
-          avatarUrl: '',
-          badgeVariant: 'outline',
-        };
-
-        setAgents(prev => [...prev, newAgent]);
-
-        toast.success(`Agent "${label}" imported successfully!`);
+      const newAgent: Agent = {
+        id: `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: imported.label,
+        description: imported.description,
+        avatarUrl: '',
+        badgeVariant: 'outline',
       };
-      reader.readAsText(file);
+
+      setAgents(prev => [...prev, newAgent]);
+
+      toast.success(`Agent "${imported.label}" imported successfully!`);
     }
     // reset input
     event.target.value = '';
@@ -430,27 +455,82 @@ export default function AgentsPage() {
     setAgents(prev => prev.filter(a => a.id !== id));
   };
 
-  const exportAgent = (agent: Agent) => {
+  const exportAgent = async (agent: Agent, subject: 'Agent' | 'Prompter' = 'Agent') => {
     const name = agent.name || 'Agent';
     const description = agent.description || '';
 
-    const content = `# ${name}\n\n${description}`;
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const filename =
+    const filenameBase =
       name
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '-')
         .replace(/-+/g, '-') || 'agent-skill';
-    a.download = `${filename}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 
-    toast.success(`Agent skill "${name}" exported!`);
+    const triggerDownload = (blob: Blob, filename: string) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    const content = `# ${name}\n\n${description}`;
+    const blob = new Blob([content], { type: 'text/markdown' });
+    triggerDownload(blob, `${filenameBase}.md`);
+
+    let avatarExported = false;
+    let avatarExportFailed = false;
+
+    if (agent.avatarUrl?.trim()) {
+      try {
+        const avatarResponse = await fetch(agent.avatarUrl);
+        if (!avatarResponse.ok) throw new Error('Avatar fetch failed');
+
+        const avatarBlob = await avatarResponse.blob();
+        const blobType = (avatarBlob.type || '').toLowerCase();
+
+        const extensionFromMime = blobType.includes('png')
+          ? 'png'
+          : blobType.includes('jpeg') || blobType.includes('jpg')
+          ? 'jpg'
+          : blobType.includes('webp')
+          ? 'webp'
+          : blobType.includes('gif')
+          ? 'gif'
+          : blobType.includes('svg')
+          ? 'svg'
+          : blobType.includes('bmp')
+          ? 'bmp'
+          : null;
+
+        const extensionFromUrlMatch = agent.avatarUrl
+          .toLowerCase()
+          .match(/\.(png|jpg|jpeg|webp|gif|svg|bmp)(?:$|\?)/);
+
+        const extensionFromUrl = extensionFromUrlMatch
+          ? extensionFromUrlMatch[1] === 'jpeg'
+            ? 'jpg'
+            : extensionFromUrlMatch[1]
+          : null;
+
+        const extension = extensionFromMime || extensionFromUrl || 'png';
+
+        triggerDownload(avatarBlob, `${filenameBase}-profile.${extension}`);
+        avatarExported = true;
+      } catch {
+        avatarExportFailed = true;
+      }
+    }
+
+    if (avatarExported) {
+      toast.success(`${subject} skill "${name}" and profile picture exported!`);
+    } else if (avatarExportFailed) {
+      toast.success(`${subject} skill "${name}" exported (profile picture export failed).`);
+    } else {
+      toast.success(`${subject} skill "${name}" exported!`);
+    }
   };
 
   const handleAvatarUpload = (file: File, id: AgentId | 'user') => {
@@ -819,34 +899,44 @@ export default function AgentsPage() {
       ]);
       setPrompt('');
 
+      const requestBody = {
+        prompt: effectivePrompt,
+        maxTurns: 4,
+        model,
+        agents: agents.map(agent => ({
+          id: agent.id,
+          name: agent.name || 'Agent',
+          description: agent.description || '',
+          avatarUrl: agent.avatarUrl,
+          avatarCrop: agent.avatarCrop,
+        })),
+        story,
+        prompterAgent,
+        prompterMode,
+        orchestration: 'auto' as const,
+        interactionMode: 'neutral' as const,
+        // attach client-side conversation so agents remember prior turns
+        history: historyForApi,
+        zenApiKey: modelProvider === 'zen' ? zenApiKey : undefined,
+        googleApiKey: modelProvider === 'google' ? googleApiKey : undefined,
+        nvidiaApiKey: modelProvider === 'nvidia' ? nvidiaApiKey : undefined,
+        hfApiKey: modelProvider === 'huggingface' ? hfApiKey : undefined,
+      };
+
+      console.log('[agents][browser->api]', {
+        ...requestBody,
+        zenApiKey: requestBody.zenApiKey ? '[REDACTED]' : undefined,
+        googleApiKey: requestBody.googleApiKey ? '[REDACTED]' : undefined,
+        nvidiaApiKey: requestBody.nvidiaApiKey ? '[REDACTED]' : undefined,
+        hfApiKey: requestBody.hfApiKey ? '[REDACTED]' : undefined,
+      });
+
       const res = await fetch('/api/agents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prompt: effectivePrompt,
-          maxTurns: 4,
-          model,
-          agents: agents.map(agent => ({
-            id: agent.id,
-            name: agent.name || 'Agent',
-            description: agent.description || '',
-            avatarUrl: agent.avatarUrl,
-            avatarCrop: agent.avatarCrop,
-          })),
-          story,
-          prompterAgent,
-          prompterMode,
-          orchestration: 'auto',
-          interactionMode: 'neutral',
-          // attach client-side conversation so agents remember prior turns
-          history: historyForApi,
-          zenApiKey: modelProvider === 'zen' ? zenApiKey : undefined,
-          googleApiKey: modelProvider === 'google' ? googleApiKey : undefined,
-          nvidiaApiKey: modelProvider === 'nvidia' ? nvidiaApiKey : undefined,
-          hfApiKey: modelProvider === 'huggingface' ? hfApiKey : undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!res.ok) {
@@ -1550,30 +1640,26 @@ export default function AgentsPage() {
                     avatarCrop={agent.avatarCrop}
                     dragOverId={dragOverId}
                     onAvatarUpload={file => handleAvatarUpload(file, agent.id)}
-                    onImport={file => {
-                      if (!file.name.endsWith('.md')) {
-                        toast.error(`File ${file.name} is not a Markdown file.`);
+                    onImport={async file => {
+                      if (file.type.startsWith('image/')) {
+                        handleAvatarUpload(file, agent.id);
+                        toast.success(`Profile picture imported for "${agent.name || 'Agent'}".`);
                         return;
                       }
-                      const reader = new FileReader();
-                      reader.onload = ev => {
-                        const content = ev.target?.result as string;
-                        if (!content) return;
-                        const firstHeadingLine = content
-                          .split(/\r?\n/)
-                          .find(line => line.trim().startsWith('#'));
-                        const label = firstHeadingLine
-                          ? firstHeadingLine.replace(/^#+\s*/, '').trim() || agent.id
-                          : agent.id;
-                        updateAgent(agent.id, {
-                          name: label,
-                          description: content.trim(),
-                        });
-                        toast.success(`Agent "${label}" imported successfully!`);
-                      };
-                      reader.readAsText(file);
+
+                      const imported = await loadImportedMarkdown(file, agent.id);
+                      if (!imported) return;
+
+                      updateAgent(agent.id, {
+                        name: imported.label,
+                        description: imported.description,
+                      });
+
+                      toast.success(`Agent "${imported.label}" imported successfully!`);
                     }}
-                    onExport={() => exportAgent(agent)}
+                    onExport={() => {
+                      void exportAgent(agent);
+                    }}
                     onDelete={() => removeAgent(agent.id)}
                     onNameChange={name => updateAgent(agent.id, { name })}
                     onDescriptionChange={description => updateAgent(agent.id, { description })}
@@ -1623,6 +1709,43 @@ export default function AgentsPage() {
                         avatarCrop={prompterAgent?.avatarCrop}
                         dragOverId={dragOverId}
                         onAvatarUpload={file => handleAvatarUpload(file, 'user')}
+                        onImport={async file => {
+                          if (file.type.startsWith('image/')) {
+                            handleAvatarUpload(file, 'user');
+                            toast.success('Profile picture imported for Prompter.');
+                            return;
+                          }
+
+                          const imported = await loadImportedMarkdown(file, 'Prompter');
+                          if (!imported) return;
+
+                          if (prompterAgent) {
+                            updatePrompterAgent({
+                              name: imported.label,
+                              description: imported.description,
+                            });
+                          } else {
+                            setPrompterAgent({
+                              id: 'user-agent',
+                              name: imported.label,
+                              description: imported.description,
+                              avatarUrl: '',
+                            });
+                          }
+
+                          toast.success(`Prompter "${imported.label}" imported successfully!`);
+                        }}
+                        onExport={() => {
+                          const target =
+                            prompterAgent ??
+                            ({
+                              id: 'user-agent',
+                              name: 'Prompter',
+                              description: '',
+                              avatarUrl: '',
+                            } as Agent);
+                          void exportAgent(target, 'Prompter');
+                        }}
                         onNameChange={name => {
                           if (prompterAgent) {
                             updatePrompterAgent({ name });

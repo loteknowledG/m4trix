@@ -139,22 +139,17 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           size="icon"
           asChild
           className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
-          title="Import Agent Role (.md)"
+          title="Import Role/Profile (.md or image)"
         >
           <label style={{ margin: 0 }}>
             <FileUp className="h-3.5 w-3.5" />
             <input
               type="file"
               className="hidden"
-              accept=".md"
+              accept=".md,image/*"
               onChange={e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                if (!file.name.endsWith('.md')) {
-                  toast.error(`File ${file.name} is not a Markdown file.`);
-                  e.target.value = '';
-                  return;
-                }
                 if (onImport) onImport(file);
                 e.target.value = '';
               }}

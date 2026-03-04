@@ -308,18 +308,28 @@ async function callProvider(
 
   apiMessages.push({ role: 'user', content: prompt });
 
+  const providerPayload = {
+    model,
+    messages: apiMessages,
+    max_tokens: 300,
+    temperature: typeof temperature === 'number' ? temperature : 0.7,
+  };
+
+  console.log('[agents][llm-request]', {
+    provider: providerName,
+    url,
+    agentId: agent.id,
+    agentName: agent.name,
+    payload: providerPayload,
+  });
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: apiMessages,
-      max_tokens: 300,
-      temperature: typeof temperature === 'number' ? temperature : 0.7,
-    }),
+    body: JSON.stringify(providerPayload),
   });
 
   if (!response.ok) {
@@ -385,7 +395,9 @@ async function callProvider(
   // Sanitization: ensure agents do NOT impersonate the prompter/user
   try {
     const prompterName =
-      coordinatorAgent && typeof coordinatorAgent.name === 'string' ? coordinatorAgent.name.trim() : '';
+      coordinatorAgent && typeof coordinatorAgent.name === 'string'
+        ? coordinatorAgent.name.trim()
+        : '';
     if (prompterName) {
       const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
       const namePattern = escapeRegExp(prompterName);
@@ -539,30 +551,6 @@ function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
       id: `${baseId}-u0`,
       from: 'user',
       text: prompt,
-    },
-    {
-      id: `${baseId}-r1`,
-      from: 'agent',
-      agentId: 'researcher',
-      text: 'We should expose agents as objects with name, role, and model, then route messages through a coordinator.',
-    },
-    {
-      id: `${baseId}-c2`,
-      from: 'agent',
-      agentId: 'critic',
-      text: 'We also need safeguards: max turns, cost limits, and a way for the user to stop the loop.',
-    },
-    {
-      id: `${baseId}-r3`,
-      from: 'agent',
-      agentId: 'researcher',
-      text: 'Implementation‑wise, a single API route can orchestrate multiple model calls sequentially or in small batches.',
-    },
-    {
-      id: `${baseId}-s4`,
-      from: 'agent',
-      agentId: 'summarizer',
-      text: 'Summary: define agents, add a coordinator, and stream the transcript back to the client UI.',
     },
   ];
 }
@@ -768,7 +756,12 @@ async function buildModelTranscript(
         messages.push({ id: `${baseId}-u${messages.length}`, from: 'user', text });
       } else {
         // include current messages.length so each agent utterance gets a unique id
-        messages.push({ id: `${baseId}-${agent.id}-${messages.length}`, from: 'agent', agentId: agent.id, text });
+        messages.push({
+          id: `${baseId}-${agent.id}-${messages.length}`,
+          from: 'agent',
+          agentId: agent.id,
+          text,
+        });
       }
     }
 

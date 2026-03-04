@@ -59,6 +59,22 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     }
   }, [messages]);
 
+  // restore focus after submit cycles that temporarily disable the input
+  useEffect(() => {
+    if (!disabled) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+    }
+  }, [disabled]);
+
+  const handleSend = () => {
+    onSend();
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
+
   // apply gif background style if set
   useEffect(() => {
     const el = scrollRef.current;
@@ -127,7 +143,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               <div
                 className={`rounded-xl px-4 py-3 max-w-[70%] shadow text-sm whitespace-pre-line ${
                   msg.from === 'user'
-                    ? 'bg-primary/66 text-primary-foreground'
+                    ? 'bg-primary/66 text-white [text-shadow:0_1px_6px_rgba(59,130,246,0.9)]'
                     : 'bg-muted/66 text-foreground'
                 }`}
               >
@@ -161,11 +177,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                onSend();
-                // Refocus the textarea after sending
-                setTimeout(() => {
-                  textareaRef.current?.focus();
-                }, 0);
+                handleSend();
               }
             }}
             disabled={disabled}
@@ -218,7 +230,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               {sendIcon ? (
                 <button
                   className="rounded-md bg-primary text-primary-foreground p-2 disabled:opacity-50"
-                  onClick={onSend}
+                  onClick={handleSend}
                   disabled={disabled || !input.trim()}
                   aria-label={sendIconAriaLabel ?? 'Send message'}
                 >
@@ -227,7 +239,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               ) : (
                 <button
                   className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
-                  onClick={onSend}
+                  onClick={handleSend}
                   disabled={disabled || !input.trim()}
                 >
                   Send
