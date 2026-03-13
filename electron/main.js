@@ -86,6 +86,8 @@ function createWindow() {
     height: 800,
     minWidth: 401,
     minHeight: 400,
+    autoHideMenuBar: true,
+    menuBarVisible: false,
     // use the repository's red‑M icon for the window/taskbar (falls back if missing)
     icon: path.join(__dirname, '..', 'src', 'app', 'icon.ico'),
     webPreferences: {

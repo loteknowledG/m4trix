@@ -1,34 +1,26 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useState } from "react";
-import { ChevronDown, Dot, LucideIcon } from "lucide-react";
+import Link from 'next/link';
+import { useState } from 'react';
+import { ChevronDown, Dot, LucideIcon } from 'lucide-react';
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Marquee } from '@/components/ui/marquee';
 // removed unused imports
-import CountBadge from "@/components/ui/count-badge";
-import { DropdownMenuArrow } from "@radix-ui/react-dropdown-menu";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger
-} from "@/components/ui/collapsible";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider
-} from "@/components/ui/tooltip";
+import CountBadge from '@/components/ui/count-badge';
+import { DropdownMenuArrow } from '@radix-ui/react-dropdown-menu';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuSeparator
-} from "@/components/ui/dropdown-menu";
-import { usePathname, useRouter } from "next/navigation";
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { usePathname, useRouter } from 'next/navigation';
 
 type Submenu = {
   href: string;
@@ -55,29 +47,22 @@ export function CollapseMenuButton({
   submenus,
   isOpen,
   href,
-  disableToggle
-  , topCount
+  disableToggle,
+  topCount,
 }: CollapseMenuButtonProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isStories = label === "Stories";
-  const isSubmenuActive = submenus.some((submenu) =>
+  const isStories = label === 'Stories';
+  const isSubmenuActive = submenus.some(submenu =>
     submenu.active === undefined ? submenu.href === pathname : submenu.active
   );
   const collapsedActiveHighlight = isOpen === false && (active || isSubmenuActive);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(isSubmenuActive);
   return isOpen ? (
-    <Collapsible
-      open={isCollapsed}
-      onOpenChange={setIsCollapsed}
-      className="w-full"
-    >
-      <CollapsibleTrigger
-        className="[&[data-state=open]>div>div>svg]:rotate-180 mb-1"
-        asChild
-      >
+    <Collapsible open={isCollapsed} onOpenChange={setIsCollapsed} className="w-full">
+      <CollapsibleTrigger className="[&[data-state=open]>div>div>svg]:rotate-180 mb-1" asChild>
         <Button
-          variant={active ? "secondary" : "ghost"}
+          variant={active ? 'secondary' : 'ghost'}
           className="relative z-30 w-full justify-start h-10 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
           asChild={!!href}
         >
@@ -85,11 +70,11 @@ export function CollapseMenuButton({
             <Link
               href={href}
               className="w-full"
-              onClick={(e) => {
+              onClick={e => {
                 // ensure navigation even if Collapsible/Trigger intercepts the click
                 e.preventDefault();
-                if (!disableToggle) setIsCollapsed((v) => !v);
-                router.push(href || "");
+                if (!disableToggle) setIsCollapsed(v => !v);
+                router.push(href || '');
               }}
             >
               <div className="w-full items-center flex justify-between">
@@ -97,28 +82,41 @@ export function CollapseMenuButton({
                   <span className="mr-4">
                     <Icon size={18} />
                   </span>
-                  <p
-                    className={cn(
-                      "max-w-[150px] truncate",
-                      isOpen ? "translate-x-0 opacity-100" : "-translate-x-96 opacity-0"
-                    )}
-                  >
-                    {label}
-                  </p>
+                  {isStories ? (
+                    <p
+                      className={cn(
+                        'max-w-[150px] truncate',
+                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                      )}
+                    >
+                      {label}
+                    </p>
+                  ) : (
+                    <Marquee
+                      className={cn(
+                        'max-w-[150px]',
+                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                      )}
+                      gap="1rem"
+                      duration="20s"
+                    >
+                      {label}
+                    </Marquee>
+                  )}
                 </div>
                 {!disableToggle && (
                   <div
                     className={cn(
-                      "whitespace-nowrap",
-                      isOpen ? "translate-x-0 opacity-100" : "-translate-x-96 opacity-0"
+                      'whitespace-nowrap',
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
                     )}
                   >
                     <ChevronDown size={18} className="transition-transform duration-200" />
                   </div>
                 )}
                 {/* Top-level count badge (e.g., stories total) */}
-                {typeof topCount === "number" && (
-                  <div className={cn(isOpen ? "ml-2" : "ml-2 hidden")}>
+                {typeof topCount === 'number' && (
+                  <div className={cn(isOpen ? 'ml-2' : 'ml-2 hidden')}>
                     <CountBadge value={topCount} />
                   </div>
                 )}
@@ -130,27 +128,40 @@ export function CollapseMenuButton({
                 <span className="mr-4">
                   <Icon size={18} />
                 </span>
-                <p
-                  className={cn(
-                    "max-w-[150px] truncate",
-                    isOpen ? "translate-x-0 opacity-100" : "-translate-x-96 opacity-0"
-                  )}
-                >
-                  {label}
-                </p>
+                {isStories ? (
+                  <p
+                    className={cn(
+                      'max-w-[150px] truncate',
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                    )}
+                  >
+                    {label}
+                  </p>
+                ) : (
+                  <Marquee
+                    className={cn(
+                      'max-w-[150px]',
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                    )}
+                    gap="1rem"
+                    duration="20s"
+                  >
+                    {label}
+                  </Marquee>
+                )}
               </div>
               {!disableToggle && (
                 <div
                   className={cn(
-                    "whitespace-nowrap",
-                    isOpen ? "translate-x-0 opacity-100" : "-translate-x-96 opacity-0"
+                    'whitespace-nowrap',
+                    isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
                   )}
                 >
                   <ChevronDown size={18} className="transition-transform duration-200" />
                 </div>
               )}
-              {typeof topCount === "number" && (
-                <div className={cn(isOpen ? "ml-2" : "ml-2 hidden")}>
+              {typeof topCount === 'number' && (
+                <div className={cn(isOpen ? 'ml-2' : 'ml-2 hidden')}>
                   <CountBadge value={topCount} />
                 </div>
               )}
@@ -162,35 +173,33 @@ export function CollapseMenuButton({
         {submenus.map(({ href, label, active, count }, index) => (
           <Button
             key={index}
-            variant={
-              (active === undefined && pathname === href) || active
-                ? "secondary"
-                : "ghost"
-            }
+            variant={(active === undefined && pathname === href) || active ? 'secondary' : 'ghost'}
             className="relative z-30 w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
             asChild
           >
             <Link
               href={href}
-              onClick={(e) => {
+              onClick={e => {
                 // ensure navigation even if parent components intercept click
                 e.preventDefault();
-                router.push(href || "");
+                router.push(href || '');
               }}
             >
               <span className="mr-4 ml-2">
                 <Dot size={18} />
               </span>
-              <p
+              <Marquee
                 className={cn(
-                  "max-w-[170px] truncate",
-                  isOpen ? "translate-x-0 opacity-100" : "-translate-x-96 opacity-0"
+                  'max-w-[170px]',
+                  isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
                 )}
+                gap="1rem"
+                duration="20s"
               >
                 {label}
-              </p>
-              {typeof count === "number" && (
-                <span className={cn(isOpen ? "ml-2" : "ml-2 hidden")}>
+              </Marquee>
+              {typeof count === 'number' && (
+                <span className={cn(isOpen ? 'ml-2' : 'ml-2 hidden')}>
                   <CountBadge value={count} />
                 </span>
               )}
@@ -206,15 +215,17 @@ export function CollapseMenuButton({
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
-                variant={active ? "secondary" : "ghost"}
+                variant={active ? 'secondary' : 'ghost'}
                 className={cn(
-                  "w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active",
+                  'w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active',
                   // when sidebar is collapsed and this top-level menu is active, give stronger lift (same as Stories)
-                  collapsedActiveHighlight || (isStories && isOpen === false) ? "hover:-translate-y-2 shadow-2xl" : "",
+                  collapsedActiveHighlight || (isStories && isOpen === false)
+                    ? 'hover:-translate-y-2 shadow-2xl'
+                    : '',
                   // show the same active/bg ring when the menu is active OR when collapsed and a submenu is active
-                  (active || collapsedActiveHighlight) ? "bg-secondary/95 ring-1 ring-primary/60" : ""
+                  active || collapsedActiveHighlight ? 'bg-secondary/95 ring-1 ring-primary/60' : ''
                 )}
-                onClick={(e) => {
+                onClick={e => {
                   if (href) {
                     e.preventDefault();
                     router.push(href);
@@ -223,19 +234,19 @@ export function CollapseMenuButton({
               >
                 <div className="w-full items-center flex justify-between relative">
                   <div className="flex items-center">
-                    <span className={cn(isOpen === false ? "" : "mr-4")}>
+                    <span className={cn(isOpen === false ? '' : 'mr-4')}>
                       <Icon size={18} />
                     </span>
                     <p
                       className={cn(
-                        "max-w-[200px] truncate",
-                        isOpen === false ? "opacity-0" : "opacity-100"
+                        'max-w-[200px] truncate',
+                        isOpen === false ? 'opacity-0' : 'opacity-100'
                       )}
                     >
                       {label}
                     </p>
                   </div>
-                  {typeof topCount === "number" && isOpen === false && (
+                  {typeof topCount === 'number' && isOpen === false && (
                     <div className="absolute left-10 top-1/2 -translate-y-1/2">
                       <CountBadge value={topCount} />
                     </div>
@@ -256,8 +267,8 @@ export function CollapseMenuButton({
         className={cn(
           // when sidebar is collapsed and this top-level menu is active, present as a lifted card (same style used for Stories)
           collapsedActiveHighlight || (isStories && isOpen === false)
-            ? "rounded-lg bg-popover/95 p-2 shadow-2xl transform transition-all duration-200 -translate-y-2 -translate-x-1"
-            : ""
+            ? 'rounded-lg bg-popover/95 p-2 shadow-2xl transform transition-all duration-200 -translate-y-2 -translate-x-1'
+            : ''
         )}
       >
         {href ? (
@@ -265,13 +276,13 @@ export function CollapseMenuButton({
             <Link
               href={href}
               className={cn(
-                "cursor-pointer w-full block",
-                active ? "bg-secondary text-secondary-foreground" : ""
+                'cursor-pointer w-full block',
+                active ? 'bg-secondary text-secondary-foreground' : ''
               )}
             >
               <div className="flex items-center justify-between w-full px-3 py-1">
                 <p className="max-w-[150px] truncate">{label}</p>
-                {typeof topCount === "number" && (
+                {typeof topCount === 'number' && (
                   <div className="ml-2">
                     <CountBadge value={topCount} />
                   </div>
@@ -282,7 +293,7 @@ export function CollapseMenuButton({
         ) : (
           <div className="flex items-center justify-between w-full">
             <DropdownMenuLabel className="max-w-[190px] truncate">{label}</DropdownMenuLabel>
-            {typeof topCount === "number" && (
+            {typeof topCount === 'number' && (
               <div className="ml-2">
                 <CountBadge value={topCount} />
               </div>
@@ -295,15 +306,13 @@ export function CollapseMenuButton({
             <Link
               href={href}
               className={cn(
-                "cursor-pointer block w-full px-2 py-1 transition-transform transform hover:-translate-y-1 hover:-translate-x-1 mc-shadow-hover",
-                ((active === undefined && pathname === href) || active) ? "bg-secondary" : ""
+                'cursor-pointer block w-full px-2 py-1 transition-transform transform hover:-translate-y-1 hover:-translate-x-1 mc-shadow-hover',
+                (active === undefined && pathname === href) || active ? 'bg-secondary' : ''
               )}
             >
               <div className="flex items-center justify-between w-full">
                 <p className="max-w-[150px] truncate">{label}</p>
-                {typeof count === "number" && (
-                  <CountBadge value={count} />
-                )}
+                {typeof count === 'number' && <CountBadge value={count} />}
               </div>
             </Link>
           </DropdownMenuItem>

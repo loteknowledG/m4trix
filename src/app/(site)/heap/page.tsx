@@ -518,7 +518,7 @@ function HeapInner() {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={10}>
-                  <p>Move to Story</p>
+                  <p>Add to Story</p>
                 </TooltipContent>
               </Tooltip>
 
@@ -580,7 +580,6 @@ function HeapInner() {
           onDragOver={onDragOver}
           onDragEnter={onDragEnter}
           onDragLeave={onDragLeave}
-          onClick={() => fileInputRef.current?.click()}
           onPaste={handlePaste}
           tabIndex={0}
           className={`relative w-full h-full rounded-lg p-4 transition-colors ${
@@ -883,7 +882,14 @@ function HeapInner() {
           <div className="mb-4 flex justify-center">
             <div className="bg-background/50 backdrop-blur-sm px-4 py-1 rounded text-sm text-muted-foreground flex items-center gap-2">
               <Upload size={16} />
-              <span>
+              <span
+                className="cursor-pointer"
+                onClick={e => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }}
+              >
                 {isDragActive
                   ? 'Release to add moments'
                   : 'Drag and drop or click here to upload moments'}

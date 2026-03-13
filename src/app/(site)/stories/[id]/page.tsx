@@ -12,6 +12,7 @@ import CollectionOverlay from '@/components/collection-overlay';
 import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Trash2, Upload } from 'lucide-react';
+import { IoBanOutline } from 'react-icons/io5';
 import { useRouter, useParams } from 'next/navigation';
 
 type Moment = { id: string; src: string; name?: string; fingerprint?: string };
@@ -523,10 +524,52 @@ export default function StoryPage() {
     }
   }, [clearSelection, id, moments, scope, selectedIds]);
 
+  const moveToHeap = useCallback(async () => {
+    try {
+      const ids = selectedIds || [];
+      if (!ids.length) return;
+      const toMove = moments.filter(m => ids.includes(m.id));
+      const existingHeap =
+        (await get<any[]>('heap-moments')) || (await get<any[]>('heap-gifs')) || [];
+      const newHeap = [...existingHeap, ...toMove];
+      await set('heap-moments', newHeap);
+
+      // remove moved items from this story
+      setMoments(prev => prev.filter(m => !ids.includes(m.id)));
+
+      const storyKey = `story:${id}`;
+      const stored = (await get<any>(storyKey)) || [];
+      let remaining: any[] = [];
+      if (Array.isArray(stored)) {
+        remaining = stored.filter((s: any) => !ids.includes(s.id || s));
+      } else if (stored && Array.isArray(stored.items)) {
+        remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
+        stored.items = remaining;
+        await set(storyKey, stored);
+      }
+      await set(storyKey, remaining);
+
+      setStoryCount(remaining.length).catch(() => {});
+      try {
+        window.dispatchEvent(
+          new CustomEvent('moments-updated', {
+            detail: { count: newHeap.length, source: 'heap' },
+          })
+        );
+      } catch (e) {
+        /* ignore */
+      }
+      clearSelection(scope);
+    } catch (err) {
+      logger.error('Failed to move selected to heap', err);
+    }
+  }, [clearSelection, id, moments, scope, selectedIds]);
+
   return (
     <>
       <ContentLayout
-        title="Stories"
+        title={title || 'Stories'}
+        titleMarquee
         navLeft={
           <SelectionHeaderBar
             selectedIds={selectedIds || []}
@@ -547,26 +590,49 @@ export default function StoryPage() {
         }
         navRight={
           (selectedIds || []).length > 0 ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      moveToTrash();
-                    }}
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                    aria-label="Move selected to trash"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={10}>
-                  <p>Move to Trash</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        moveToHeap();
+                      }}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-destructive hover:text-destructive/80 transition-colors"
+                      aria-label="Remove from story"
+                    >
+                      <IoBanOutline size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Remove from story</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        moveToTrash();
+                      }}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                      aria-label="Move selected to trash"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Move to Trash</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           ) : null
         }
       >

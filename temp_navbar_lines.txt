@@ -1,0 +1,166 @@
+﻿   1: 'use client';
+   2: 
+   3: import useSelection from '@/hooks/use-selection';
+   4: import { SheetMenu } from '@/components/admin-panel/sheet-menu';
+   5: import { usePathname } from 'next/navigation';
+   6: import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from 'lucide-react';
+   7: import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+   8: import { Marquee } from '@/components/ui/marquee';
+   9: import { useRef, useEffect, type ReactNode } from 'react';
+  10: 
+  11: interface NavbarProps {
+  12:   title: ReactNode;
+  13:   titleMarquee?: boolean;
+  14:   leftSlot?: React.ReactNode;
+  15:   navRight?: React.ReactNode;
+  16: }
+  17: 
+  18: export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps) {
+  19:   const pathname = usePathname();
+  20:   const headerRef = useRef<HTMLElement | null>(null);
+  21:   const titleString = typeof title === 'string' ? title : '';
+  22:   const isStoryDetail = !!pathname && pathname.startsWith('/stories/');
+  23:   const isStories = !!titleString && titleString.toLowerCase() === 'stories';
+  24:   const isTags = !!titleString && titleString.toLowerCase() === 'tags';
+  25:   const isTrash = !!titleString && titleString.toLowerCase() === 'trash';
+  26: 
+  27:   // derive scope for selection store when on a story detail
+  28:   let scope = '';
+  29:   if (isStoryDetail && pathname) {
+  30:     const parts = pathname.split('/');
+  31:     const id = parts.length > 2 ? parts[2] : '';
+  32:     scope = id ? `story:${id}` : '';
+  33:   }
+  34: 
+  35:   const selectedCount = useSelection(s => (scope ? s.selections[scope]?.length || 0 : 0));
+  36:   const clearSelection = useSelection(s => s.clear);
+  37: 
+  38:   const displayTitle = isStoryDetail ? title : isStories ? '' : isTags ? '' : isTrash ? '' : title;
+  39: 
+  40:   const onAction = (action: string) => {
+  41:     try {
+  42:       window.dispatchEvent(new CustomEvent('story-action', { detail: { action } }));
+  43:     } catch (e) {
+  44:       /* ignore */
+  45:     }
+  46:   };
+  47: 
+  48:   useEffect(() => {
+  49:     const setVar = () => {
+  50:       const h = headerRef.current?.offsetHeight ?? 56;
+  51:       try {
+  52:         document.documentElement.style.setProperty('--app-header-height', `${h}px`);
+  53:       } catch (e) {
+  54:         /* ignore */
+  55:       }
+  56:     };
+  57:     setVar();
+  58:     window.addEventListener('resize', setVar);
+  59:     return () => window.removeEventListener('resize', setVar);
+  60:   }, []);
+  61: 
+  62:   return (
+  63:     <header
+  64:       ref={headerRef}
+  65:       className="sticky top-0 z-10 w-full bg-background/95 shadow backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary"
+  66:     >
+  67:       <div className="mx-4 sm:mx-8 flex h-14 items-center">
+  68:         <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4">
+  69:           <div className="flex items-center space-x-4 lg:space-x-0">
+  70:             <SheetMenu />
+  71:             {leftSlot ? (
+  72:               leftSlot
+  73:             ) : isStoryDetail && selectedCount > 0 ? (
+  74:               <button
+  75:                 onClick={() => {
+  76:                   try {
+  77:                     clearSelection(scope);
+  78:                   } catch (e) {
+  79:                     /* ignore */
+  80:                   }
+  81:                 }}
+  82:                 className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+  83:                 aria-label="Clear selection"
+  84:               >
+  85:                 <X size={16} />
+  86:               </button>
+  87:             ) : null}
+  88:           </div>
+  89: 
+  90:           <div className="flex justify-center min-w-0">
+  91:             {!leftSlot && selectedCount ? (
+  92:               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
+  93:             ) : (
+  94:               <h2
+  95:                 className={
+  96:                   isStories || isStoryDetail || isTags || isTrash
+  97:                     ? 'text-sm font-medium lowercase'
+  98:                     : 'text-lg font-medium'
+  99:                 }
+ 100:               >
+ 101:                 {titleMarquee && displayTitle ? (
+ 102:                   <Marquee gap="12rem" className="w-full font-medium text-current">
+ 103:                     {displayTitle}
+ 104:                   </Marquee>
+ 105:                 ) : (
+ 106:                   displayTitle
+ 107:                 )}
+ 108:               </h2>
+ 109:             )}
+ 110:           </div>
+ 111: 
+ 112:           <div className="flex items-center justify-end">
+ 113:             {isStoryDetail && selectedCount > 0 ? (
+ 114:               <TooltipProvider>
+ 115:                 <div className="flex items-center gap-3">
+ 116:                   <Tooltip>
+ 117:                     <TooltipTrigger asChild>
+ 118:                       <button
+ 119:                         onClick={() => onAction('move-to-heap')}
+ 120:                         className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+ 121:                       >
+ 122:                         <LayoutGrid size={18} />
+ 123:                       </button>
+ 124:                     </TooltipTrigger>
+ 125:                     <TooltipContent side="top" sideOffset={10}>
+ 126:                       <p>Move to Heap</p>
+ 127:                     </TooltipContent>
+ 128:                   </Tooltip>
+ 129: 
+ 130:                   <Tooltip>
+ 131:                     <TooltipTrigger asChild>
+ 132:                       <button
+ 133:                         onClick={() => onAction('move-to-chapter')}
+ 134:                         className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+ 135:                       >
+ 136:                         <SquarePen size={18} />
+ 137:                       </button>
+ 138:                     </TooltipTrigger>
+ 139:                     <TooltipContent side="top" sideOffset={10}>
+ 140:                       <p>Move to Chapter</p>
+ 141:                     </TooltipContent>
+ 142:                   </Tooltip>
+ 143: 
+ 144:                 <Tooltip>
+ 145:                   <TooltipTrigger asChild>
+ 146:                     <button
+ 147:                       onClick={() => onAction('move-to-trash')}
+ 148:                       className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+ 149:                     >
+ 150:                       <Trash2 size={18} />
+ 151:                     </button>
+ 152:                   </TooltipTrigger>
+ 153:                   <TooltipContent side="top" sideOffset={10}>
+ 154:                     <p>Move to Trash</p>
+ 155:                   </TooltipContent>
+ 156:                 </Tooltip>
+ 157:               </div>
+ 158:             </TooltipProvider>
+ 159:           ) : (
+ 160:             navRight
+ 161:           )}
+ 162:         </div>
+ 163:       </div>
+ 164:     </header>
+ 165:   );
+ 166: }

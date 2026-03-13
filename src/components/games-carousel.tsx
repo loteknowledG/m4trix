@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { get } from 'idb-keyval';
 import {
@@ -13,10 +13,24 @@ import {
 
 type StoryMeta = { id: string; title?: string; count?: number };
 
-export default function GamesCarousel() {
+type GamesCarouselProps = {
+  onTitleChange?: (title: string) => void;
+};
+
+export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
   const [stories, setStories] = useState<StoryMeta[]>([]);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
+  const [emblaApi, setEmblaApi] = useState<any | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const setTitleFromIndex = useCallback(
+    (index: number) => {
+      const title = stories[index]?.title || 'Games';
+      onTitleChange?.(title);
+    },
+    [stories, onTitleChange]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -47,6 +61,8 @@ export default function GamesCarousel() {
         const map: Record<string, string | null> = {};
         previewEntries.forEach(([id, src]) => (map[id] = src));
         setPreviews(map);
+
+        setCurrentIndex(0);
       } catch (err) {
         console.error('Failed to load stories', err);
       } finally {
@@ -58,6 +74,27 @@ export default function GamesCarousel() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!stories.length) return;
+    setTitleFromIndex(currentIndex);
+  }, [stories, currentIndex, setTitleFromIndex]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+
+    const onSelect = () => {
+      const idx = emblaApi.selectedScrollSnap();
+      setCurrentIndex(idx);
+    };
+
+    emblaApi.on('select', onSelect);
+    onSelect();
+
+    return () => {
+      emblaApi.off('select', onSelect);
+    };
+  }, [emblaApi]);
+
   if (loading) {
     return <div className="text-center text-gray-300">Loading...</div>;
   }
@@ -67,17 +104,21 @@ export default function GamesCarousel() {
   }
 
   return (
-    <Carousel className="w-full overflow-visible" opts={{ loop: true }}>
+    <Carousel
+      className="w-full h-[100vh] overflow-visible bg-zinc-800"
+      opts={{ loop: true }}
+      setApi={setEmblaApi}
+    >
       <CarouselContent>
         {stories.map(story => (
           <CarouselItem key={story.id}>
-            <Link href={`/stories/${story.id}`}>
-              <div className="w-[82%] max-w-[500px] aspect-square bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
+            <Link href={`/games/${story.id}`}>
+              <div className="h-[100vh] max-w-[500px] bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
                 {previews[story.id] ? (
                   <img
                     src={previews[story.id] || undefined}
                     alt={story.title ?? 'story'}
-                    className="w-full h-full object-contain"
+                    className="w-full h-[100vh] object-contain"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-gray-400">
@@ -89,8 +130,8 @@ export default function GamesCarousel() {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious className="left-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-black/40 hover:bg-black/60 z-10" />
-      <CarouselNext className="right-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-black/40 hover:bg-black/60 z-10" />
+      <CarouselPrevious className="left-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-[#c90084]/80 hover:bg-[#c90084]/100 z-10" />
+      <CarouselNext className="right-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-[#c90084]/80 hover:bg-[#c90084]/100 z-10" />
     </Carousel>
   );
 }

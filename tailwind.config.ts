@@ -80,9 +80,10 @@ const config = {
           to: { height: '0' },
         },
         marquee: {
+          // Move by one copy's width (1 / repeatCount of the full content width).
+          // The component sets --marquee-repeat to match how many copies it renders.
           '0%': { transform: 'translateX(0)' },
-          // when content duplicated twice, move by half its width
-          '100%': { transform: 'translateX(-50%)' },
+          '100%': { transform: 'translateX(calc(-100% / var(--marquee-repeat, 2)))' },
         },
       },
       animation: {
@@ -90,7 +91,7 @@ const config = {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'collapsible-down': 'collapsible-down 0.2s ease-out',
         'collapsible-up': 'collapsible-up 0.2s ease-out',
-        marquee: 'marquee 8s linear infinite',
+        marquee: 'marquee var(--marquee-duration, 14s) linear infinite',
       },
     },
   },

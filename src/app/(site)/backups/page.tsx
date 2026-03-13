@@ -164,7 +164,7 @@ export default function BackupsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `moments-backup-${Date.now()}.json`;
+      a.download = `m4trix-${Date.now()}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
