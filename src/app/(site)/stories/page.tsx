@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { get } from 'idb-keyval';
 import { logger } from '@/lib/logger';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
+import { Card, CardContent } from '@/components/ui/card';
+import { Marquee } from '@/components/ui/marquee';
 // removed unused imports
 import CountBadge from '@/components/ui/count-badge';
 
@@ -80,28 +82,30 @@ export default function StoriesPage() {
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {stories.map(s => (
-                  <Link
-                    key={s.id}
-                    href={`/stories/${s.id}`}
-                    className="block border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-150"
-                  >
-                    {previews[s.id] ? (
-                      <img
-                        src={previews[s.id] || undefined}
-                        alt={s.title ?? 'story'}
-                        className="w-full h-32 object-cover"
-                      />
-                    ) : (
-                      <div className="h-32 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">
-                        No preview
+                  <Link key={s.id} href={`/stories/${s.id}`}>
+                    <Card className="overflow-hidden hover:shadow-2xl transition-shadow duration-150 transition-transform duration-150 ease-out hover:-translate-y-2 hover:-translate-x-2 active:translate-y-2 active:translate-x-2 cursor-pointer">
+                      <div className="relative">
+                        {previews[s.id] ? (
+                          <img
+                            src={previews[s.id] || undefined}
+                            alt={s.title ?? 'story'}
+                            className="w-full h-32 object-cover"
+                          />
+                        ) : (
+                          <div className="h-32 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">
+                            No preview
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-2">
+                          <div className="flex flex-col">
+                            <Marquee className="font-medium text-white truncate">
+                              {s.title && s.title.trim() ? s.title : 'Untitled'}
+                            </Marquee>
+                            <div className="text-xs text-white">{s.count ?? 0}</div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <div className="p-2">
-                      <div className="font-medium truncate">
-                        {s.title && s.title.trim() ? s.title : 'Untitled'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{s.count ?? 0}</div>
-                    </div>
+                    </Card>
                   </Link>
                 ))}
               </div>

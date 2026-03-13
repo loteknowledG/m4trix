@@ -10,10 +10,11 @@ import { MomentsProvider } from '@/context/moments-collection';
 import MomentsGrid from '@/components/moments-grid';
 import CollectionOverlay from '@/components/collection-overlay';
 import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
-import { Upload } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Trash2, Upload } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
-type Moment = { id: string; src: string; name?: string };
+type Moment = { id: string; src: string; name?: string; fingerprint?: string };
 
 export default function StoryPage() {
   const params = useParams();
@@ -216,6 +217,27 @@ export default function StoryPage() {
     }
   }, []);
 
+  // set story's saved count to exact number
+  const setStoryCount = useCallback(
+    async (count: number) => {
+      if (!id) return;
+      try {
+        const saved = (await get<any[]>('stories')) || [];
+        const idx = saved.findIndex(s => s.id === id);
+        if (idx > -1) {
+          saved[idx].count = count;
+          await set('stories', saved);
+          try {
+            window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+          } catch {}
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    },
+    [id]
+  );
+
   const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
     e.preventDefault();
     setDragOverIndex(idx);
@@ -282,6 +304,55 @@ export default function StoryPage() {
     [moments, id]
   );
 
+  // allow dropping external images/URLs to append to story
+  const handleExternalDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      const addSrc = async (src: string, fingerprint?: string) => {
+        setMoments(ms => {
+          // avoid duplicates by fingerprint (when available) or by src
+          if (
+            ms.some(m =>
+              fingerprint && m.fingerprint ? m.fingerprint === fingerprint : m.src === src
+            )
+          ) {
+            setStoryCount(ms.length).catch(() => {});
+            return ms;
+          }
+
+          const newMoment: Moment = { id: crypto.randomUUID(), src, fingerprint };
+          const updated = [...ms, newMoment];
+          set(`story:${id}`, updated).catch(() => {});
+          setStoryCount(updated.length).catch(() => {});
+          return updated;
+        });
+      };
+
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        for (const file of Array.from(e.dataTransfer.files)) {
+          if (file.type.startsWith('image/')) {
+            const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(file);
+            });
+            await addSrc(dataUrl, fingerprint);
+          }
+        }
+        return;
+      }
+      const text = e.dataTransfer.getData('text/plain');
+      if (text) {
+        // normalize URL for dedupe by stripping query params
+        const normalized = text.split('?')[0];
+        await addSrc(text, normalized);
+      }
+    },
+    [id]
+  );
+
   function startAutoScroll() {
     if (scrollAnimRef.current) return;
     const step = () => {
@@ -314,8 +385,12 @@ export default function StoryPage() {
       stopAutoScroll();
     };
     window.addEventListener('dragend', onDragEndWin);
-    return () => window.removeEventListener('dragend', onDragEndWin);
-  }, []);
+    return () => {
+      window.removeEventListener('dragend', onDragEndWin);
+      // clear any selections scoped to this story when leaving
+      clearSelection(scope);
+    };
+  }, [clearSelection, scope]);
 
   useEffect(() => {
     const prev = document.title;
@@ -404,6 +479,50 @@ export default function StoryPage() {
     }
   }
 
+  const moveToTrash = useCallback(async () => {
+    try {
+      const ids = selectedIds || [];
+      if (!ids.length) return;
+      const toMove = moments.filter(m => ids.includes(m.id));
+      const existingTrash =
+        (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
+      const newTrash = [...existingTrash, ...toMove];
+      await set('trash-moments', newTrash);
+
+      // remove moved items from this story
+      setMoments(prev => prev.filter(m => !ids.includes(m.id)));
+
+      // update stored story list
+      const storyKey = `story:${id}`;
+      const stored = (await get<any>(storyKey)) || [];
+      let remaining: any[] = [];
+      if (Array.isArray(stored)) {
+        remaining = stored.filter((s: any) => !ids.includes(s.id || s));
+      } else if (stored && Array.isArray(stored.items)) {
+        remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
+        stored.items = remaining;
+        await set(storyKey, stored);
+      }
+      await set(storyKey, remaining);
+
+      // keep story count in sync
+      setStoryCount(remaining.length).catch(() => {});
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('moments-updated', {
+            detail: { count: newTrash.length, source: 'story' },
+          })
+        );
+      } catch (e) {
+        /* ignore */
+      }
+      clearSelection(scope);
+    } catch (err) {
+      logger.error('Failed to move selected to trash', err);
+    }
+  }, [clearSelection, id, moments, scope, selectedIds]);
+
   return (
     <>
       <ContentLayout
@@ -426,12 +545,37 @@ export default function StoryPage() {
             onClearSelection={() => clearSelection(scope)}
           />
         }
-        navRight={null}
+        navRight={
+          (selectedIds || []).length > 0 ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      moveToTrash();
+                    }}
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                    aria-label="Move selected to trash"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10}>
+                  <p>Move to Trash</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null
+        }
       >
         <ErrorBoundary>
           <div
             className="overflow-auto"
             style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleExternalDrop}
           >
             <div className="py-4">
               <div className="mb-6">
@@ -439,6 +583,8 @@ export default function StoryPage() {
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   onBlur={handleTitleBlur}
+                  onClick={e => e.stopPropagation()}
+                  onMouseDown={e => e.stopPropagation()}
                   placeholder="Add a title"
                   className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
                 />
