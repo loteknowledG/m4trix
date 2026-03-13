@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { get, set } from "idb-keyval";
-import useSelection from "@/hooks/use-selection";
-import { logger } from "@/lib/logger";
-import { ContentLayout } from "@/components/admin-panel/content-layout";
-import ErrorBoundary from "@/components/error-boundary";
-import { MomentsProvider } from "@/context/moments-collection";
-import MomentsGrid from "@/components/moments-grid";
-import CollectionOverlay from "@/components/collection-overlay";
-import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
-import { Upload } from "lucide-react";
-import { useRouter, useParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { get, set } from 'idb-keyval';
+import useSelection from '@/hooks/use-selection';
+import { logger } from '@/lib/logger';
+import { ContentLayout } from '@/components/admin-panel/content-layout';
+import ErrorBoundary from '@/components/error-boundary';
+import { MomentsProvider } from '@/context/moments-collection';
+import MomentsGrid from '@/components/moments-grid';
+import CollectionOverlay from '@/components/collection-overlay';
+import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
+import { Upload } from 'lucide-react';
+import { useRouter, useParams } from 'next/navigation';
 
 type Moment = { id: string; src: string; name?: string };
 
@@ -23,10 +23,10 @@ export default function StoryPage() {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
 
-  const selectedIds = useSelection((s) => s.selections['stories'] || []);
-  const toggleSelect = useSelection((s) => s.toggle);
-  const setSelectionStore = useSelection((s) => s.set);
-  const clearSelection = useSelection((s) => s.clear);
+  const selectedIds = useSelection(s => s.selections['stories'] || []);
+  const toggleSelect = useSelection(s => s.toggle);
+  const setSelectionStore = useSelection(s => s.set);
+  const clearSelection = useSelection(s => s.clear);
   const scope = 'stories';
 
   const dragIndexRef = useRef<number | null>(null);
@@ -51,9 +51,17 @@ export default function StoryPage() {
 
         let loadedMoments: Moment[] = [];
         if (Array.isArray(stored)) {
-          loadedMoments = stored.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name }));
+          loadedMoments = stored.map((s: any) => ({
+            id: s.id || s,
+            src: s.src || s,
+            name: s.name,
+          }));
         } else if (stored && Array.isArray(stored.items)) {
-          loadedMoments = stored.items.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name }));
+          loadedMoments = stored.items.map((s: any) => ({
+            id: s.id || s,
+            src: s.src || s,
+            name: s.name,
+          }));
         }
 
         setMoments(loadedMoments);
@@ -61,7 +69,8 @@ export default function StoryPage() {
         // try to get title from stored object or stories metadata
         let t = stored && stored.title ? stored.title : '';
         try {
-          const saved = (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
+          const saved =
+            (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
           const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
         } catch (e) {
@@ -78,7 +87,7 @@ export default function StoryPage() {
     return () => {
       mounted = false;
     };
-  }, [id, selectedIds, scope, setSelectionStore]);
+  }, [id]);
 
   // listen for toolbar actions dispatched from navbar
   useEffect(() => {
@@ -396,105 +405,107 @@ export default function StoryPage() {
   }
 
   return (
-    <ContentLayout
-      title="Stories"
-      navLeft={
-        <SelectionHeaderBar
-          selectedIds={selectedIds || []}
-          moments={moments}
-          showSelectAll={(selectedIds || []).length > 0}
-          onSelectAll={() => {
-            if ((selectedIds || []).length !== moments.length) {
-              setSelectionStore(
-                scope,
-                moments.map(m => m.id)
-              );
-            } else {
-              clearSelection(scope);
-            }
-          }}
-          onClearSelection={() => clearSelection(scope)}
-        />
-      }
-      navRight={null}
-    >
-      <ErrorBoundary>
-        <div
-          className="overflow-auto"
-          style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
-        >
-          <div className="py-4">
-            <div className="mb-6">
-              <input
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                onBlur={handleTitleBlur}
-                placeholder="Add a title"
-                className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
-              />
-            </div>
-            {loading ? (
-              <div className="text-sm text-muted-foreground">Loading…</div>
-            ) : moments.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Upload size={16} />
-                  <div className="font-medium">No story selected</div>
-                </div>
-                <div className="text-sm">
-                  Create a new story from the heap to move moments here.
-                </div>
-                <div className="mt-4">
-                  <button
-                    onClick={handleDeleteStory}
-                    className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
-                  >
-                    Delete story
-                  </button>
-                </div>
+    <>
+      <ContentLayout
+        title="Stories"
+        navLeft={
+          <SelectionHeaderBar
+            selectedIds={selectedIds || []}
+            moments={moments}
+            showSelectAll={(selectedIds || []).length > 0}
+            onSelectAll={() => {
+              if ((selectedIds || []).length !== moments.length) {
+                setSelectionStore(
+                  scope,
+                  moments.map(m => m.id)
+                );
+              } else {
+                clearSelection(scope);
+              }
+            }}
+            onClearSelection={() => clearSelection(scope)}
+          />
+        }
+        navRight={null}
+      >
+        <ErrorBoundary>
+          <div
+            className="overflow-auto"
+            style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
+          >
+            <div className="py-4">
+              <div className="mb-6">
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  onBlur={handleTitleBlur}
+                  placeholder="Add a title"
+                  className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
+                />
               </div>
-            ) : (
-              <MomentsProvider collection={moments}>
-                {moments.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <Upload size={16} />
-                      <div className="font-medium">No story selected</div>
-                    </div>
-                    <div className="text-sm">
-                      Create a new story from the heap to move moments here.
-                    </div>
-                    <div className="mt-4">
-                      <button
-                        onClick={handleDeleteStory}
-                        className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
-                      >
-                        Delete story
-                      </button>
-                    </div>
+              {loading ? (
+                <div className="text-sm text-muted-foreground">Loading…</div>
+              ) : moments.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Upload size={16} />
+                    <div className="font-medium">No story selected</div>
                   </div>
-                ) : (
-                  <MomentsGrid
-                    moments={moments}
-                    selectedIds={selectedIds}
-                    toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                    onDragStart={onDragStart}
-                    onDragEnd={(_idx: number) => {
-                      dragIndexRef.current = null;
-                      setDragOverIndex(null);
-                      stopAutoScroll();
-                    }}
-                    onDragOver={onDragOver}
-                    onDrop={onDrop}
-                    dragOverIndex={dragOverIndex}
-                  />
-                )}
-                <CollectionOverlay />
-              </MomentsProvider>
-            )}
+                  <div className="text-sm">
+                    Create a new story from the heap to move moments here.
+                  </div>
+                  <div className="mt-4">
+                    <button
+                      onClick={handleDeleteStory}
+                      className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+                    >
+                      Delete story
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <MomentsProvider collection={moments}>
+                  {moments.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <Upload size={16} />
+                        <div className="font-medium">No story selected</div>
+                      </div>
+                      <div className="text-sm">
+                        Create a new story from the heap to move moments here.
+                      </div>
+                      <div className="mt-4">
+                        <button
+                          onClick={handleDeleteStory}
+                          className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+                        >
+                          Delete story
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <MomentsGrid
+                      moments={moments}
+                      selectedIds={selectedIds}
+                      toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                      onDragStart={onDragStart}
+                      onDragEnd={(_idx: number) => {
+                        dragIndexRef.current = null;
+                        setDragOverIndex(null);
+                        stopAutoScroll();
+                      }}
+                      onDragOver={onDragOver}
+                      onDrop={onDrop}
+                      dragOverIndex={dragOverIndex}
+                    />
+                  )}
+                  <CollectionOverlay />
+                </MomentsProvider>
+              )}
+            </div>
           </div>
-        </div>
-      </ErrorBoundary>
-    </ContentLayout>
+        </ErrorBoundary>
+      </ContentLayout>{' '}
+    </>
   );
 }

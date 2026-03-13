@@ -1,23 +1,22 @@
-"use client";
-import { useCallback, useRef, useState } from "react";
-import { get, set, clear } from "idb-keyval";
+'use client';
+import { useCallback, useRef, useState } from 'react';
+import { get, set, clear } from 'idb-keyval';
 import {
   Breadcrumb,
   BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbPage,
-} from "@/components/ui/breadcrumb";
-import JsonTree from "@/components/ui/json-tree";
-import { logger } from "@/lib/logger";
-
+} from '@/components/ui/breadcrumb';
+import JsonTree from '@/components/ui/json-tree';
+import { logger } from '@/lib/logger';
 
 function removeSrc(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(removeSrc);
-  if (typeof obj === "object") {
+  if (typeof obj === 'object') {
     const out: any = {};
     for (const [k, v] of Object.entries(obj)) {
-      if (k === "src") continue;
+      if (k === 'src') continue;
       out[k] = removeSrc(v);
     }
     return out;
@@ -47,16 +46,16 @@ export default function BackupsPage() {
   const [importedText, setImportedText] = useState<string | null>(null);
   const MAX_EXPORT_BYTES = 5 * 1024 * 1024; // 5 MB
 
-
   const handleExport = useCallback(async () => {
-    let previewSummary: any = null
+    let previewSummary: any = null;
     try {
-      const heap = (await get("heap-moments")) || (await get("heap-gifs")) || [];
-      const trash = (await get("trash-moments")) || (await get("trash-gifs")) || [];
+      const heap = (await get('heap-moments')) || (await get('heap-gifs')) || [];
+      const trash = (await get('trash-moments')) || (await get('trash-gifs')) || [];
       // include stories and per-story items
-      const savedStories = (await get<{ id: string; title?: string; count?: number }[]>("stories")) || [];
+      const savedStories =
+        (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
       const storiesWithItems = await Promise.all(
-        savedStories.map(async (s) => {
+        savedStories.map(async s => {
           try {
             const items = (await get<any[]>(`story:${s.id}`)) || [];
             return { ...s, items };
@@ -93,7 +92,9 @@ export default function BackupsPage() {
                   overlays[id] = raw;
                 }
               }
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+              /* ignore */
+            }
           }
         };
         collectFor(heap);
@@ -125,14 +126,14 @@ export default function BackupsPage() {
           } catch (err2) {
             setExportedText(previewStr);
             setExportedObj(removeSrc(previewSummary));
-            setMessage("Export failed: payload too large (showing summary)");
+            setMessage('Export failed: payload too large (showing summary)');
             setTimeout(() => setMessage(null), 4000);
             return;
           }
         } else {
           setExportedText(previewStr);
           setExportedObj(removeSrc(previewSummary));
-          setMessage("Export failed: could not serialize payload (showing summary)");
+          setMessage('Export failed: could not serialize payload (showing summary)');
           setTimeout(() => setMessage(null), 4000);
           return;
         }
@@ -145,8 +146,8 @@ export default function BackupsPage() {
           // payload is large — keep a sanitized object for the tree preview and show a trimmed text summary,
           // but still allow the user to download the full payload to a file.
           setExportedObj(removeSrc(payload));
-          setExportedText(previewStr.slice(0, 1024) + "\n\n...export trimmed (too large)...");
-          setMessage("Export large: showing trimmed preview but download will proceed");
+          setExportedText(previewStr.slice(0, 1024) + '\n\n...export trimmed (too large)...');
+          setMessage('Export large: showing trimmed preview but download will proceed');
           setTimeout(() => setMessage(null), 4000);
           // do not return; proceed to create blob and trigger download
         }
@@ -157,9 +158,11 @@ export default function BackupsPage() {
       // Show sanitized preview but download the full payload (downloadStr)
       setExportedObj(removeSrc(payload));
       setExportedText(previewStr);
-      const blob = new Blob([downloadStr || previewStr], { type: "application/json;charset=utf-8" });
+      const blob = new Blob([downloadStr || previewStr], {
+        type: 'application/json;charset=utf-8',
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
       a.download = `moments-backup-${Date.now()}.json`;
       document.body.appendChild(a);
@@ -167,15 +170,17 @@ export default function BackupsPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      logger.error("Export failed", e);
+      logger.error('Export failed', e);
       try {
         if (previewSummary) {
           const s = JSON.stringify(removeSrc(previewSummary), null, 2);
           setExportedObj(removeSrc(previewSummary));
           setExportedText(s);
         }
-      } catch (er) { /* ignore */ }
-      setMessage("Export failed");
+      } catch (er) {
+        /* ignore */
+      }
+      setMessage('Export failed');
       setTimeout(() => setMessage(null), 4000);
     }
   }, [MAX_EXPORT_BYTES]);
@@ -187,13 +192,15 @@ export default function BackupsPage() {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const parsed = JSON.parse(String(reader.result || "null"));
+        const parsed = JSON.parse(String(reader.result || 'null'));
         try {
           setImportedText(JSON.stringify(removeSrc(parsed), null, 2));
         } catch (e) {
           try {
-            setImportedText(sanitizeAndStringify(String(reader.result || "")));
-          } catch (ee) { /* ignore */ }
+            setImportedText(sanitizeAndStringify(String(reader.result || '')));
+          } catch (ee) {
+            /* ignore */
+          }
         }
 
         // Handle old flat-array backups (array of heap items)
@@ -208,11 +215,11 @@ export default function BackupsPage() {
             src: p.src ?? p.url,
             name: p.name ?? p.title,
           }));
-        } else if (parsed && typeof parsed === "object") {
+        } else if (parsed && typeof parsed === 'object') {
           // structured backup: { heap: [...], stories: [{id,title,count,items: [...]}, ...] }
-          const heapArr = parsed.moments ?? parsed.heap ?? parsed["heap-gifs"] ?? [];
+          const heapArr = parsed.moments ?? parsed.heap ?? parsed['heap-gifs'] ?? [];
           if (!Array.isArray(heapArr)) {
-            setMessage("Invalid backup file");
+            setMessage('Invalid backup file');
             setTimeout(() => setMessage(null), 4000);
             return;
           }
@@ -231,7 +238,7 @@ export default function BackupsPage() {
             }));
           }
           // legacy or structured trash payloads
-          const trashArr = parsed.trash ?? parsed["trash-moments"] ?? parsed["trash-gifs"] ?? null;
+          const trashArr = parsed.trash ?? parsed['trash-moments'] ?? parsed['trash-gifs'] ?? null;
           if (Array.isArray(trashArr)) {
             trashPayload = trashArr.map((p: any) => ({
               id: p.id ?? `${Date.now()}-${Math.random()}`,
@@ -242,7 +249,7 @@ export default function BackupsPage() {
           // if the backup contains overlay data, keep it for later restoration
           overlaysPayload = parsed.overlays ?? parsed.overlay ?? null;
         } else {
-          setMessage("Invalid backup file");
+          setMessage('Invalid backup file');
           setTimeout(() => setMessage(null), 4000);
           return;
         }
@@ -250,98 +257,108 @@ export default function BackupsPage() {
         try {
           await clear();
         } catch (e) {
-          logger.warn("Failed to clear IndexedDB before import", e);
+          logger.warn('Failed to clear IndexedDB before import', e);
         }
         // immediately clear story metadata/submenus and notify UI so submenus disappear before restore
         try {
-          await set("stories", []);
-          await set("stories-active", null as any);
+          await set('stories', []);
+          await set('stories-active', null as any);
           try {
-            window.dispatchEvent(new CustomEvent("stories-updated", { detail: {} }));
-          } catch (e) { /* ignore in non-browser */ }
+            window.dispatchEvent(new CustomEvent('stories-updated', { detail: {} }));
+          } catch (e) {
+            /* ignore in non-browser */
+          }
         } catch (e) {
-          logger.warn("Failed to reset stories keys after import", e);
+          logger.warn('Failed to reset stories keys after import', e);
         }
 
         // restore heap items
-        await set("heap-moments", validated);
+        await set('heap-moments', validated);
         // restore any overlays from the imported payload
         try {
-          if (overlaysPayload && typeof overlaysPayload === "object") {
+          if (overlaysPayload && typeof overlaysPayload === 'object') {
             for (const [key, val] of Object.entries(overlaysPayload)) {
               try {
-                await Promise.resolve(localStorage.setItem(`overlay:text:${key}`, JSON.stringify(val)));
+                await Promise.resolve(
+                  localStorage.setItem(`overlay:text:${key}`, JSON.stringify(val))
+                );
               } catch (e) {
-                logger.warn("Failed to restore overlay for", key, e);
+                logger.warn('Failed to restore overlay for', key, e);
               }
             }
           }
         } catch (e) {
-          logger.warn("Failed to apply overlays from import", e);
+          logger.warn('Failed to apply overlays from import', e);
         }
         // restore trash items if present
         if (trashPayload) {
           try {
-            await set("trash-moments", trashPayload);
+            await set('trash-moments', trashPayload);
           } catch (e) {
-            logger.warn("Failed to restore trash items", e);
+            logger.warn('Failed to restore trash items', e);
           }
         }
         // restore stories if present
         if (storiesPayload) {
           const meta = storiesPayload.map(({ id, title, count }) => ({ id, title, count }));
           try {
-            await set("stories", meta);
+            await set('stories', meta);
             // write per-story items
             await Promise.all(
-              storiesPayload.map(async (s) => {
+              storiesPayload.map(async s => {
                 try {
                   await set(`story:${s.id}`, s.items || []);
                 } catch (e) {
-                  logger.warn("Failed to write story items", s.id, e);
+                  logger.warn('Failed to write story items', s.id, e);
                 }
               })
             );
             try {
-              window.dispatchEvent(new CustomEvent("stories-updated", { detail: {} }));
-            } catch (e) { /* ignore in non-browser */ }
+              window.dispatchEvent(new CustomEvent('stories-updated', { detail: {} }));
+            } catch (e) {
+              /* ignore in non-browser */
+            }
           } catch (e) {
-            logger.warn("Failed to restore stories metadata", e);
+            logger.warn('Failed to restore stories metadata', e);
           }
         }
         // notify app to refresh any in-memory state
         try {
-          window.dispatchEvent(new CustomEvent("moments-updated", { detail: { count: validated.length } }));
-        } catch (e) { /* ignore in non-browser */ }
+          window.dispatchEvent(
+            new CustomEvent('moments-updated', { detail: { count: validated.length } })
+          );
+        } catch (e) {
+          /* ignore in non-browser */
+        }
         // don't reload the page; dispatch events above already notify the app
         setMessage(`Imported ${validated.length} moments`);
         setTimeout(() => setMessage(null), 4000);
       } catch (err) {
         logger.error(err);
-        setMessage("Import failed");
+        setMessage('Import failed');
         try {
-          setImportedText(sanitizeAndStringify(String(reader.result || "")));
-        } catch (e) { /* ignore */ }
+          setImportedText(sanitizeAndStringify(String(reader.result || '')));
+        } catch (e) {
+          /* ignore */
+        }
         setTimeout(() => setMessage(null), 4000);
       }
     };
     reader.readAsText(f);
   }, []);
 
-  const renderPreview = (text: string | null, emptyLabel = "No data") => {
+  const renderPreview = (text: string | null, emptyLabel = 'No data') => {
     if (!text) return <div className="text-slate-400">{emptyLabel}</div>;
     try {
       const parsed = JSON.parse(text);
       return <JsonTree data={parsed} />;
     } catch (e) {
-      return (
-        <pre className="font-mono text-xs whitespace-pre-wrap text-slate-700">{text}</pre>
-      );
+      return <pre className="font-mono text-xs whitespace-pre-wrap text-slate-700">{text}</pre>;
     }
   };
 
   // Prefer the parsed sanitized object when available so we can render a tree
-  const renderExportPreview = (text: string | null, emptyLabel = "No data") => {
+  const renderExportPreview = (text: string | null, emptyLabel = 'No data') => {
     if (exportedObj) return <JsonTree data={exportedObj} />;
     return renderPreview(text, emptyLabel);
   };
@@ -359,44 +376,47 @@ export default function BackupsPage() {
       ) : null}
       <h2 className="text-2xl font-bold mb-4">Backups</h2>
       <p className="mb-4">Export or import your moment backups as JSON.</p>
-      <div className="flex gap-3">
-        <button
-          onClick={handleExport}
-          className="px-4 py-2 rounded bg-slate-800 text-white"
-        >
-          Export JSON
-        </button>
-        <input
-          ref={importRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={(e) => handleImport(e.target.files)}
-        />
-        <button
-          onClick={() => importRef.current?.click()}
-          className="px-4 py-2 rounded border"
-        >
-          Import JSON
-        </button>
+      {/* buttons in two-column grid align with preview panels below */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="flex justify-start">
+          <button onClick={handleExport} className="px-4 py-2 rounded bg-slate-800 text-white">
+            Export JSON
+          </button>
+        </div>
+        <div className="flex justify-end items-center">
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={e => handleImport(e.target.files)}
+          />
+          <button onClick={() => importRef.current?.click()} className="px-4 py-2 rounded border">
+            Import JSON
+          </button>
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         <div>
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium mb-2">Exported Preview</label>
-            {!exportedText ? null : <span className="text-xs text-slate-500">sanitized (no src)</span>}
+            {!exportedText ? null : (
+              <span className="text-xs text-slate-500">sanitized (no src)</span>
+            )}
           </div>
           <div className="w-full rounded border-0 p-2 bg-slate-900 text-slate-100 max-h-96 overflow-auto">
-            {renderExportPreview(exportedText, "No export yet")}
+            {renderExportPreview(exportedText, 'No export yet')}
           </div>
         </div>
         <div>
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium mb-2">Imported Preview</label>
-            {!importedText ? null : <span className="text-xs text-slate-500">sanitized (no src)</span>}
+            {!importedText ? null : (
+              <span className="text-xs text-slate-500">sanitized (no src)</span>
+            )}
           </div>
           <div className="w-full rounded border-0 p-2 bg-slate-900 text-slate-100 max-h-96 overflow-auto">
-            {renderPreview(importedText, "No import yet")}
+            {renderPreview(importedText, 'No import yet')}
           </div>
         </div>
       </div>
