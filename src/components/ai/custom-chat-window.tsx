@@ -8,6 +8,7 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
+import { ConnectionSheet } from '@/components/connection-sheet';
 
 export interface CustomChatMessage {
   id: string;
@@ -26,6 +27,9 @@ interface CustomChatWindowProps {
   // Optional icon to use for the send button (renders an icon button when provided)
   sendIcon?: React.ReactNode;
   sendIconAriaLabel?: string;
+  // When provided, renders a connection icon + model label on the left side of the send row.
+  connected?: boolean;
+  connectionModel?: string | null;
   // Optional compact prompter-mode selector (no visible label) rendered above the send control
   prompterMode?: 'tell' | 'do' | 'think';
   onPrompterModeChange?: (v: 'tell' | 'do' | 'think') => void;
@@ -39,6 +43,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   disabled,
   sendIcon,
   sendIconAriaLabel,
+  connected,
+  connectionModel,
   prompterMode,
   onPrompterModeChange,
 }) => {
@@ -113,123 +119,89 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     >
       <div
         ref={scrollRef}
-        className="overflow-y-auto p-6 space-y-6 bg-background/60 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
-        style={{ maxHeight: '100%' }}
+        className="overflow-y-auto bg-background/60 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
+        style={{ maxHeight: '100%', scrollbarGutter: 'stable' }}
       >
-        {messages.length === 0 ? (
-          <div className="text-center text-muted-foreground text-sm opacity-70 py-8">
-            No messages yet. Start the conversation!
-          </div>
-        ) : (
-          messages.map(msg => (
-            <div
-              key={msg.id}
-              className={`flex items-end ${
-                msg.from === 'user' ? 'justify-end' : 'justify-start'
-              } gap-3`}
-            >
-              {msg.from === 'agent' && (
-                <Avatar className="h-8 w-8 shrink-0">
-                  {msg.avatarUrl ? (
-                    <AvatarImage src={msg.avatarUrl} />
-                  ) : (
-                    <AvatarFallback>
-                      <UserIcon className="h-4 w-4" />
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-              )}
-
-              <div
-                className={`rounded-xl px-4 py-3 max-w-[70%] shadow text-sm whitespace-pre-line ${
-                  msg.from === 'user'
-                    ? 'bg-primary/66 text-white [text-shadow:0_1px_6px_rgba(59,130,246,0.9)]'
-                    : 'bg-muted/66 text-foreground'
-                }`}
-              >
-                {msg.text}
-              </div>
-
-              {msg.from === 'user' && (
-                <Avatar noContainer className="h-8 w-8 shrink-0">
-                  {msg.avatarUrl ? (
-                    <AvatarImage src={msg.avatarUrl} />
-                  ) : (
-                    <AvatarFallback>
-                      <UserIcon className="h-4 w-4" />
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-              )}
+        <div className="p-6 space-y-6">
+          {messages.length === 0 ? (
+            <div className="text-center text-muted-foreground text-sm opacity-70 py-8">
+              No messages yet. Start the conversation!
             </div>
-          ))
-        )}
+          ) : (
+            messages.map(msg => (
+              <div
+                key={msg.id}
+                className={`flex items-end ${
+                  msg.from === 'user' ? 'justify-end' : 'justify-start'
+                } gap-3 w-full`}
+              >
+                <div
+                  className={`px-4 py-3 text-sm whitespace-pre-line ${
+                    msg.from === 'user'
+                      ? 'relative ml-auto inline-block max-w-[70%] text-right bg-violet-700 text-white border border-violet-500 rounded-2xl rounded-br-none shadow'
+                      : 'w-full mr-auto max-w-[calc(100%+20px)] -ml-5 text-left text-muted-foreground'
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       <div ref={footerRef} className="flex-none bg-zinc-950/90 border-t border-zinc-800 p-4">
-        <div className="flex gap-2 items-end">
-          <textarea
-            ref={textareaRef}
-            className="flex-1 resize-none rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            rows={2}
-            value={input}
-            onChange={e => onInputChange(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            disabled={disabled}
-            placeholder="Type your message..."
-          />
+        <div className="space-y-2">
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+            <textarea
+              ref={textareaRef}
+              className="w-full resize-none bg-transparent px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-0"
+              rows={2}
+              value={input}
+              onChange={e => onInputChange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={disabled}
+              placeholder="Type your message..."
+            />
 
-          {/* right-side compact controls: small prompter-mode selector above send */}
-          <div className="flex flex-col items-end gap-2">
-            {prompterMode !== undefined && onPrompterModeChange && (
-              <Select
-                value={prompterMode}
-                onValueChange={(v: string) => onPrompterModeChange(v as 'tell' | 'do' | 'think')}
-              >
-                <SelectTrigger aria-label="Prompter mode" className="h-7 w-20 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tell">Tell</SelectItem>
-                  <SelectItem value="do">Do</SelectItem>
-                  <SelectItem value="think">Think</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            <div className="flex items-center justify-between gap-2 border-t border-zinc-800 p-2">
+              <div className="flex items-center gap-2">
+                <ConnectionSheet side="bottom" />
+                {connected && connectionModel ? (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {connectionModel}
+                  </span>
+                ) : null}
 
-            <div className="flex items-center gap-2">
-              <button
-                className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
-                onClick={() => fileInputRef.current?.click()}
-                title="Choose background GIF"
-                type="button"
-              >
-                🖼️
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/gif"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const url = URL.createObjectURL(file);
-                    setBgGifUrl(url);
-                  }
-                  // reset
-                  e.target.value = '';
-                }}
-              />
+                {prompterMode !== undefined && onPrompterModeChange && (
+                  <div>
+                    <Select
+                      value={prompterMode}
+                      onValueChange={(v: string) =>
+                        onPrompterModeChange(v as 'tell' | 'do' | 'think')
+                      }
+                    >
+                      <SelectTrigger aria-label="Prompter mode" className="h-7 w-20 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tell">Tell</SelectItem>
+                        <SelectItem value="do">Do</SelectItem>
+                        <SelectItem value="think">Think</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
 
               {sendIcon ? (
                 <button
-                  className="rounded-md bg-primary text-primary-foreground p-2 disabled:opacity-50"
+                  className="rounded-md bg-white text-black p-2 hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333] disabled:opacity-50"
                   onClick={handleSend}
                   disabled={disabled || !input.trim()}
                   aria-label={sendIconAriaLabel ?? 'Send message'}

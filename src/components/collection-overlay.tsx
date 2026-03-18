@@ -1,12 +1,16 @@
-"use client";
+'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { useMomentsContext } from "@/context/moments-collection";
-import { normalizeMomentSrc } from "@/lib/moments";
-import { X, ArrowLeft, ArrowRight, Pencil } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { del, get, keys, set } from 'idb-keyval';
+import { useMomentsContext } from '@/context/moments-collection';
+import { normalizeMomentSrc } from '@/lib/moments';
+import { X, ArrowLeft, ArrowRight } from 'lucide-react';
+import { FaTags } from 'react-icons/fa';
+import { MdTitle } from 'react-icons/md';
+import MomentClassifier from '@/components/ai/moment-classifier';
 
-const noop = () => { };
+const noop = () => {};
 
 export default function CollectionOverlay() {
   const ctx = useMomentsContext();
@@ -17,20 +21,27 @@ export default function CollectionOverlay() {
   const prev = ctx?.prev ?? noop;
   const isOpen = ctx?.isOpen ?? false;
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState("");
+  const [tagging, setTagging] = useState(false);
+  const [text, setText] = useState('');
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
-  const [font, setFont] = useState("system");
+  const [font, setFont] = useState('system');
   const [fontSize, setFontSize] = useState(40);
   const [textWidth, setTextWidth] = useState(60);
   const [strokeWidth, setStrokeWidth] = useState(0);
-  const [strokeColor, setStrokeColor] = useState("#000000");
-  const [fontColor, setFontColor] = useState("#ffffff");
+  const [strokeColor, setStrokeColor] = useState('#000000');
+  const [fontColor, setFontColor] = useState('#ffffff');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [highlightedSuggestion, setHighlightedSuggestion] = useState<number>(-1);
   const [pixelWidth, setPixelWidth] = useState<number | null>(null);
   const pixelWidthRef = useRef<number | null>(null);
 
   const posRef = useRef(pos);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
+  const skipPersistRef = useRef(false);
 
   // compute pixel width from percent and container size so wrapping is stable
   const computePixelWidth = useCallback(() => {
@@ -48,64 +59,165 @@ export default function CollectionOverlay() {
     }
   }, [textWidth]);
 
-  // load saved overlay text for the current item from localStorage
+  // load saved overlay text for the current item from IndexedDB
   useEffect(() => {
     if (!currentId) return;
-    try {
-      const v = localStorage.getItem(`overlay:text:${currentId}`) || "";
-      if (!v) {
-        setText("");
-        setPos({ x: 0.5, y: 0.5 });
-        setStrokeWidth(0);
-        setStrokeColor("#000000");
-        return;
-      }
+    // Prevent saving the previous moment's tag state into the new moment while we load.
+    skipPersistRef.current = true;
+
+    (async () => {
       try {
-        const parsed = JSON.parse(v);
-        if (parsed && typeof parsed === "object" && "text" in parsed) {
-          setText(parsed.text || "");
+        const v = await get(`overlay:text:${currentId}`);
+        if (!v) {
+          setText('');
+          setPos({ x: 0.5, y: 0.5 });
+          setStrokeWidth(0);
+          setStrokeColor('#000000');
+          setTags([]);
+          return;
+        }
+
+        const parsed = typeof v === 'string' ? JSON.parse(v) : v;
+        if (parsed && typeof parsed === 'object' && 'text' in parsed) {
+          setText(parsed.text || '');
           setPos({ x: parsed.x ?? 0.5, y: parsed.y ?? 0.5 });
-          setFont(parsed.font ?? "system");
+          setFont(parsed.font ?? 'system');
           setFontSize(parsed.fontSize ?? 40);
           setTextWidth(parsed.textWidth ?? 60);
           setStrokeWidth(parsed.strokeWidth ?? 0);
-          setStrokeColor(parsed.strokeColor ?? "#000000");
-          setFontColor(parsed.fontColor ?? "#ffffff");
+          setStrokeColor(parsed.strokeColor ?? '#000000');
+          setFontColor(parsed.fontColor ?? '#ffffff');
+          setTags(Array.isArray(parsed.tags) ? parsed.tags : []);
         } else {
           // legacy plain-string value
           setText(String(v));
           setPos({ x: 0.5, y: 0.5 });
-          setFont("system");
+          setFont('system');
           setFontSize(40);
           setTextWidth(60);
           setStrokeWidth(0);
-          setStrokeColor("#000000");
-          setFontColor("#ffffff");
+          setStrokeColor('#000000');
+          setFontColor('#ffffff');
+          setTags([]);
         }
       } catch (e) {
-        // not JSON, treat as legacy string
-        setText(String(v));
+        setText('');
         setPos({ x: 0.5, y: 0.5 });
-        setFont("system");
-        setFontSize(40);
-        setTextWidth(60);
         setStrokeWidth(0);
-        setStrokeColor("#000000");
-        setFontColor("#ffffff");
+        setStrokeColor('#000000');
+        setTags([]);
       }
-    } catch (e) {
-      setText("");
-      setPos({ x: 0.5, y: 0.5 });
-      setStrokeWidth(0);
-      setStrokeColor("#000000");
-    }
+    })();
   }, [currentId]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await get('overlay:tags');
+        if (Array.isArray(stored)) {
+          setAllTags(stored);
+        }
+      } catch {
+        setAllTags([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    const lower = tagInput.trim().toLowerCase();
+    if (!lower) {
+      setTagSuggestions([]);
+      setHighlightedSuggestion(-1);
+      return;
+    }
+
+    const matches = allTags
+      .filter(t => t.toLowerCase().includes(lower))
+      .filter(t => !tags.includes(t))
+      .slice(0, 7);
+
+    setTagSuggestions(matches);
+    setHighlightedSuggestion(matches.length ? 0 : -1);
+  }, [tagInput, allTags, tags]);
+
+  // Keep global tag list in sync with every moment's stored tags.
+  // If a tag is removed from all moments, it should no longer appear in autocomplete.
+  const refreshAllTagsFromStorage = useCallback(() => {
+    (async () => {
+      try {
+        const allKeys = await keys();
+        const tagSet = new Set<string>();
+        const overlayKeys = (allKeys as any[])
+          .filter(k => typeof k === 'string' && k.startsWith('overlay:text:'))
+          .map(k => String(k));
+
+        await Promise.all(
+          overlayKeys.map(async key => {
+            try {
+              const stored = await get(key);
+              if (stored && Array.isArray((stored as any).tags)) {
+                for (const t of (stored as any).tags) {
+                  if (typeof t === 'string' && t.trim()) tagSet.add(t);
+                }
+              }
+            } catch {
+              // ignore parse errors
+            }
+          })
+        );
+
+        setAllTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b)));
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    refreshAllTagsFromStorage();
+  }, [refreshAllTagsFromStorage, isOpen, currentId, tags]);
+
   useEffect(() => {
     computePixelWidth();
     const onResize = () => computePixelWidth();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, [computePixelWidth]);
+
+  const persistOverlayData = (payload: {
+    text: string;
+    x: number;
+    y: number;
+    font: string;
+    fontSize: number;
+    textWidth: number;
+    strokeWidth: number;
+    strokeColor: string;
+    fontColor: string;
+    tags: string[];
+  }) => {
+    // Store overlay text in IndexedDB for import/export consistency.
+    (async () => {
+      try {
+        await set(`overlay:text:${currentId}`, payload);
+      } catch (e) {
+        /* ignore */
+      }
+    })();
+
+    // Persist global tag list in indexedDB so it can be exported/imported with the rest of the app state.
+    (async () => {
+      try {
+        const existing = (await get('overlay:tags')) || [];
+        const merged = Array.from(
+          new Set([...(Array.isArray(existing) ? existing : []), ...(payload.tags || [])])
+        );
+        await set('overlay:tags', merged);
+      } catch (e) {
+        /* ignore */
+      }
+    })();
+  };
 
   const saveText = (
     t: string,
@@ -115,26 +227,34 @@ export default function CollectionOverlay() {
     width?: number,
     sWidth?: number,
     sColor?: string,
-    fontColorParam?: string
+    fontColorParam?: string,
+    newTags?: string[]
   ) => {
-    try {
-      if (t) {
-        const payload = {
-          text: t,
-          x: p?.x ?? pos.x,
-          y: p?.y ?? pos.y,
-          font: f ?? font,
-          fontSize: size ?? fontSize,
-          textWidth: width ?? textWidth,
-          strokeWidth: sWidth ?? strokeWidth,
-          strokeColor: sColor ?? strokeColor,
-          fontColor: fontColorParam ?? fontColor,
-        };
-        localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
-      } else {
-        localStorage.removeItem(`overlay:text:${currentId}`);
-      }
-    } catch (e) { /* ignore */ }
+    const payload = {
+      text: t,
+      x: p?.x ?? pos.x,
+      y: p?.y ?? pos.y,
+      font: f ?? font,
+      fontSize: size ?? fontSize,
+      textWidth: width ?? textWidth,
+      strokeWidth: sWidth ?? strokeWidth,
+      strokeColor: sColor ?? strokeColor,
+      fontColor: fontColorParam ?? fontColor,
+      tags: newTags ?? tags,
+    };
+
+    if (t || (newTags && newTags.length)) {
+      persistOverlayData(payload);
+    } else {
+      (async () => {
+        try {
+          await del(`overlay:text:${currentId}`);
+        } catch {
+          /* ignore */
+        }
+      })();
+    }
+
     setText(t);
     if (p) setPos(p);
     if (f) setFont(f);
@@ -143,10 +263,8 @@ export default function CollectionOverlay() {
     if (sWidth != null) setStrokeWidth(sWidth);
     if (sColor) setStrokeColor(sColor);
     if (fontColorParam) setFontColor(fontColorParam);
-    setEditing(false);
+    if (newTags) setTags(newTags);
   };
-
-
 
   const savePosition = (p: { x: number; y: number }) => {
     try {
@@ -162,11 +280,11 @@ export default function CollectionOverlay() {
         fontColor,
       };
       if (text) localStorage.setItem(`overlay:text:${currentId}`, JSON.stringify(payload));
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
     setPos(p);
   };
-
-
 
   const onStartDrag = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
@@ -193,19 +311,21 @@ export default function CollectionOverlay() {
       try {
         // persist when drag ends
         savePosition(posRef.current);
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
       // unlock pixel width and recompute based on container
       pixelWidthRef.current = null;
       computePixelWidth();
-      window.removeEventListener("mousemove", move as any);
-      window.removeEventListener("touchmove", move as any);
-      window.removeEventListener("mouseup", end as any);
-      window.removeEventListener("touchend", end as any);
+      window.removeEventListener('mousemove', move as any);
+      window.removeEventListener('touchmove', move as any);
+      window.removeEventListener('mouseup', end as any);
+      window.removeEventListener('touchend', end as any);
     };
-    window.addEventListener("mousemove", move as any);
-    window.addEventListener("touchmove", move as any, { passive: false } as any);
-    window.addEventListener("mouseup", end as any);
-    window.addEventListener("touchend", end as any);
+    window.addEventListener('mousemove', move as any);
+    window.addEventListener('touchmove', move as any, { passive: false } as any);
+    window.addEventListener('mouseup', end as any);
+    window.addEventListener('touchend', end as any);
 
     // lock current pixel width for stable wrapping while dragging
     pixelWidthRef.current = pixelWidth;
@@ -213,19 +333,21 @@ export default function CollectionOverlay() {
 
   useEffect(() => {
     if (!ctx || !isOpen) return;
-    const prevOverflow = document.body.style.overflow || "";
-    document.body.style.overflow = "hidden";
+    const prevOverflow = document.body.style.overflow || '';
+    document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "ArrowRight") next();
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener('keydown', onKey);
       try {
         document.body.style.overflow = prevOverflow;
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     };
   }, [ctx, isOpen, close, next, prev]);
 
@@ -244,21 +366,63 @@ export default function CollectionOverlay() {
     }
     prevPathRef.current = pathname;
   }, [ctx, isOpen, close, pathname]);
+  useEffect(() => {
+    if (!currentId) return;
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    saveText(text, undefined, font, fontSize, textWidth, strokeWidth, strokeColor, fontColor, tags);
+  }, [tags, currentId, text, font, fontSize, textWidth, strokeWidth, strokeColor, fontColor]);
+
+  useEffect(() => {
+    if (!isOpen || !currentId) return;
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    persistOverlayData({
+      text,
+      x: pos.x,
+      y: pos.y,
+      font,
+      fontSize,
+      textWidth,
+      strokeWidth,
+      strokeColor,
+      fontColor,
+      tags,
+    });
+  }, [
+    isOpen,
+    currentId,
+    text,
+    pos.x,
+    pos.y,
+    font,
+    fontSize,
+    textWidth,
+    strokeWidth,
+    strokeColor,
+    fontColor,
+    tags,
+  ]);
+
   if (!ctx || !isOpen || !currentId) return null;
   const item = collection.find((m: any) => m.id === currentId);
   if (!item) return null;
   return (
     <div
       className="fixed inset-0 z-[1200] bg-black/90 flex items-center justify-center"
-      onClick={(e) => {
+      onClick={e => {
         e.stopPropagation();
       }}
-      onMouseDown={(e) => {
+      onMouseDown={e => {
         e.stopPropagation();
       }}
     >
       <button
-        onClick={(e) => {
+        onClick={e => {
           e.stopPropagation();
           e.preventDefault();
           close();
@@ -269,219 +433,350 @@ export default function CollectionOverlay() {
         <X size={18} />
       </button>
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          setEditing(true);
-        }}
-        className="absolute right-6 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
-        aria-label="Edit overlay text"
+      <div className="absolute right-4 top-4 flex items-center gap-2 z-10">
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            e.preventDefault();
+            setEditing(true);
+          }}
+          className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white"
+          aria-label="Edit overlay title"
+        >
+          <MdTitle size={18} />
+        </button>
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            e.preventDefault();
+            setTagging(true);
+          }}
+          className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white"
+          aria-label="Manage tags"
+        >
+          <FaTags size={18} />
+        </button>
+      </div>
+
+      {collection.length > 1 && (
+        <>
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              e.preventDefault();
+              prev();
+            }}
+            aria-label="Previous"
+            className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              e.preventDefault();
+              next();
+            }}
+            aria-label="Next"
+            className="absolute right-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
+          >
+            <ArrowRight size={20} />
+          </button>
+        </>
+      )}
+
+      <div
+        ref={containerRef}
+        className="max-h-full max-w-full flex items-center justify-center relative"
       >
-        <Pencil size={18} />
-      </button>
+        <div className="flex items-center justify-center w-full">
+          <img
+            src={normalizeMomentSrc(item.src)}
+            alt={item.name || 'Moment preview'}
+            className="h-screen max-w-full object-contain rounded"
+            onClick={e => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+          />
+        </div>
 
-      <div className="max-w-6xl w-full h-full flex items-center justify-center">
-        <div className="w-full h-full flex items-center justify-center relative">
-          {collection.length > 1 && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  prev();
-                }}
-                aria-label="Previous"
-                className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  next();
-                }}
-                aria-label="Next"
-                className="absolute right-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
-              >
-                <ArrowRight size={20} />
-              </button>
-            </>
-          )}
+        {text ? (
+          <div
+            onMouseDown={e => onStartDrag(e)}
+            onTouchStart={e => onStartDrag(e)}
+            className="absolute z-30"
+            style={{
+              left: `${pos.x * 100}%`,
+              top: `${pos.y * 100}%`,
+              transform: 'translate(-50%, -50%)',
+              cursor: 'grab',
+              pointerEvents: 'auto',
+            }}
+            role="presentation"
+          >
+            <span
+              className="text-white drop-shadow-lg px-4"
+              style={{
+                display: 'block',
+                textAlign: 'center',
+                wordBreak: 'break-word',
+                width: pixelWidth ? `${pixelWidth}px` : undefined,
+                maxWidth: pixelWidth ? `${pixelWidth}px` : undefined,
+                color: fontColor,
+                fontFamily:
+                  font === 'serif'
+                    ? "Georgia, 'Times New Roman', Times, serif"
+                    : font === 'mono'
+                    ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace"
+                    : font === 'mrs'
+                    ? "'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive"
+                    : font === 'satisfy'
+                    ? "'Satisfy', 'Segoe Script', 'Brush Script MT', cursive"
+                    : font === 'cursive'
+                    ? "'Brush Script MT', 'Segoe Script', cursive"
+                    : "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial",
+                fontSize: `${fontSize}px`,
+                lineHeight: 1.1,
+                whiteSpace: 'normal',
+                hyphens: 'auto',
+                ...(strokeWidth
+                  ? {
+                      WebkitTextStroke: `${strokeWidth}px ${strokeColor}`,
+                      textStroke: `${strokeWidth}px ${strokeColor}`,
+                    }
+                  : {}),
+              }}
+            >
+              {text}
+            </span>
+          </div>
+        ) : null}
+      </div>
 
-          <div ref={containerRef} className="max-h-full max-w-full flex items-center justify-center relative">
-            <div className="flex items-center justify-center w-full">
-              { }
-              <img
-                src={normalizeMomentSrc(item.src)}
-                alt={item.name || "Moment preview"}
-                className="h-screen max-w-full object-contain rounded"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                }}
-              />
-            </div>
+      {/* Editor action buttons removed per request */}
 
-            {text ? (
-              <div
-                onMouseDown={(e) => onStartDrag(e)}
-                onTouchStart={(e) => onStartDrag(e)}
-                className="absolute z-30"
-                style={{
-                  left: `${pos.x * 100}%`,
-                  top: `${pos.y * 100}%`,
-                  transform: "translate(-50%, -50%)",
-                  cursor: "grab",
-                  pointerEvents: "auto",
-                }}
-                role="presentation"
-              >
-                <span
-                  className="text-white drop-shadow-lg px-4"
-                  style={{
-                    display: "block",
-                    textAlign: "center",
-                    wordBreak: "break-word",
-                    width: pixelWidth ? `${pixelWidth}px` : undefined,
-                    maxWidth: pixelWidth ? `${pixelWidth}px` : undefined,
-                    color: fontColor,
-                    fontFamily: (
-                      font === "serif" ? "Georgia, 'Times New Roman', Times, serif" :
-                        font === "mono" ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace" :
-                          font === "mrs" ? "'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive" :
-                            font === "satisfy" ? "'Satisfy', 'Segoe Script', 'Brush Script MT', cursive" :
-                              font === "cursive" ? "'Brush Script MT', 'Segoe Script', cursive" :
-                                "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial"
-                    ),
-                    fontSize: `${fontSize}px`,
-                    lineHeight: 1.1,
-                    whiteSpace: "normal",
-                    hyphens: "auto",
-                    ...(strokeWidth ? { WebkitTextStroke: `${strokeWidth}px ${strokeColor}`, textStroke: `${strokeWidth}px ${strokeColor}` } : {}),
-                  }}
-                >
-                  {text}
-                </span>
-              </div>
-            ) : null}
+      <div
+        className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${
+          editing ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        role="dialog"
+        aria-hidden={!editing}
+      >
+        <div className="h-full flex flex-col p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium">Edit Overlay Text</h3>
+            <button
+              onClick={() => setEditing(false)}
+              className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+              aria-label="Close editor"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          {/* Editor action buttons removed per request */}
+          <div className="flex-1 overflow-auto space-y-3">
+            <input
+              value={text}
+              onChange={e => setText(e.target.value)}
+              className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
+              placeholder="Overlay text"
+            />
 
-          <div
-            className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${editing ? "translate-x-0" : "translate-x-full"
-              }`}
-            role="dialog"
-            aria-hidden={!editing}
-          >
-            <div className="h-full flex flex-col p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium">Edit Overlay Text</h3>
-                <button
-                  onClick={() => setEditing(false)}
-                  className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
-                  aria-label="Close editor"
-                >
-                  <X size={18} />
-                </button>
+            <select
+              value={font}
+              onChange={e => setFont(e.target.value)}
+              className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
+            >
+              <option value="system">System Sans</option>
+              <option value="serif">Serif</option>
+              <option value="mono">Monospace</option>
+              <option value="cursive">Cursive</option>
+              <option value="mrs">Mrs Saint Delafield</option>
+              <option value="satisfy">Satisfy</option>
+            </select>
+
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs text-white/80">Size</label>
+              <input
+                type="range"
+                min={16}
+                max={96}
+                value={fontSize}
+                onChange={e => setFontSize(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="text-sm text-white w-14 text-right">{fontSize}px</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs text-white/80">Width</label>
+              <input
+                type="range"
+                min={20}
+                max={100}
+                value={textWidth}
+                onChange={e => setTextWidth(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="text-sm text-white w-14 text-right">{textWidth}%</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs text-white/80">Stroke</label>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={0.5}
+                value={strokeWidth}
+                onChange={e => setStrokeWidth(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="text-sm text-white w-14 text-right">{strokeWidth}px</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={strokeColor}
+                onChange={e => setStrokeColor(e.target.value)}
+                className="w-10 h-10 p-0 border-0 bg-transparent"
+                title="Stroke color"
+              />
+              <span className="text-sm text-white">Stroke color</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={fontColor}
+                onChange={e => setFontColor(e.target.value)}
+                className="w-10 h-10 p-0 border-0 bg-transparent"
+                title="Font color"
+              />
+              <span className="text-sm text-white">Font color</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${
+          tagging ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        role="dialog"
+        aria-hidden={!tagging}
+      >
+        <div className="h-full flex flex-col p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium">Tags & Suggestions</h3>
+            <button
+              onClick={() => setTagging(false)}
+              className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+              aria-label="Close tags panel"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setHighlightedSuggestion(prev => Math.min(prev + 1, tagSuggestions.length - 1));
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setHighlightedSuggestion(prev => Math.max(prev - 1, 0));
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const selected =
+                      highlightedSuggestion >= 0 && highlightedSuggestion < tagSuggestions.length
+                        ? tagSuggestions[highlightedSuggestion]
+                        : tagInput.trim();
+                    if (selected) {
+                      const next = selected.trim();
+                      if (!tags.includes(next)) {
+                        setTags(prev => [...prev, next]);
+                      }
+                      setTagInput('');
+                    }
+                  }
+                }}
+                className="flex-1 px-2 py-1 text-sm rounded bg-white/90 text-black"
+                placeholder="Add tag (e.g. chapter.1)"
+              />
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  const next = tagInput.trim();
+                  if (next && !tags.includes(next)) {
+                    setTags(prev => [...prev, next]);
+                  }
+                  setTagInput('');
+                }}
+                className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm"
+              >
+                Add
+              </button>
+            </div>
+
+            {tagSuggestions.length > 0 && (
+              <div className="rounded bg-black/70 border border-white/10 p-2">
+                {tagSuggestions.map((s, index) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (!tags.includes(s)) setTags(prev => [...prev, s]);
+                      setTagInput('');
+                    }}
+                    className={`w-full text-left text-sm py-1 ${
+                      highlightedSuggestion === index ? 'bg-white/20' : 'hover:bg-white/10'
+                    } text-white rounded`}
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
+            )}
 
-              <div className="flex-1 overflow-auto space-y-3">
-                <input
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
-                  placeholder="Overlay text"
-                />
-
-                <select
-                  value={font}
-                  onChange={(e) => setFont(e.target.value)}
-                  className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
+            <div className="flex flex-wrap gap-2">
+              {tags.map(t => (
+                <span
+                  key={t}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/10 text-white text-xs"
                 >
-                  <option value="system">System Sans</option>
-                  <option value="serif">Serif</option>
-                  <option value="mono">Monospace</option>
-                  <option value="cursive">Cursive</option>
-                  <option value="mrs">Mrs Saint Delafield</option>
-                  <option value="satisfy">Satisfy</option>
-                </select>
+                  <span>{t}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTags(prev => prev.filter(x => x !== t))}
+                    className="text-xs text-white/70 hover:text-white"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
 
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-xs text-white/80">Size</label>
-                  <input
-                    type="range"
-                    min={16}
-                    max={96}
-                    value={fontSize}
-                    onChange={(e) => setFontSize(Number(e.target.value))}
-                    className="w-full"
-                  />
-                  <span className="text-sm text-white w-14 text-right">{fontSize}px</span>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-xs text-white/80">Width</label>
-                  <input
-                    type="range"
-                    min={20}
-                    max={100}
-                    value={textWidth}
-                    onChange={(e) => setTextWidth(Number(e.target.value))}
-                    className="w-full"
-                  />
-                  <span className="text-sm text-white w-14 text-right">{textWidth}%</span>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-xs text-white/80">Stroke</label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={10}
-                    step={0.5}
-                    value={strokeWidth}
-                    onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                    className="w-full"
-                  />
-                  <span className="text-sm text-white w-14 text-right">{strokeWidth}px</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={strokeColor}
-                    onChange={(e) => setStrokeColor(e.target.value)}
-                    className="w-10 h-10 p-0 border-0 bg-transparent"
-                    title="Stroke color"
-                  />
-                  <span className="text-sm text-white">Stroke color</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={fontColor}
-                    onChange={(e) => setFontColor(e.target.value)}
-                    className="w-10 h-10 p-0 border-0 bg-transparent"
-                    title="Font color"
-                  />
-                  <span className="text-sm text-white">Font color</span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() => {
-                    saveText(text, undefined, font, fontSize, textWidth, strokeWidth, strokeColor, fontColor);
-                    setEditing(false);
-                  }}
-                  className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm"
-                >
-                  Save
-                </button>
-              </div>
+            <div className="mt-6 border-t border-white/10 pt-4">
+              <h4 className="text-xs text-white/70 mb-2">Auto-tag</h4>
+              <MomentClassifier
+                imageSrc={normalizeMomentSrc(item.src)}
+                onAddTags={newTags => {
+                  setTags(prev => Array.from(new Set([...prev, ...newTags])));
+                }}
+              />
             </div>
           </div>
         </div>

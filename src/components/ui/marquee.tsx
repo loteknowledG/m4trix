@@ -10,33 +10,27 @@ const MarqueeInner = React.forwardRef<HTMLDivElement, MarqueeProps>(
   ({ className, children, gap = '2rem', duration = '24s', ...props }, ref) => {
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const innerRef = React.useRef<HTMLDivElement | null>(null);
-    const repeatCountRef = React.useRef(6);
-    const [repeatCount, setRepeatCount] = React.useState(6);
 
-    const computeRepeatCount = React.useCallback(() => {
+    // Start with a high repeat count so short titles still scroll smoothly.
+    const [repeatCount, setRepeatCount] = React.useState(10);
+
+    const durationValue = React.useMemo(() => {
+      if (duration && duration !== '24s') return duration;
+
+      // A fixed duration makes the scroll speed consistent.
+      return '3s';
+    }, [duration]);
+
+    React.useLayoutEffect(() => {
       const containerWidth = containerRef.current?.offsetWidth ?? 0;
       const firstChildWidth =
         innerRef.current?.firstElementChild?.getBoundingClientRect().width ?? 0;
 
       if (!containerWidth || !firstChildWidth) return;
 
-      // Ensure enough copies exist to keep the scroll continuous.
-      // Buffer by 2x container width so the animation never exposes an empty gap.
-      const needed = Math.ceil((containerWidth * 2) / firstChildWidth);
-      const next = Math.max(needed, 2);
-      if (next !== repeatCountRef.current) {
-        repeatCountRef.current = next;
-        setRepeatCount(next);
-      }
-    }, []);
-
-    React.useLayoutEffect(() => {
-      computeRepeatCount();
-      const handleResize = () => requestAnimationFrame(computeRepeatCount);
-
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }, [computeRepeatCount]);
+      const neededCopies = Math.max(10, Math.ceil(containerWidth / firstChildWidth) + 1);
+      setRepeatCount(neededCopies);
+    }, [children, gap]);
 
     const items = React.useMemo(
       () =>
@@ -59,7 +53,7 @@ const MarqueeInner = React.forwardRef<HTMLDivElement, MarqueeProps>(
         style={
           {
             ...((props.style ?? {}) as React.CSSProperties),
-            '--marquee-duration': duration,
+            '--marquee-duration': durationValue,
             '--marquee-repeat': repeatCount,
           } as React.CSSProperties
         }

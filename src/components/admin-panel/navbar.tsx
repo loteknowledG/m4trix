@@ -88,14 +88,14 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
           </div>
 
           <div className="flex justify-center min-w-0">
-            {!leftSlot && selectedCount ? (
+            {selectedCount ? (
               <h2 className="text-sm font-medium lowercase truncate">{selectedCount} selected</h2>
             ) : (
               <h2
                 className={
-                  isStories || isStoryDetail || isTags || isTrash
+                  (isStories || isStoryDetail || isTags || isTrash
                     ? 'text-sm font-medium lowercase'
-                    : 'text-lg font-medium'
+                    : 'text-lg font-medium') + ' w-full max-w-[calc(100%-6rem)] truncate'
                 }
               >
                 {titleMarquee && displayTitle && !isStoryDetail ? (

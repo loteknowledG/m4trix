@@ -10,6 +10,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
+import { pressableClass } from '@/components/ui/pressable';
 
 type StoryMeta = { id: string; title?: string; count?: number };
 
@@ -113,12 +114,12 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
         {stories.map(story => (
           <CarouselItem key={story.id}>
             <Link href={`/games/${story.id}`}>
-              <div className="h-[100vh] max-w-[500px] bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
+              <div className="h-[100vh] w-full max-w-full bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
                 {previews[story.id] ? (
                   <img
                     src={previews[story.id] || undefined}
                     alt={story.title ?? 'story'}
-                    className="w-full h-[100vh] object-contain"
+                    className="h-full w-auto object-contain"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-gray-400">
@@ -130,8 +131,12 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious className="left-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-[#c90084]/80 hover:bg-[#c90084]/100 z-10" />
-      <CarouselNext className="right-1 top-[54%] -translate-y-1/2 h-12 w-12 bg-[#c90084]/80 hover:bg-[#c90084]/100 z-10" />
+      <CarouselPrevious
+        className={`left-1 top-[54%] -mt-6 h-12 w-12 bg-[#c90084]/80 z-10 ${pressableClass}`}
+      />
+      <CarouselNext
+        className={`right-1 top-[54%] -mt-6 h-12 w-12 bg-[#c90084]/80 z-10 ${pressableClass}`}
+      />
     </Carousel>
   );
 }

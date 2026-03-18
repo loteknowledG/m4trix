@@ -75,32 +75,36 @@ export default function BackupsPage() {
         trashCount: Array.isArray(trash) ? trash.length : 0,
         storiesCount: Array.isArray(savedStories) ? savedStories.length : 0,
       };
-      // collect any per-item overlay text saved in localStorage
+      // collect any per-item overlay text saved in indexedDB
       try {
         const overlays: Record<string, any> = {};
-        const collectFor = (items: any[] | undefined) => {
-          if (!Array.isArray(items)) return;
-          for (const it of items) {
-            const id = it?.id;
-            if (!id) continue;
+        const allKeys = await keys();
+        const overlayKeys = (allKeys as any[])
+          .filter(k => typeof k === 'string' && k.startsWith('overlay:text:'))
+          .map(k => String(k));
+
+        await Promise.all(
+          overlayKeys.map(async key => {
             try {
-              const raw = localStorage.getItem(`overlay:text:${id}`);
-              if (raw) {
-                try {
-                  overlays[id] = JSON.parse(raw);
-                } catch (e) {
-                  overlays[id] = raw;
-                }
+              const val = await get(key);
+              if (val !== undefined) {
+                overlays[key.replace(/^overlay:text:/, '')] = val;
               }
             } catch (e) {
               /* ignore */
             }
-          }
-        };
-        collectFor(heap);
-        collectFor(trash);
-        for (const s of storiesWithItems) collectFor(s.items);
+          })
+        );
+
         if (Object.keys(overlays).length > 0) (payload as any).overlays = overlays;
+
+        // also export the global tag list used for autocomplete
+        try {
+          const globalTags = await get('overlay:tags');
+          if (Array.isArray(globalTags)) (payload as any).overlayTags = globalTags;
+        } catch (e) {
+          /* ignore */
+        }
       } catch (e) {
         // continue without overlays on error
       }
@@ -279,12 +283,19 @@ export default function BackupsPage() {
           if (overlaysPayload && typeof overlaysPayload === 'object') {
             for (const [key, val] of Object.entries(overlaysPayload)) {
               try {
-                await Promise.resolve(
-                  localStorage.setItem(`overlay:text:${key}`, JSON.stringify(val))
-                );
+                await Promise.all([set(`overlay:text:${key}`, val)]);
               } catch (e) {
                 logger.warn('Failed to restore overlay for', key, e);
               }
+            }
+          }
+
+          // restore the global tag list if present
+          if (Array.isArray((parsed as any).overlayTags)) {
+            try {
+              await set('overlay:tags', (parsed as any).overlayTags);
+            } catch (e) {
+              logger.warn('Failed to restore overlay tags list', e);
             }
           }
         } catch (e) {
