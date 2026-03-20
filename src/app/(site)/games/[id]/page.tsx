@@ -36,7 +36,7 @@ export default function GamePage() {
   const [connected, setConnected] = useState(false);
   const [connectionModel, setConnectionModel] = useState<string | null>(null);
 
-  const sendChatMessage = () => {
+  const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
     if (!trimmed) return;
 
@@ -50,16 +50,64 @@ export default function GamePage() {
     setChatInput('');
     setChatDisabled(true);
 
-    // Simulate a simple bot response.
-    setTimeout(() => {
-      const botMessage: CustomChatMessage = {
-        id: `bot-${Date.now()}`,
+    if (!connected) {
+      // Fallback local response when no LLM connection is configured
+      setTimeout(() => {
+        const botMessage: CustomChatMessage = {
+          id: `bot-${Date.now()}`,
+          from: 'agent',
+          text: `You said: "${trimmed}". This is a demo response.`,
+        };
+        setChatMessages(messages => [...messages, botMessage]);
+        setChatDisabled(false);
+      }, 450);
+      return;
+    }
+
+    try {
+      const zenKey = window.sessionStorage.getItem('ZEN_API_KEY_SESSION') ?? undefined;
+      const googleKey = window.sessionStorage.getItem('GOOGLE_API_KEY_SESSION') ?? undefined;
+      const hfKey = window.sessionStorage.getItem('HF_API_KEY_SESSION') ?? undefined;
+      const nvidiaKey = window.sessionStorage.getItem('NVIDIA_API_KEY_SESSION') ?? undefined;
+
+      const res = await fetch('/api/agents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: trimmed,
+          model: connectionModel,
+          zenApiKey: zenKey,
+          googleApiKey: googleKey,
+          hfApiKey: hfKey,
+          nvidiaApiKey: nvidiaKey,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !Array.isArray(data.messages)) {
+        throw new Error(data?.error || 'Failed to get response from LLM');
+      }
+
+      const botMessages: CustomChatMessage[] = data.messages.map((m: any, idx: number) => ({
+        id: m.id || `agent-${Date.now()}-${idx}`,
         from: 'agent',
-        text: `You said: "${trimmed}". This is a demo response.`,
+        text: typeof m.text === 'string' ? m.text : String(m.text ?? ''),
+      }));
+
+      setChatMessages(messages => [...messages, ...botMessages]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const botMessage: CustomChatMessage = {
+        id: `agent-${Date.now()}`,
+        from: 'agent',
+        text: `Error: ${message}`,
       };
       setChatMessages(messages => [...messages, botMessage]);
+    } finally {
       setChatDisabled(false);
-    }, 450);
+    }
   };
 
   useEffect(() => {

@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia';
+type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'kobold';
 
 export interface ConnectionSheetProps {
   /** Side to open the sheet from */
@@ -33,10 +33,13 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   const [googleApiKey, setGoogleApiKey] = useState('');
   const [hfApiKey, setHfApiKey] = useState('');
   const [nvidiaApiKey, setNvidiaApiKey] = useState('');
+  const [koboldUrl, setKoboldUrl] = useState('http://localhost:5000');
+  const [koboldModel, setKoboldModel] = useState('');
   const [zenConnected, setZenConnected] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [hfConnected, setHfConnected] = useState(false);
   const [nvidiaConnected, setNvidiaConnected] = useState(false);
+  const [koboldConnected, setKoboldConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [model, setModel] = useState('');
@@ -44,7 +47,8 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     Array<{ id: string; label: string; provider: Provider }>
   >([]);
 
-  const connected = zenConnected || googleConnected || hfConnected || nvidiaConnected;
+  const connected =
+    zenConnected || googleConnected || hfConnected || nvidiaConnected || koboldConnected;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -56,14 +60,15 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   }, [connected, model]);
 
   const hasKeyForActiveProvider =
-    (
-      (activeProvider === 'zen'
-        ? zenApiKey
-        : activeProvider === 'google'
-        ? googleApiKey
-        : activeProvider === 'nvidia'
-        ? nvidiaApiKey
-        : hfApiKey) || ''
+    (activeProvider === 'zen'
+      ? zenApiKey
+      : activeProvider === 'google'
+      ? googleApiKey
+      : activeProvider === 'nvidia'
+      ? nvidiaApiKey
+      : activeProvider === 'kobold'
+      ? koboldUrl
+      : hfApiKey || ''
     ).trim().length > 0;
 
   const activeProviderConnected =
@@ -73,6 +78,8 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       ? googleConnected
       : activeProvider === 'nvidia'
       ? nvidiaConnected
+      : activeProvider === 'kobold'
+      ? koboldConnected
       : hfConnected;
 
   const storeSession = () => {
@@ -88,6 +95,12 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
 
     if (nvidiaApiKey) window.sessionStorage.setItem('NVIDIA_API_KEY_SESSION', nvidiaApiKey);
     else window.sessionStorage.removeItem('NVIDIA_API_KEY_SESSION');
+
+    if (koboldUrl) window.sessionStorage.setItem('KOBOLD_URL_SESSION', koboldUrl);
+    else window.sessionStorage.removeItem('KOBOLD_URL_SESSION');
+
+    if (koboldModel) window.sessionStorage.setItem('KOBOLD_MODEL_SESSION', koboldModel);
+    else window.sessionStorage.removeItem('KOBOLD_MODEL_SESSION');
 
     if (model) window.sessionStorage.setItem('ACTIVE_MODEL_SESSION', model);
     else window.sessionStorage.removeItem('ACTIVE_MODEL_SESSION');
@@ -107,8 +120,11 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     ) as Provider | null;
 
     const storedModel = window.sessionStorage.getItem('ACTIVE_MODEL_SESSION');
+    const storedKoboldUrl = window.sessionStorage.getItem('KOBOLD_URL_SESSION');
+    const storedKoboldModel = window.sessionStorage.getItem('KOBOLD_MODEL_SESSION');
 
     if (storedModel) setModel(storedModel);
+    if (storedKoboldModel) setKoboldModel(storedKoboldModel);
     if (storedProvider) setActiveProvider(storedProvider);
 
     if (storedZen) {
@@ -126,6 +142,10 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     if (storedNvidia) {
       setNvidiaApiKey(storedNvidia);
       void validateAndFetchModels('nvidia', storedNvidia);
+    }
+    if (storedKoboldUrl) {
+      setKoboldUrl(storedKoboldUrl);
+      setKoboldConnected(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -241,6 +261,13 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
 
   const connectWithKey = async (event?: React.FormEvent<HTMLFormElement>) => {
     if (event) event.preventDefault();
+
+    if (activeProvider === 'kobold') {
+      // KoboldCPP is an always-available local endpoint; just consider it "connected".
+      setKoboldConnected(true);
+      return;
+    }
+
     const key =
       activeProvider === 'zen'
         ? zenApiKey
@@ -307,10 +334,15 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                   {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
                   {!nvidiaConnected && <SelectItem value="nvidia">NVIDIA</SelectItem>}
                   {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
+                  <SelectItem value="kobold">KoboldCPP (local)</SelectItem>
                 </SelectContent>
               </Select>
 
-              {(zenConnected || googleConnected || hfConnected || nvidiaConnected) && (
+              {(zenConnected ||
+                googleConnected ||
+                hfConnected ||
+                nvidiaConnected ||
+                koboldConnected) && (
                 <div className="hidden sm:inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background/5 text-xs">
                   {zenConnected && (
                     <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
@@ -383,7 +415,11 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
               )}
             </div>
 
-            {(zenConnected || googleConnected || hfConnected || nvidiaConnected) && (
+            {(zenConnected ||
+              googleConnected ||
+              hfConnected ||
+              nvidiaConnected ||
+              koboldConnected) && (
               <div className="w-full sm:col-span-3 sm:col-start-2 sm:row-start-1 flex justify-end sm:hidden">
                 <div className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background/5 text-xs">
                   {zenConnected && (

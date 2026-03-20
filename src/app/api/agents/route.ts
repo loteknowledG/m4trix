@@ -289,7 +289,9 @@ async function callProvider(
       "Compete with other agents: argue for your solution, highlight weaknesses in other proposals, and try to earn the user's preference.";
   }
 
-  const systemPrompt = context ? `${systemPromptBase} ${context}` : `${systemPromptBase} `;
+  const systemPrompt = context
+    ? `${systemPromptBase} ${context} Do not simply repeat the user input; answer the user with a helpful and informative response.`
+    : `${systemPromptBase} Do not simply repeat the user input; answer the user with a helpful and informative response.`;
 
   // Build a messages array that includes system + optional transcript history + the current user prompt
   const apiMessages: any[] = [{ role: 'system', content: systemPrompt }];
@@ -390,6 +392,19 @@ async function callProvider(
     })();
 
     throw new Error(`${providerName} response missing content. Raw payload: ${debugSnippet}`);
+  }
+
+  // If the model is just echoing the user prompt, return a helpful fallback instead.
+  const normalizedPrompt = prompt.trim().toLowerCase();
+  const normalizedContent = content.trim().toLowerCase();
+  const isEcho =
+    normalizedPrompt &&
+    normalizedContent.includes(normalizedPrompt) &&
+    normalizedContent.length <=
+      Math.max(normalizedPrompt.length * 1.5, normalizedPrompt.length + 10);
+
+  if (isEcho) {
+    return "It looks like I'm just repeating what you said — please ask a specific question or describe what you want help with, and I'll respond accordingly.";
   }
 
   // Sanitization: ensure agents do NOT impersonate the prompter/user
