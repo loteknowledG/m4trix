@@ -37,21 +37,31 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
     let mounted = true;
     (async () => {
       try {
-        const saved = (await get<StoryMeta[]>('stories')) || [];
+        const saved = (await get<any[]>('stories')) || [];
         if (!mounted) return;
         setStories(saved);
 
+        // load preview (title moment src if set, else first item src) for each story
         const previewEntries = await Promise.all(
           saved.map(async s => {
             try {
               const items = (await get<any>(`story:${s.id}`)) || [];
-              const first =
-                Array.isArray(items) && items.length > 0
-                  ? items[0]
-                  : items && items.items && items.items[0]
-                  ? items.items[0]
-                  : null;
-              const src = first ? first.src || first : null;
+              // Check for titleMomentId in story meta or object
+              const titleMomentId = s.titleMomentId || (items && items.titleMomentId);
+              let momentsArr = Array.isArray(items)
+                ? items
+                : items && Array.isArray(items.items)
+                ? items.items
+                : [];
+              let src = null;
+              if (titleMomentId && Array.isArray(momentsArr)) {
+                const titleMoment = momentsArr.find((m: any) => m.id === titleMomentId);
+                src = titleMoment ? titleMoment.src || titleMoment : null;
+              }
+              // fallback to first moment if no title moment
+              if (!src && Array.isArray(momentsArr) && momentsArr.length > 0) {
+                src = momentsArr[0].src || momentsArr[0];
+              }
               return [s.id, src] as const;
             } catch (e) {
               return [s.id, null] as const;

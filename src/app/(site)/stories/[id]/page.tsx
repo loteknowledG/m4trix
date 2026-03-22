@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { get, set } from 'idb-keyval';
 import useSelection from '@/hooks/use-selection';
 import { logger } from '@/lib/logger';
+import { Marquee } from '@/components/ui/marquee';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
 import ErrorBoundary from '@/components/error-boundary';
 import { MomentsProvider } from '@/context/moments-collection';
@@ -24,6 +25,7 @@ export default function StoryPage() {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
+  const [editingTitle, setEditingTitle] = useState(false);
 
   const selectedIds = useSelection(s => s.selections['stories'] || []);
   const toggleSelect = useSelection(s => s.toggle);
@@ -645,15 +647,38 @@ export default function StoryPage() {
           >
             <div className="py-4">
               <div className="mb-6">
-                <input
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  onBlur={handleTitleBlur}
-                  onClick={e => e.stopPropagation()}
-                  onMouseDown={e => e.stopPropagation()}
-                  placeholder="Add a title"
-                  className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
-                />
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    onBlur={async () => {
+                      await handleTitleBlur();
+                      setEditingTitle(false);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).blur();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setEditingTitle(false);
+                      }
+                    }}
+                    className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingTitle(true)}
+                    className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
+                    aria-label="Edit story title"
+                  >
+                    <Marquee className="text-5xl font-light truncate">
+                      {title.trim() ? title : 'Add a title'}
+                    </Marquee>
+                  </button>
+                )}
               </div>
               {loading ? (
                 <div className="text-sm text-muted-foreground">Loading…</div>

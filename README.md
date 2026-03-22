@@ -1,3 +1,13 @@
+```
+  [m][4][t][r][i][x]
+   \ \  |  /  /  /
+    \ \ | /  /  /
+     \ \|/  /  /
+      \ 4TRIX /
+       \     /
+        \___/
+```
+
 # m4trix: Agent-Based Sitcom Playground
 
 [![E2E — Playwright](https://github.com/loteknowledG/m4trix/actions/workflows/e2e.yml/badge.svg)](https://github.com/loteknowledG/m4trix/actions/workflows/e2e.yml)
@@ -108,6 +118,30 @@ Common issues & quick fixes
 - Next.js
 - TypeScript
 - Tailwind CSS
+
+## Optional Importable Component Package (local)
+
+The hover lens moment interaction is now encapsulated in a reusable component:
+
+- `src/components/hover-lens-moments-grid.tsx`
+- `src/components/moment-card.tsx`
+- `src/components/index.ts`
+
+Usage:
+
+```tsx
+import { HoverLensMomentsGrid } from '@/components';
+
+<HoverLensMomentsGrid
+  moments={moments}
+  selectedIds={selectedIds}
+  toggleSelect={toggleSelect}
+  onOpen={handleOpen}
+/>;
+```
+
+This setup makes the new UI behavior easy to share across pages and to migrate into an independent package structure later.
+
 - Progressive Web App (PWA — service worker & manifest)
 - Zustand (state management)
 - idb (IndexedDB wrapper)

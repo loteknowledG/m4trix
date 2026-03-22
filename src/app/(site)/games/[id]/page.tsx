@@ -249,20 +249,28 @@ export default function GamePage() {
         const stored = (await get<any>(`story:${id}`)) || null;
         if (!mounted) return;
 
-        setGameData(stored);
+        let storyObj = stored;
+        let momentsArr = Array.isArray(storyObj)
+          ? storyObj
+          : storyObj && Array.isArray(storyObj.items)
+          ? storyObj.items
+          : [];
 
-        // Determine preview source from the first moment in the game/story.
-        const firstItem = Array.isArray(stored)
-          ? stored[0]
-          : stored && Array.isArray(stored.items)
-          ? stored.items[0]
-          : null;
-        const src = firstItem?.src || firstItem?.url || firstItem?.image || null;
+        // Determine which moment to show: title moment if set, else first moment
+        let previewMoment = null;
+        if (storyObj && storyObj.titleMomentId && Array.isArray(momentsArr)) {
+          previewMoment = momentsArr.find((m: any) => m.id === storyObj.titleMomentId) || null;
+        }
+        if (!previewMoment && momentsArr.length > 0) {
+          previewMoment = momentsArr[0];
+        }
+        setGameData(storyObj);
+        const src = previewMoment?.src || previewMoment?.url || previewMoment?.image || null;
         setPreviewSrc(typeof src === 'string' ? src : undefined);
 
         // The story object in IndexedDB often doesn’t include a title,
         // so fall back to the stories metadata list (used by the carousel).
-        let resolvedTitle = stored?.title ?? '';
+        let resolvedTitle = storyObj?.title ?? '';
         if (!resolvedTitle) {
           try {
             const stories = (await get<any[]>('stories')) || [];

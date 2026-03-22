@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
 import { del, get, keys, set } from 'idb-keyval';
+import { usePathname } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
 import { normalizeMomentSrc } from '@/lib/moments';
 import { X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { FaTags } from 'react-icons/fa';
-import { MdTitle } from 'react-icons/md';
+import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
 import MomentClassifier from '@/components/ai/moment-classifier';
 
 const noop = () => {};
@@ -16,6 +16,34 @@ export default function CollectionOverlay() {
   const ctx = useMomentsContext();
   const collection = ctx?.collection ?? [];
   const currentId = ctx?.currentId ?? null;
+  // Track if this moment is the title moment for the current story
+  const [isTitleMoment, setIsTitleMoment] = useState(false);
+
+  // Get story id from URL if possible
+  const storyId = (() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/stories\/(.+?)(\/|$)/);
+      return match ? match[1] : null;
+    }
+    return null;
+  })();
+
+  // Check if this moment is the title moment on mount or when currentId/storyId changes
+  useEffect(() => {
+    if (!storyId || !currentId) return;
+    (async () => {
+      const storyKey = `story:${storyId}`;
+      const stored = (await get<any>(storyKey)) || {};
+      let titleMomentId = stored.titleMomentId;
+      if (!titleMomentId && Array.isArray(stored)) {
+        // fallback: check stories metadata
+        const storiesMeta = (await get<any[]>('stories')) || [];
+        const meta = storiesMeta.find((s: any) => s.id === storyId);
+        titleMomentId = meta?.titleMomentId;
+      }
+      setIsTitleMoment(titleMomentId === currentId);
+    })();
+  }, [storyId, currentId]);
   const close = ctx?.close ?? noop;
   const next = ctx?.next ?? noop;
   const prev = ctx?.prev ?? noop;
@@ -435,6 +463,39 @@ export default function CollectionOverlay() {
 
       <div className="absolute right-4 top-4 flex items-center gap-2 z-10">
         <button
+          onClick={async e => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!storyId || !currentId) return;
+            // Update story object in IndexedDB
+            const storyKey = `story:${storyId}`;
+            let stored = (await get<any>(storyKey)) || {};
+            if (Array.isArray(stored)) {
+              stored = { items: stored };
+            }
+            stored.titleMomentId = currentId;
+            await set(storyKey, stored);
+            // Also update stories metadata
+            const storiesMeta = (await get<any[]>('stories')) || [];
+            const idx = storiesMeta.findIndex((s: any) => s.id === storyId);
+            if (idx > -1) {
+              storiesMeta[idx].titleMomentId = currentId;
+              await set('stories', storiesMeta);
+            }
+            setIsTitleMoment(true);
+            window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id: storyId } }));
+          }}
+          className={`inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white${
+            isTitleMoment
+              ? ' ring-2 ring-violet-500 shadow-[0_0_12px_2px_rgba(139,92,246,0.7)]'
+              : ''
+          }`}
+          aria-label="Set title moment"
+          title="Set title moment"
+        >
+          <MdOutlinePhotoAlbum size={18} />
+        </button>
+        <button
           onClick={e => {
             e.stopPropagation();
             e.preventDefault();
@@ -505,49 +566,10 @@ export default function CollectionOverlay() {
           <div
             onMouseDown={e => onStartDrag(e)}
             onTouchStart={e => onStartDrag(e)}
-            className="absolute z-30"
-            style={{
-              left: `${pos.x * 100}%`,
-              top: `${pos.y * 100}%`,
-              transform: 'translate(-50%, -50%)',
-              cursor: 'grab',
-              pointerEvents: 'auto',
-            }}
+            className="absolute z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab pointer-events-auto"
             role="presentation"
           >
-            <span
-              className="text-white drop-shadow-lg px-4"
-              style={{
-                display: 'block',
-                textAlign: 'center',
-                wordBreak: 'break-word',
-                width: pixelWidth ? `${pixelWidth}px` : undefined,
-                maxWidth: pixelWidth ? `${pixelWidth}px` : undefined,
-                color: fontColor,
-                fontFamily:
-                  font === 'serif'
-                    ? "Georgia, 'Times New Roman', Times, serif"
-                    : font === 'mono'
-                    ? "SFMono-Regular, Menlo, Monaco, 'Courier New', monospace"
-                    : font === 'mrs'
-                    ? "'Mrs Saint Delafield', 'Segoe Script', 'Brush Script MT', cursive"
-                    : font === 'satisfy'
-                    ? "'Satisfy', 'Segoe Script', 'Brush Script MT', cursive"
-                    : font === 'cursive'
-                    ? "'Brush Script MT', 'Segoe Script', cursive"
-                    : "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial",
-                fontSize: `${fontSize}px`,
-                lineHeight: 1.1,
-                whiteSpace: 'normal',
-                hyphens: 'auto',
-                ...(strokeWidth
-                  ? {
-                      WebkitTextStroke: `${strokeWidth}px ${strokeColor}`,
-                      textStroke: `${strokeWidth}px ${strokeColor}`,
-                    }
-                  : {}),
-              }}
-            >
+            <span className="block text-white drop-shadow-lg px-4 text-center break-words">
               {text}
             </span>
           </div>
@@ -561,7 +583,7 @@ export default function CollectionOverlay() {
           editing ? 'translate-x-0' : 'translate-x-full'
         }`}
         role="dialog"
-        aria-hidden={!editing}
+        aria-hidden={editing ? 'false' : 'true'}
       >
         <div className="h-full flex flex-col p-4">
           <div className="flex items-center justify-between mb-2">
@@ -583,10 +605,15 @@ export default function CollectionOverlay() {
               placeholder="Overlay text"
             />
 
+            <label htmlFor="font-family-select" className="sr-only">
+              Font family
+            </label>
             <select
+              id="font-family-select"
               value={font}
               onChange={e => setFont(e.target.value)}
               className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
+              aria-label="Font family"
             >
               <option value="system">System Sans</option>
               <option value="serif">Serif</option>
@@ -597,8 +624,11 @@ export default function CollectionOverlay() {
             </select>
 
             <div className="flex items-center justify-between gap-2">
-              <label className="text-xs text-white/80">Size</label>
+              <label htmlFor="font-size-range" className="text-xs text-white/80">
+                Size
+              </label>
               <input
+                id="font-size-range"
                 type="range"
                 min={16}
                 max={96}
@@ -610,8 +640,11 @@ export default function CollectionOverlay() {
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <label className="text-xs text-white/80">Width</label>
+              <label htmlFor="text-width-range" className="text-xs text-white/80">
+                Width
+              </label>
               <input
+                id="text-width-range"
                 type="range"
                 min={20}
                 max={100}
@@ -623,8 +656,11 @@ export default function CollectionOverlay() {
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <label className="text-xs text-white/80">Stroke</label>
+              <label htmlFor="stroke-width-range" className="text-xs text-white/80">
+                Stroke
+              </label>
               <input
+                id="stroke-width-range"
                 type="range"
                 min={0}
                 max={10}

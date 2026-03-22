@@ -1,7 +1,7 @@
 'use client';
 
 import { Circle, Check, CheckCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { normalizeMomentSrc } from '@/lib/moments';
 import { ShineBorder } from '@/components/ui/shine-border';
 import type { MouseEvent as ReactMouseEvent } from 'react';
@@ -31,6 +31,17 @@ export default function MomentCard({
   const pathname = usePathname();
   const momentsCtx = useMomentsContext();
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -85,52 +96,116 @@ export default function MomentCard({
   return (
     <div
       onClick={handleContainerClick}
-      className={`relative group rounded overflow-hidden shadow-sm transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active cursor-pointer ${
-        item.selected ? 'ring-2 ring-primary/60' : ''
-      } ${fullHeight ? 'h-full' : ''}`}
-    >
-      {item.selected && (
-        <ShineBorder
-          borderWidth={4}
-          duration={8}
-          shineColor={['#22c55e', '#ec4899', '#a855f7']}
-          className="z-10"
-        />
-      )}
-      <button
-        onClick={e => {
-          e.stopPropagation();
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          toggleSelect(item.id);
-        }}
-        className={`absolute z-0 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
-          item.selected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        } transition-opacity pointer-events-auto`}
-        aria-label="Select moment"
+          handleContainerClick(e as unknown as React.MouseEvent<HTMLDivElement>);
+        }
+      }}
+      className={[
+        'pushable-moment relative group rounded-md overflow-hidden border-none bg-transparent cursor-pointer',
+        item.selected ? 'ring-2 ring-primary/60' : '',
+        fullHeight ? 'h-full' : '',
+      ].join(' ')}
+      tabIndex={0}
+      // 3D movement handlers + hover preview
+      onMouseEnter={e => {
+        const card = e.currentTarget;
+        card.querySelector('.front-moment')?.setAttribute('data-state', 'hover');
+        card.querySelector('.shadow')?.setAttribute('data-state', 'hover');
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+        }
+        hoverTimerRef.current = setTimeout(() => setHovered(true), 120);
+      }}
+      onMouseLeave={e => {
+        const card = e.currentTarget;
+        card.querySelector('.front-moment')?.setAttribute('data-state', 'base');
+        card.querySelector('.shadow')?.setAttribute('data-state', 'base');
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = null;
+        }
+        setHovered(false);
+      }}
+      onMouseDown={e => {
+        const card = e.currentTarget;
+        card.querySelector('.front-moment')?.setAttribute('data-state', 'active');
+        card.querySelector('.shadow')?.setAttribute('data-state', 'active');
+      }}
+      onMouseUp={e => {
+        const card = e.currentTarget;
+        card.querySelector('.front-moment')?.setAttribute('data-state', 'hover');
+        card.querySelector('.shadow')?.setAttribute('data-state', 'hover');
+      }}
+    >
+      <span
+        className={`shadow absolute inset-0 rounded-md bg-black/30 will-change-transform pointer-events-none filter blur-2xl transition-all duration-220 ease-[cubic-bezier(0.24,0.8,0.32,1)] ${
+          hovered ? 'translate-y-[10px] opacity-[0.45]' : 'translate-y-[2px] opacity-[0.28]'
+        }`}
+        aria-hidden="true"
+      />
+      <span
+        className="edge absolute inset-0 rounded-md pointer-events-none bg-[linear-gradient(to_left,_hsl(240deg_4%_16%)_0%,_hsl(240deg_4%_32%)_8%,_hsl(240deg_4%_32%)_92%,_hsl(240deg_4%_16%)_100%)]"
+        aria-hidden="true"
+      />
+      <span
+        className={`front-moment relative block rounded-2xl w-full h-full min-h-[120px] bg-zinc-100 dark:bg-zinc-800 will-change-transform select-none overflow-hidden transition-all duration-220 ease-[cubic-bezier(0.24,0.8,0.32,1)] ${
+          hovered
+            ? ' -translate-y-[12px] scale-[1.02] shadow-[0_20px_40px_rgba(0,0,0,0.38)] border border-white/30'
+            : '-translate-y-[4px] scale-100 shadow-[0_7px_18px_rgba(0,0,0,0.2)] border border-white/10'
+        }`}
       >
-        {!item.selected && (
-          <div className="relative w-7 h-7 flex items-center justify-center">
-            <Circle size={18} className="text-white/70" />
-            <Check
-              size={14}
-              className="absolute opacity-0 hover:opacity-100 transition-opacity text-white"
-            />
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            e.preventDefault();
+            toggleSelect(item.id);
+          }}
+          className={`absolute z-30 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
+            hovered ? 'opacity-100' : 'opacity-0'
+          } transition-opacity pointer-events-auto`}
+          aria-label="Select moment"
+          aria-pressed={item.selected}
+        >
+          {!item.selected && (
+            <div className="relative w-7 h-7 flex items-center justify-center">
+              <Circle size={18} className="text-white/70" />
+              <Check
+                size={14}
+                className="absolute opacity-0 hover:opacity-100 transition-opacity text-white"
+              />
+            </div>
+          )}
+          {item.selected && (
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
+              <CheckCircle size={14} />
+            </span>
+          )}
+        </button>
+        <img
+          src={normalizeMomentSrc(item.src)}
+          alt={item.name || 'moment'}
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover block"
+        />
+        {hovered && !open && (
+          <div className="absolute inset-0 z-20 pointer-events-none">
+            <div className="absolute inset-0 rounded-2xl border-2 border-white/30" />
+            <div className="absolute inset-0 rounded-2xl bg-black/10 backdrop-blur-sm" />
+            <div
+              className="absolute inset-0 rounded-2xl overflow-hidden"
+              style={{ pointerEvents: 'none' }}
+            >
+              <img
+                src={normalizeMomentSrc(item.src)}
+                alt={item.name || 'Moment preview'}
+                className="h-full w-full object-cover opacity-90"
+              />
+            </div>
           </div>
         )}
-        {item.selected && (
-          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
-            <CheckCircle size={14} />
-          </span>
-        )}
-      </button>
-      {}
-      <img
-        src={normalizeMomentSrc(item.src)}
-        alt={item.name || 'moment'}
-        referrerPolicy="no-referrer"
-        className="w-full h-full object-cover"
-        style={{ display: 'block', height: '100%' }}
-      />
+      </span>
       {open && (
         <div
           className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center"
