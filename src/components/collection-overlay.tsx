@@ -9,6 +9,7 @@ import { X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { FaTags } from 'react-icons/fa';
 import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
 import MomentClassifier from '@/components/ai/moment-classifier';
+import 'quill/dist/quill.snow.css';
 
 const noop = () => {};
 
@@ -44,10 +45,7 @@ export default function CollectionOverlay() {
       setIsTitleMoment(titleMomentId === currentId);
     })();
   }, [storyId, currentId]);
-  const close = ctx?.close ?? noop;
-  const next = ctx?.next ?? noop;
-  const prev = ctx?.prev ?? noop;
-  const isOpen = ctx?.isOpen ?? false;
+
   const [editing, setEditing] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [text, setText] = useState('');
@@ -58,6 +56,8 @@ export default function CollectionOverlay() {
   const [strokeWidth, setStrokeWidth] = useState(0);
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [fontColor, setFontColor] = useState('#ffffff');
+  const [quillInstance, setQuillInstance] = useState<any>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -65,6 +65,54 @@ export default function CollectionOverlay() {
   const [highlightedSuggestion, setHighlightedSuggestion] = useState<number>(-1);
   const [pixelWidth, setPixelWidth] = useState<number | null>(null);
   const pixelWidthRef = useRef<number | null>(null);
+
+  const close = ctx?.close ?? noop;
+  const next = ctx?.next ?? noop;
+  const prev = ctx?.prev ?? noop;
+  const isOpen = ctx?.isOpen ?? false;
+
+  useEffect(() => {
+    if (!editing || !editorRef.current) return;
+
+    let quillInstanceLocal: any;
+
+    (async () => {
+      const Quill = (await import('quill')).default;
+      if (!editorRef.current) return;
+
+      quillInstanceLocal = new Quill(editorRef.current, {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            ['blockquote', 'code-block'],
+            ['link', 'clean'],
+          ],
+        },
+      });
+
+      quillInstanceLocal.root.innerHTML = text;
+      quillInstanceLocal.on('text-change', () => {
+        setText(quillInstanceLocal.root.innerHTML);
+      });
+
+      setQuillInstance(quillInstanceLocal);
+    })();
+
+    return () => {
+      if (quillInstanceLocal) {
+        quillInstanceLocal.off('text-change');
+      }
+      setQuillInstance(null);
+    };
+  }, [editing]);
+
+  useEffect(() => {
+    if (quillInstance && quillInstance.root && quillInstance.root.innerHTML !== text) {
+      quillInstance.root.innerHTML = text;
+    }
+  }, [text, quillInstance]);
 
   const posRef = useRef(pos);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -569,9 +617,10 @@ export default function CollectionOverlay() {
             className="absolute z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab pointer-events-auto"
             role="presentation"
           >
-            <span className="block text-white drop-shadow-lg px-4 text-center break-words">
-              {text}
-            </span>
+            <span
+              className="block text-white drop-shadow-lg px-4 text-center break-words"
+              dangerouslySetInnerHTML={{ __html: text }}
+            />
           </div>
         ) : null}
       </div>
@@ -597,101 +646,12 @@ export default function CollectionOverlay() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-auto space-y-3">
-            <input
-              value={text}
-              onChange={e => setText(e.target.value)}
-              className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
-              placeholder="Overlay text"
+          <div className="flex-1 overflow-auto">
+            <div
+              ref={editorRef}
+              className="h-64 bg-white text-black rounded"
+              aria-label="Overlay text editor"
             />
-
-            <label htmlFor="font-family-select" className="sr-only">
-              Font family
-            </label>
-            <select
-              id="font-family-select"
-              value={font}
-              onChange={e => setFont(e.target.value)}
-              className="w-full px-2 py-1 text-sm rounded bg-white/90 text-black"
-              aria-label="Font family"
-            >
-              <option value="system">System Sans</option>
-              <option value="serif">Serif</option>
-              <option value="mono">Monospace</option>
-              <option value="cursive">Cursive</option>
-              <option value="mrs">Mrs Saint Delafield</option>
-              <option value="satisfy">Satisfy</option>
-            </select>
-
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="font-size-range" className="text-xs text-white/80">
-                Size
-              </label>
-              <input
-                id="font-size-range"
-                type="range"
-                min={16}
-                max={96}
-                value={fontSize}
-                onChange={e => setFontSize(Number(e.target.value))}
-                className="w-full"
-              />
-              <span className="text-sm text-white w-14 text-right">{fontSize}px</span>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="text-width-range" className="text-xs text-white/80">
-                Width
-              </label>
-              <input
-                id="text-width-range"
-                type="range"
-                min={20}
-                max={100}
-                value={textWidth}
-                onChange={e => setTextWidth(Number(e.target.value))}
-                className="w-full"
-              />
-              <span className="text-sm text-white w-14 text-right">{textWidth}%</span>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="stroke-width-range" className="text-xs text-white/80">
-                Stroke
-              </label>
-              <input
-                id="stroke-width-range"
-                type="range"
-                min={0}
-                max={10}
-                step={0.5}
-                value={strokeWidth}
-                onChange={e => setStrokeWidth(Number(e.target.value))}
-                className="w-full"
-              />
-              <span className="text-sm text-white w-14 text-right">{strokeWidth}px</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={strokeColor}
-                onChange={e => setStrokeColor(e.target.value)}
-                className="w-10 h-10 p-0 border-0 bg-transparent"
-                title="Stroke color"
-              />
-              <span className="text-sm text-white">Stroke color</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={fontColor}
-                onChange={e => setFontColor(e.target.value)}
-                className="w-10 h-10 p-0 border-0 bg-transparent"
-                title="Font color"
-              />
-              <span className="text-sm text-white">Font color</span>
-            </div>
           </div>
         </div>
       </div>

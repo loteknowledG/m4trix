@@ -7,7 +7,7 @@ interface MarqueeProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const MarqueeInner = React.forwardRef<HTMLDivElement, MarqueeProps>(
-  ({ className, children, gap = '2rem', duration = '24s', ...props }, ref) => {
+  ({ className, children, gap = '2rem', duration, ...props }, ref) => {
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const innerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -15,10 +15,8 @@ const MarqueeInner = React.forwardRef<HTMLDivElement, MarqueeProps>(
     const [repeatCount, setRepeatCount] = React.useState(10);
 
     const durationValue = React.useMemo(() => {
-      if (duration && duration !== '24s') return duration;
-
-      // A fixed duration makes the scroll speed consistent.
-      return '3s';
+      // Default scroll speed is made noticeably faster for short headers.
+      return duration ?? '5s';
     }, [duration]);
 
     React.useLayoutEffect(() => {
