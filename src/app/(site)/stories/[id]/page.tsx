@@ -640,7 +640,8 @@ export default function StoryPage() {
       >
         <ErrorBoundary>
           <div
-            className="overflow-auto h-[calc(100vh-var(--app-header-height,56px))]"
+            className="overflow-auto"
+            style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
             onDragOver={e => e.preventDefault()}
             onDrop={handleExternalDrop}
           >
@@ -664,8 +665,6 @@ export default function StoryPage() {
                         setEditingTitle(false);
                       }
                     }}
-                    placeholder="Add a title"
-                    aria-label="Story title"
                     className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
                   />
                 ) : (
