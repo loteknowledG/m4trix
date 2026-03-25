@@ -1,6 +1,5 @@
-import AgentsPage from '../page';
+import { redirect } from 'next/navigation';
 
 export default function AgentsChatPage() {
-  // Render same UI as /agents while keeping the URL /agents/chat.
-  return <AgentsPage />;
+  redirect('/characters/chat');
 }

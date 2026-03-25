@@ -103,7 +103,7 @@ export default function MomentCard({
         }
       }}
       className={[
-        'pushable-moment relative group rounded-md overflow-hidden border-none bg-transparent cursor-pointer',
+        'pushable-moment relative group rounded-md overflow-visible border-none bg-transparent cursor-pointer',
         item.selected ? 'ring-2 ring-primary/60' : '',
         fullHeight ? 'h-full' : '',
       ].join(' ')}
@@ -140,20 +140,10 @@ export default function MomentCard({
       }}
     >
       <span
-        className={`shadow absolute inset-0 rounded-md bg-black/30 will-change-transform pointer-events-none filter blur-2xl transition-all duration-220 ease-[cubic-bezier(0.24,0.8,0.32,1)] ${
-          hovered ? 'translate-y-[10px] opacity-[0.45]' : 'translate-y-[2px] opacity-[0.28]'
-        }`}
-        aria-hidden="true"
-      />
-      <span
-        className="edge absolute inset-0 rounded-md pointer-events-none bg-[linear-gradient(to_left,_hsl(240deg_4%_16%)_0%,_hsl(240deg_4%_32%)_8%,_hsl(240deg_4%_32%)_92%,_hsl(240deg_4%_16%)_100%)]"
-        aria-hidden="true"
-      />
-      <span
-        className={`front-moment relative block rounded-2xl w-full h-full min-h-[120px] bg-zinc-100 dark:bg-zinc-800 will-change-transform select-none overflow-hidden transition-all duration-220 ease-[cubic-bezier(0.24,0.8,0.32,1)] ${
+        className={`front-moment relative block rounded-2xl w-full h-full min-h-[120px] bg-zinc-100 dark:bg-zinc-800 will-change-transform select-none overflow-hidden transition-all duration-220 ease-[cubic-bezier(0.24,0.8,0.32,1)] origin-bottom ${
           hovered
-            ? ' -translate-y-[12px] scale-[1.02] shadow-[0_20px_40px_rgba(0,0,0,0.38)] border border-white/30'
-            : '-translate-y-[4px] scale-100 shadow-[0_7px_18px_rgba(0,0,0,0.2)] border border-white/10'
+            ? 'scale-[1.05] shadow-[0_16px_36px_rgba(0,0,0,0.65)] border border-white/30'
+            : 'scale-100 shadow-[0_8px_18px_rgba(0,0,0,0.5)] border border-white/10'
         }`}
       >
         <button

@@ -65,10 +65,19 @@ export default function BackupsPage() {
         })
       );
 
+      const agents = (await get('PLAYGROUND_AGENTS')) || [];
+      const prompter = await get('PLAYGROUND_PROMPTER');
+      const story = await get('PLAYGROUND_STORY');
+      const prompterMode = await get('PLAYGROUND_PROMPTER_MODE');
+
       const payload = {
         heap,
         trash,
         stories: storiesWithItems,
+        agents,
+        prompter,
+        story,
+        prompterMode,
       };
       previewSummary = {
         heapCount: Array.isArray(heap) ? heap.length : 0,
@@ -212,6 +221,10 @@ export default function BackupsPage() {
         let storiesPayload: any[] | null = null;
         let trashPayload: any[] | null = null;
         let overlaysPayload: any | null = null;
+        let agentsPayload: any[] | null = null;
+        let prompterPayload: any | null = null;
+        let storyPayload: any = null;
+        let prompterModePayload: any = null;
 
         if (Array.isArray(parsed)) {
           validated = parsed.map((p: any) => ({
@@ -252,6 +265,10 @@ export default function BackupsPage() {
           }
           // if the backup contains overlay data, keep it for later restoration
           overlaysPayload = parsed.overlays ?? parsed.overlay ?? null;
+          agentsPayload = Array.isArray(parsed.agents) ? parsed.agents : null;
+          if (parsed.prompter !== undefined) prompterPayload = parsed.prompter;
+          if (parsed.story !== undefined) storyPayload = parsed.story;
+          if (parsed.prompterMode !== undefined) prompterModePayload = parsed.prompterMode;
         } else {
           setMessage('Invalid backup file');
           setTimeout(() => setMessage(null), 4000);
@@ -333,6 +350,43 @@ export default function BackupsPage() {
             logger.warn('Failed to restore stories metadata', e);
           }
         }
+
+        // restore agents if present
+        if (agentsPayload) {
+          try {
+            await set('PLAYGROUND_AGENTS', agentsPayload);
+            try {
+              window.dispatchEvent(new CustomEvent('characters-updated', { detail: {} }));
+            } catch (e) {
+              /* ignore in non-browser */
+            }
+          } catch (e) {
+            logger.warn('Failed to restore agents list', e);
+          }
+        }
+
+        // restore prompter/story mode data if present
+        if (prompterPayload !== null) {
+          try {
+            await set('PLAYGROUND_PROMPTER', prompterPayload);
+          } catch (e) {
+            logger.warn('Failed to restore prompter data', e);
+          }
+        }
+        if (storyPayload !== undefined) {
+          try {
+            await set('PLAYGROUND_STORY', storyPayload);
+          } catch (e) {
+            logger.warn('Failed to restore story content', e);
+          }
+        }
+        if (prompterModePayload !== undefined) {
+          try {
+            await set('PLAYGROUND_PROMPTER_MODE', prompterModePayload);
+          } catch (e) {
+            logger.warn('Failed to restore prompter mode', e);
+          }
+        }
         // notify app to refresh any in-memory state
         try {
           window.dispatchEvent(
@@ -400,9 +454,14 @@ export default function BackupsPage() {
             type="file"
             accept="application/json"
             className="hidden"
+            aria-label="Import JSON backup"
             onChange={e => handleImport(e.target.files)}
           />
-          <button onClick={() => importRef.current?.click()} className="px-4 py-2 rounded border">
+          <button
+            onClick={() => importRef.current?.click()}
+            className="px-4 py-2 rounded border"
+            aria-label="Open JSON backup file picker"
+          >
             Import JSON
           </button>
         </div>

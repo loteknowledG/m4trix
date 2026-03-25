@@ -17,7 +17,8 @@ const AGENTS_KEY = 'PLAYGROUND_AGENTS';
 
 export default function AgentDetailPage() {
   const params = useParams();
-  const agentId = params?.id ?? '';
+  const rawAgentId = params?.id;
+  const agentId = Array.isArray(rawAgentId) ? rawAgentId[0] ?? '' : rawAgentId ?? '';
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -63,10 +64,10 @@ export default function AgentDetailPage() {
 
   if (!agent) {
     return (
-      <ContentLayout title="Agent not found" navLeft={null}>
-        <p>Agent '{agentId}' not found.</p>
-        <Link href="/agents/list">
-          <Button>Back to agents list</Button>
+      <ContentLayout title="Character not found" navLeft={null}>
+        <p>Character '{agentId}' not found.</p>
+        <Link href="/characters/list">
+          <Button>Back to characters list</Button>
         </Link>
       </ContentLayout>
     );
@@ -75,25 +76,36 @@ export default function AgentDetailPage() {
   const saveAgent = async () => {
     if (!agent) return;
     const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+    const trimmedName = nameValue.trim() || 'Untitled';
+    const trimmedDescription = descriptionValue.trim();
     const updated = (stored ?? []).map(a =>
       a.id === agent.id
         ? {
             ...a,
-            name: nameValue.trim() || 'Untitled',
-            description: descriptionValue.trim(),
+            name: trimmedName,
+            description: trimmedDescription,
           }
         : a
     );
     await idbSet(AGENTS_KEY, updated);
     setAgent({
       ...agent,
-      name: nameValue.trim() || 'Untitled',
-      description: descriptionValue.trim(),
+      name: trimmedName,
+      description: trimmedDescription,
     });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('characters-updated'));
+    }
+  };
+
+  const handleNameCommit = async () => {
+    setIsEditingName(false);
+    await saveAgent();
   };
 
   return (
-    <ContentLayout title={`Agent: ${agent.name || 'Untitled'}`} navLeft={null}>
+    <ContentLayout title={`Character: ${agent.name || 'Untitled'}`} navLeft={null}>
       <div className="space-y-6 p-6">
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
           {isEditingName ? (
@@ -102,9 +114,16 @@ export default function AgentDetailPage() {
               placeholder="Add name"
               value={nameValue}
               onChange={e => setNameValue(e.target.value)}
-              onBlur={async () => {
-                setIsEditingName(false);
-                await saveAgent();
+              onBlur={handleNameCommit}
+              onKeyDown={async e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  await handleNameCommit();
+                }
+                if (e.key === 'Escape') {
+                  setIsEditingName(false);
+                  setNameValue(agent.name || '');
+                }
               }}
               autoFocus
             />
@@ -126,10 +145,10 @@ export default function AgentDetailPage() {
           />
         </div>
         <div className="flex gap-2">
-          <Link href="/agents/list">
+          <Link href="/characters/list">
             <Button variant="secondary">Back to list</Button>
           </Link>
-          <Link href={`/agents/${agent.id}/chat`}>
+          <Link href={`/characters/${agent.id}/chat`}>
             <Button>Open chat</Button>
           </Link>
         </div>

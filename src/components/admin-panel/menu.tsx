@@ -96,12 +96,14 @@ export function Menu({ isOpen }: MenuProps) {
     };
     window.addEventListener('stories-updated', handler);
     window.addEventListener('moments-updated', handler);
+    window.addEventListener('characters-updated', handler);
     // backward compat
     window.addEventListener('heap-updated', handler);
     return () => {
       mounted = false;
       window.removeEventListener('stories-updated', handler);
       window.removeEventListener('moments-updated', handler);
+      window.removeEventListener('characters-updated', handler);
       // backward compat
       window.removeEventListener('heap-updated', handler);
     };
@@ -227,12 +229,14 @@ export function Menu({ isOpen }: MenuProps) {
                           ? isOpen === false
                             ? pathname === href && !activeStoryId
                             : pathname === href
+                          : label === 'Characters'
+                          ? pathname.startsWith('/characters')
                           : active === undefined
                           ? pathname.startsWith(href)
                           : active
                       }
                       submenus={
-                        label === 'Stories' && storiesList.length > 0
+                        label === 'Stories'
                           ? storiesList.map(s => ({
                               href: `/stories/${s.id}`,
                               label: s.title && s.title.trim() ? s.title : 'Untitled',
@@ -243,23 +247,30 @@ export function Menu({ isOpen }: MenuProps) {
                                   : false,
                               count: s.count ?? 0,
                             }))
-                          : label === 'Agents' && agentsList.length > 0
-                          ? agentsList.map(a => ({
-                              href: `/agents/${a.id}`,
-                              label: a.name && a.name.trim() ? a.name : 'Untitled',
-                              active: pathname?.startsWith(`/agents/${a.id}`),
-                            }))
+                          : label === 'Characters'
+                          ? [
+                              {
+                                href: '/characters/chat',
+                                label: 'Chat',
+                                active: pathname === '/characters/chat',
+                              },
+                              ...agentsList.map(a => ({
+                                href: `/characters/${a.id}`,
+                                label: a.name && a.name.trim() ? a.name : 'Untitled',
+                                active: pathname?.startsWith(`/characters/${a.id}`),
+                              })),
+                            ]
                           : submenus
                       }
                       isOpen={isOpen}
                       disableToggle={
                         (label === 'Stories' && storiesList.length === 0) ||
-                        (label === 'Agents' && agentsList.length === 0)
+                        (label === 'Characters' && agentsList.length === 0)
                       }
                       topCount={
                         label === 'Stories'
                           ? storiesList.length
-                          : label === 'Agents'
+                          : label === 'Characters'
                           ? agentsList.length
                           : undefined
                       }

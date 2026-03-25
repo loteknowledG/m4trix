@@ -117,7 +117,7 @@ export function Sidebar() {
           >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_34%,rgba(244,114,182,0.16),transparent_24%),radial-gradient(circle_at_28%_18%,rgba(217,70,239,0.10),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.03),transparent_28%,transparent_72%,rgba(255,255,255,0.02))]" />
             <div className="pointer-events-none absolute left-3 top-3 h-12 w-12 rounded-xl border border-fuchsia-300/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))]" />
-            <LogoBadge onClick={toggleTheme} />
+            {/* <LogoBadge onClick={toggleTheme} /> */}
             <Link
               href="/heap"
               className={cn(

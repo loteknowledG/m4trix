@@ -95,15 +95,15 @@ export default function StoriesPage() {
                 {stories.map(s => (
                   <Link key={s.id} href={`/stories/${s.id}`}>
                     <Card className="overflow-hidden hover:shadow-2xl transition-shadow duration-150 transition-transform duration-150 ease-out hover:-translate-y-2 hover:-translate-x-2 active:translate-y-2 active:translate-x-2 cursor-pointer">
-                      <div className="relative">
+                      <div className="relative aspect-square">
                         {previews[s.id] ? (
                           <img
                             src={previews[s.id] || undefined}
                             alt={s.title ?? 'story'}
-                            className="w-full h-32 object-cover"
+                            className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="h-32 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">
+                          <div className="h-full w-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">
                             No preview
                           </div>
                         )}

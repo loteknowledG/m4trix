@@ -200,13 +200,15 @@ export const AgentCard: React.FC<AgentCardProps> = ({
       </div>
       <Input
         className="h-7 text-xs"
-        placeholder={isUser ? 'Your name (shown in messages)' : 'Agent name'}
+        placeholder={isUser ? 'Your name (shown in messages)' : 'Character name'}
         value={name}
         onChange={e => onNameChange && onNameChange(e.target.value)}
       />
       <textarea
         className="min-h-[60px] text-[11px] w-full mt-1"
-        placeholder={isUser ? 'Describe your role and how you interact...' : 'Agent description'}
+        placeholder={
+          isUser ? 'Describe your role and how you interact...' : 'Character description'
+        }
         value={description}
         onChange={e => onDescriptionChange && onDescriptionChange(e.target.value)}
       />

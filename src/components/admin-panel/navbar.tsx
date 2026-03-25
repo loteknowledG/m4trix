@@ -41,7 +41,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
   const router = useRouter();
   const displayTitle = isStoryDetail ? '' : isStories ? '' : isTags ? '' : isTrash ? '' : title;
 
-  const createUntitledAgent = async () => {
+  const createUntitledCharacter = async () => {
     try {
       const agents = (await idbGet('PLAYGROUND_AGENTS')) as
         | Array<{ id: string; name: string; description: string }>
@@ -53,10 +53,10 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
       };
       const next = agents ? [...agents, newAgent] : [newAgent];
       await idbSet('PLAYGROUND_AGENTS', next);
-      window.dispatchEvent(new Event('agents-updated'));
-      router.push(`/agents/${newAgent.id}`);
+      window.dispatchEvent(new Event('characters-updated'));
+      router.push(`/characters/${newAgent.id}`);
     } catch (err) {
-      toast.error('Failed to create agent');
+      toast.error('Failed to create character');
     }
   };
 
@@ -133,11 +133,11 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            {(pathname === '/agents' || pathname === '/agents/list') && (
+            {(pathname === '/characters' || pathname === '/characters/list') && (
               <button
-                onClick={createUntitledAgent}
+                onClick={createUntitledCharacter}
                 className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Create agent"
+                aria-label="Create character"
               >
                 <GrUserAdd size={18} />
               </button>

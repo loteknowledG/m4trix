@@ -44,12 +44,12 @@ export function getMenuList(): Group[] {
       groupLabel: 'Contents',
       menus: [
         {
-          href: '/agents/list',
-          label: 'Agents',
+          href: '/characters/list',
+          label: 'Characters',
           icon: Users,
           submenus: [
             {
-              href: '/agents/chat',
+              href: '/characters/chat',
               label: 'Chat',
             },
           ],
