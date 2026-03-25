@@ -40,6 +40,7 @@ export default function AgentsListPage() {
   const saveAgents = async (next: Agent[]) => {
     setAgents(next);
     await idbSet(AGENTS_KEY, next);
+    window.dispatchEvent(new Event('agents-updated'));
   };
 
   const addAgent = async () => {
@@ -63,6 +64,7 @@ export default function AgentsListPage() {
 
   const removeAgent = async (id: string) => {
     await saveAgents(agents.filter(a => a.id !== id));
+    window.dispatchEvent(new Event('agents-updated'));
   };
 
   const agentCount = useMemo(() => agents.length, [agents]);
@@ -80,19 +82,6 @@ export default function AgentsListPage() {
           <span className="rounded bg-zinc-900 px-3 py-1 text-xs text-muted-foreground">
             {agentCount} agents
           </span>
-        </div>
-
-        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-          <h2 className="text-lg font-semibold">Create agent</h2>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Agent name" />
-          <Textarea
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            rows={3}
-            placeholder="Agent description"
-          />
-          <Button onClick={addAgent}>Add agent</Button>
         </div>
 
         {agents.length === 0 ? (

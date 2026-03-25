@@ -2,11 +2,13 @@
 
 import useSelection from '@/hooks/use-selection';
 import { SheetMenu } from '@/components/admin-panel/sheet-menu';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from 'lucide-react';
 import { GrUserAdd } from 'react-icons/gr';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Marquee } from '@/components/ui/marquee';
+import { get as idbGet, set as idbSet } from 'idb-keyval';
+import { toast } from 'sonner';
 import { useRef, useEffect, type ReactNode } from 'react';
 
 interface NavbarProps {
@@ -36,7 +38,27 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
   const selectedCount = useSelection(s => (scope ? s.selections[scope]?.length || 0 : 0));
   const clearSelection = useSelection(s => s.clear);
 
+  const router = useRouter();
   const displayTitle = isStoryDetail ? '' : isStories ? '' : isTags ? '' : isTrash ? '' : title;
+
+  const createUntitledAgent = async () => {
+    try {
+      const agents = (await idbGet('PLAYGROUND_AGENTS')) as
+        | Array<{ id: string; name: string; description: string }>
+        | undefined;
+      const newAgent = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        name: '',
+        description: '',
+      };
+      const next = agents ? [...agents, newAgent] : [newAgent];
+      await idbSet('PLAYGROUND_AGENTS', next);
+      window.dispatchEvent(new Event('agents-updated'));
+      router.push(`/agents/${newAgent.id}`);
+    } catch (err) {
+      toast.error('Failed to create agent');
+    }
+  };
 
   const onAction = (action: string) => {
     try {
@@ -111,10 +133,12 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            {(pathname === '/agents' ||
-              pathname === '/agents/list' ||
-              (pathname.startsWith('/agents/') && !pathname.includes('/chat'))) && (
-              <button className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {(pathname === '/agents' || pathname === '/agents/list') && (
+              <button
+                onClick={createUntitledAgent}
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Create agent"
+              >
                 <GrUserAdd size={18} />
               </button>
             )}
