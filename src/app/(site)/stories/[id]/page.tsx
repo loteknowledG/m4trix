@@ -399,13 +399,13 @@ export default function StoryPage() {
     const prev = document.title;
     if (!id)
       return () => {
-        document.title = prev ?? 'matrix';
+        document.title = prev ?? 'm4trix';
       };
 
-    const base = 'matrix - story';
+    const base = 'm4trix - story';
     document.title = title ? `${base} - ${title}` : base;
     return () => {
-      document.title = prev ?? 'matrix';
+      document.title = prev ?? 'm4trix';
     };
   }, [id, title]);
 
@@ -674,7 +674,12 @@ export default function StoryPage() {
                     className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
                     aria-label="Edit story title"
                   >
-                    <Marquee className="text-5xl font-light truncate">
+                    <Marquee
+                      className="text-5xl font-light"
+                      duration="8s"
+                      gap="13rem"
+                      distance="200%"
+                    >
                       {title.trim() ? title : 'Add a title'}
                     </Marquee>
                   </button>

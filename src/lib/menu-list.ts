@@ -44,9 +44,15 @@ export function getMenuList(): Group[] {
       groupLabel: 'Contents',
       menus: [
         {
-          href: '/agents',
+          href: '/agents/list',
           label: 'Agents',
           icon: Users,
+          submenus: [
+            {
+              href: '/agents/chat',
+              label: 'Chat',
+            },
+          ],
         },
         {
           href: '/stories',

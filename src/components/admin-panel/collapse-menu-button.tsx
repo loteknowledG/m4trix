@@ -86,7 +86,7 @@ export function CollapseMenuButton({
                     <p
                       className={cn(
                         'max-w-[150px] truncate',
-                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                       )}
                     >
                       {label}
@@ -95,10 +95,10 @@ export function CollapseMenuButton({
                     <Marquee
                       className={cn(
                         'max-w-[150px]',
-                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                       )}
                       gap="1rem"
-                      duration="20s"
+                      duration="4s"
                     >
                       {label}
                     </Marquee>
@@ -108,7 +108,7 @@ export function CollapseMenuButton({
                   <div
                     className={cn(
                       'whitespace-nowrap',
-                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                     )}
                   >
                     <ChevronDown size={18} className="transition-transform duration-200" />
@@ -132,7 +132,7 @@ export function CollapseMenuButton({
                   <p
                     className={cn(
                       'max-w-[150px] truncate',
-                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                     )}
                   >
                     {label}
@@ -141,7 +141,7 @@ export function CollapseMenuButton({
                   <Marquee
                     className={cn(
                       'max-w-[150px]',
-                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                     )}
                     gap="1rem"
                     duration="20s"
@@ -154,7 +154,7 @@ export function CollapseMenuButton({
                 <div
                   className={cn(
                     'whitespace-nowrap',
-                    isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                    isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                   )}
                 >
                   <ChevronDown size={18} className="transition-transform duration-200" />
@@ -191,7 +191,7 @@ export function CollapseMenuButton({
               <Marquee
                 className={cn(
                   'max-w-[170px]',
-                  isOpen ? 'translate-x-0 opacity-100' : '-translate-x-96 opacity-0'
+                  isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
                 )}
                 gap="1rem"
                 duration="20s"

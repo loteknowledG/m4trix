@@ -80,10 +80,13 @@ const config = {
           to: { height: '0' },
         },
         marquee: {
-          // Move by one copy's width (1 / repeatCount of the full content width).
+          // Move by a configured distance or by one copy width (1 / repeatCount of full content width).
           // The component sets --marquee-repeat to match how many copies it renders.
           '0%': { transform: 'translateX(0)' },
-          '100%': { transform: 'translateX(calc(-100% / var(--marquee-repeat, 2)))' },
+          '100%': {
+            transform:
+              'translateX(calc(-1 * var(--marquee-distance, 100% / var(--marquee-repeat, 2))))',
+          },
         },
       },
       animation: {

@@ -53,10 +53,13 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const footerRef = useRef<HTMLDivElement | null>(null);
   // textarea for user input
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = React.useState(true);
 
   // background gif state
   const [bgGifUrl, setBgGifUrl] = React.useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const lastSpokenIdRef = useRef<string | null>(null);
 
   // keep list scrolled to bottom when messages change
   useEffect(() => {
@@ -64,6 +67,25 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!voiceEnabled) return;
+    if (!messages || messages.length === 0) return;
+
+    const latest = messages[messages.length - 1];
+    if (latest.from !== 'agent') return;
+    if (latest.id === lastSpokenIdRef.current) return;
+
+    lastSpokenIdRef.current = latest.id;
+
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: latest.text }),
+    }).catch(err => {
+      console.warn('[tts] failed to speak text', err);
+    });
+  }, [messages, voiceEnabled]);
 
   // restore focus after submit cycles that temporarily disable the input
   useEffect(() => {
@@ -199,6 +221,16 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                 )}
               </div>
 
+              <button
+                className={
+                  'rounded-md border border-zinc-700 px-3 py-1 text-xs ' +
+                  (voiceEnabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-200')
+                }
+                onClick={() => setVoiceEnabled(prev => !prev)}
+                type="button"
+              >
+                Voice: {voiceEnabled ? 'On' : 'Off'}
+              </button>
               {sendIcon ? (
                 <button
                   className="rounded-md bg-white text-black p-2 hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333] disabled:opacity-50"

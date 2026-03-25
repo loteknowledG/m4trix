@@ -4,6 +4,7 @@ import useSelection from '@/hooks/use-selection';
 import { SheetMenu } from '@/components/admin-panel/sheet-menu';
 import { usePathname } from 'next/navigation';
 import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from 'lucide-react';
+import { GrUserAdd } from 'react-icons/gr';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Marquee } from '@/components/ui/marquee';
 import { useRef, useEffect, type ReactNode } from 'react';
@@ -109,7 +110,14 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
             )}
           </div>
 
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {(pathname === '/agents' ||
+              pathname === '/agents/list' ||
+              (pathname.startsWith('/agents/') && !pathname.includes('/chat'))) && (
+              <button className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <GrUserAdd size={18} />
+              </button>
+            )}
             {isStoryDetail && selectedCount > 0 ? (
               <TooltipProvider>
                 <div className="flex items-center gap-3">

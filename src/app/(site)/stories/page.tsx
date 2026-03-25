@@ -70,9 +70,9 @@ export default function StoriesPage() {
 
   useEffect(() => {
     const prev = document.title;
-    document.title = 'matrix - stories';
+    document.title = 'm4trix - stories';
     return () => {
-      document.title = prev ?? 'matrix';
+      document.title = prev ?? 'm4trix';
     };
   }, []);
 

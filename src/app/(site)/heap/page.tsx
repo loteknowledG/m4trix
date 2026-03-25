@@ -380,9 +380,9 @@ function HeapInner() {
 
   useEffect(() => {
     const prev = document.title;
-    document.title = 'matrix - heap';
+    document.title = 'm4trix - heap';
     return () => {
-      document.title = prev ?? 'matrix';
+      document.title = prev ?? 'm4trix';
     };
   }, []);
 
