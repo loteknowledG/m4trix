@@ -168,6 +168,19 @@ body,
   .mc-shadow-hover:hover {
     box-shadow: 12px 12px 36px rgba(0, 0, 0, 0.88);
   }
+  .pushable-effect {
+    @apply transition-transform duration-150 ease-out;
+    transform: translate(0, 0);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+  .pushable-effect:hover {
+    transform: translate(-0.5rem, -0.5rem);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46);
+  }
+  .pushable-effect:active {
+    transform: translate(0.5rem, 0.5rem);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+  }
   .dark .mc-shadow-hover:hover {
     box-shadow: 14px 14px 44px rgba(0, 0, 0, 0.98);
   }

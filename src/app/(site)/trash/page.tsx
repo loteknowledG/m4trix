@@ -1,20 +1,15 @@
-"use client";
-import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
+'use client';
+import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
 
-import { useEffect, useState } from "react";
-import { get, set } from "idb-keyval";
-import { logger } from "@/lib/logger";
-import { ContentLayout } from "@/components/admin-panel/content-layout";
-import ErrorBoundary from "@/components/error-boundary";
-import { MomentsProvider } from "@/context/moments-collection";
-import MomentsGrid from "@/components/moments-grid";
-import { Trash2, RotateCcw } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { useEffect, useState } from 'react';
+import { get, set } from 'idb-keyval';
+import { logger } from '@/lib/logger';
+import { ContentLayout } from '@/components/admin-panel/content-layout';
+import ErrorBoundary from '@/components/error-boundary';
+import { MomentsProvider } from '@/context/moments-collection';
+import MomentsGrid from '@/components/moments-grid';
+import { Trash2, RotateCcw } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Moment = { id: string; src: string; name?: string };
 
@@ -24,62 +19,67 @@ export default function TrashPage() {
 
   const load = async () => {
     try {
-      const saved = (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
-      if (Array.isArray(saved)) setMoments(saved.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name })));
+      const saved = (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
+      if (Array.isArray(saved))
+        setMoments(saved.map((s: any) => ({ id: s.id || s, src: s.src || s, name: s.name })));
       else setMoments([]);
     } catch (e) {
-      logger.error("Failed to load trash", e);
+      logger.error('Failed to load trash', e);
       setMoments([]);
     }
   };
 
-  const anySelected = Object.keys(selected).some((k) => selected[k]);
+  const anySelected = Object.keys(selected).some(k => selected[k]);
 
   const toggleSelect = (id: string) => {
-    setSelected((s) => ({ ...s, [id]: !s[id] }));
+    setSelected(s => ({ ...s, [id]: !s[id] }));
   };
 
   const clearSelection = () => setSelected({});
 
   const restoreSelected = async () => {
-    const ids = Object.keys(selected).filter((k) => selected[k]);
+    const ids = Object.keys(selected).filter(k => selected[k]);
     if (ids.length === 0) return;
     try {
-      const trash = (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
+      const trash = (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
       const toRestore = trash.filter((t: any) => ids.includes(t.id || t));
       const remaining = trash.filter((t: any) => !ids.includes(t.id || t));
       // write remaining back to trash
-      await set("trash-moments", remaining);
+      await set('trash-moments', remaining);
       // append to heap
-      const heap = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
+      const heap = (await get<any[]>('heap-moments')) || (await get<any[]>('heap-gifs')) || [];
       const newHeap = [...heap, ...toRestore];
-      await set("heap-moments", newHeap);
+      await set('heap-moments', newHeap);
       // refresh
       clearSelection();
       await load();
       try {
-        window.dispatchEvent(new Event("moments-updated"));
-      } catch (e) { /* ignore */ }
+        window.dispatchEvent(new Event('moments-updated'));
+      } catch (e) {
+        /* ignore */
+      }
     } catch (e) {
-      logger.error("Failed to restore selected moments", e);
+      logger.error('Failed to restore selected moments', e);
     }
   };
 
   const deleteSelectedPermanently = async () => {
-    const ids = Object.keys(selected).filter((k) => selected[k]);
+    const ids = Object.keys(selected).filter(k => selected[k]);
     if (ids.length === 0) return;
     if (!confirm(`Delete ${ids.length} item(s) permanently? This cannot be undone.`)) return;
     try {
-      const trash = (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
+      const trash = (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
       const remaining = trash.filter((t: any) => !ids.includes(t.id || t));
-      await set("trash-moments", remaining);
+      await set('trash-moments', remaining);
       clearSelection();
       await load();
       try {
-        window.dispatchEvent(new Event("moments-updated"));
-      } catch (e) { /* ignore */ }
+        window.dispatchEvent(new Event('moments-updated'));
+      } catch (e) {
+        /* ignore */
+      }
     } catch (e) {
-      logger.error("Failed to delete selected moments", e);
+      logger.error('Failed to delete selected moments', e);
     }
   };
 
@@ -87,12 +87,16 @@ export default function TrashPage() {
     load();
     const h = () => load();
     try {
-      window.addEventListener("moments-updated", h as EventListener);
-    } catch (e) { /* ignore */ }
+      window.addEventListener('moments-updated', h as EventListener);
+    } catch (e) {
+      /* ignore */
+    }
     return () => {
       try {
-        window.removeEventListener("moments-updated", h as EventListener);
-      } catch (e) { /* ignore */ }
+        window.removeEventListener('moments-updated', h as EventListener);
+      } catch (e) {
+        /* ignore */
+      }
     };
   }, []);
 
@@ -102,7 +106,7 @@ export default function TrashPage() {
       navLeft={
         anySelected ? (
           <SelectionHeaderBar
-            selectedIds={Object.keys(selected).filter((k) => selected[k])}
+            selectedIds={Object.keys(selected).filter(k => selected[k])}
             moments={moments}
             onSelectAll={() => {
               setSelected(Object.fromEntries(moments.map(m => [m.id, true])));
@@ -119,6 +123,7 @@ export default function TrashPage() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={restoreSelected}
+                    title="Restore selected moments"
                     className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
                   >
                     <RotateCcw size={18} />
@@ -133,6 +138,7 @@ export default function TrashPage() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={deleteSelectedPermanently}
+                    title="Delete selected moments permanently"
                     className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
                   >
                     <Trash2 size={18} />
@@ -148,7 +154,7 @@ export default function TrashPage() {
       }
     >
       <ErrorBoundary>
-        <div className="overflow-auto" style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}>
+        <div className="overflow-auto h-[calc(100vh_-_var(--app-header-height,56px))]">
           <div className="py-4">
             {moments.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">No items in Trash.</div>
@@ -156,7 +162,7 @@ export default function TrashPage() {
               <MomentsProvider collection={moments}>
                 <MomentsGrid
                   moments={moments}
-                  selectedIds={Object.keys(selected).filter((k) => selected[k])}
+                  selectedIds={Object.keys(selected).filter(k => selected[k])}
                   toggleSelect={toggleSelect}
                 />
               </MomentsProvider>

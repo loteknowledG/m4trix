@@ -103,7 +103,7 @@ export default function MomentCard({
         }
       }}
       className={[
-        'pushable-moment relative group rounded-md overflow-visible border-none bg-transparent cursor-pointer',
+        'pushable-moment pushable-effect relative group rounded-md overflow-visible border-none bg-transparent cursor-pointer',
         item.selected ? 'ring-2 ring-primary/60' : '',
         fullHeight ? 'h-full' : '',
       ].join(' ')}
@@ -168,8 +168,8 @@ export default function MomentCard({
             </div>
           )}
           {item.selected && (
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
-              <CheckCircle size={14} />
+            <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground">
+              <CheckCircle size={16} />
             </span>
           )}
         </button>
@@ -183,10 +183,7 @@ export default function MomentCard({
           <div className="absolute inset-0 z-20 pointer-events-none">
             <div className="absolute inset-0 rounded-2xl border-2 border-white/30" />
             <div className="absolute inset-0 rounded-2xl bg-black/10 backdrop-blur-sm" />
-            <div
-              className="absolute inset-0 rounded-2xl overflow-hidden"
-              style={{ pointerEvents: 'none' }}
-            >
+            <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
               <img
                 src={normalizeMomentSrc(item.src)}
                 alt={item.name || 'Moment preview'}

@@ -1,16 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, DragEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
+import { cn } from '@/lib/utils';
 
 type Agent = {
   id: string;
   name: string;
   description: string;
+  avatarUrl?: string;
+  avatarCrop?: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
 };
 
 const AGENTS_KEY = 'PLAYGROUND_AGENTS';
@@ -24,6 +31,8 @@ export default function AgentDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [descriptionValue, setDescriptionValue] = useState('');
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0, zoom: 1 });
 
   useEffect(() => {
     let mounted = true;
@@ -38,12 +47,19 @@ export default function AgentDetailPage() {
         setDescriptionValue(found.description);
         setIsEditingName(found.name.trim() === '');
       } else {
-        const newAgent = { id: agentId, name: '', description: '' };
+        const newAgent = {
+          id: agentId,
+          name: '',
+          description: '',
+          avatarUrl: undefined,
+          avatarCrop: { x: 0, y: 0, zoom: 1 },
+        };
         const next = (stored ?? []).concat(newAgent);
         await idbSet(AGENTS_KEY, next);
         setAgent(newAgent);
         setNameValue('');
         setDescriptionValue('');
+        setAvatarCrop({ x: 0, y: 0, zoom: 1 });
         setIsEditingName(true);
       }
 
@@ -73,29 +89,76 @@ export default function AgentDetailPage() {
     );
   }
 
-  const saveAgent = async () => {
-    if (!agent) return;
+  const saveAgent = async (updatedAgent?: Agent) => {
+    if (!agent && !updatedAgent) return;
     const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+    const currentAgent = updatedAgent ?? agent;
+    if (!currentAgent) return;
     const trimmedName = nameValue.trim() || 'Untitled';
     const trimmedDescription = descriptionValue.trim();
     const updated = (stored ?? []).map(a =>
-      a.id === agent.id
+      a.id === currentAgent.id
         ? {
             ...a,
             name: trimmedName,
             description: trimmedDescription,
+            avatarUrl: currentAgent.avatarUrl,
           }
         : a
     );
     await idbSet(AGENTS_KEY, updated);
-    setAgent({
-      ...agent,
+    const nextAgent = {
+      ...currentAgent,
       name: trimmedName,
       description: trimmedDescription,
-    });
+      avatarUrl: currentAgent.avatarUrl,
+      avatarCrop: avatarCrop,
+    };
+
+    setAgent(nextAgent);
+    setAvatarCrop(currentAgent.avatarCrop ?? { x: 0, y: 0, zoom: 1 });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('characters-updated'));
+    }
+  };
+
+  const persistAvatar = async (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = async event => {
+      const dataUrl = event.target?.result as string;
+      if (!agent) return;
+      const updatedAgent = {
+        ...agent,
+        avatarUrl: dataUrl,
+      };
+      setAgent(updatedAgent);
+      await saveAgent(updatedAgent);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      persistAvatar(file);
     }
   };
 
@@ -105,13 +168,22 @@ export default function AgentDetailPage() {
   };
 
   return (
-    <ContentLayout title={`Character: ${agent.name || 'Untitled'}`} navLeft={null}>
-      <div className="space-y-6 p-6">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
+    <ContentLayout title="" navLeft={null}>
+      <div
+        className={cn(
+          'space-y-6 p-6 rounded-lg border border-dashed',
+          isDragActive ? 'border-primary bg-primary/10' : 'border-transparent'
+        )}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        <div className="space-y-4 w-full">
           {isEditingName ? (
             <input
               className="w-full text-5xl font-light bg-transparent border border-zinc-600 rounded px-3 py-2"
               placeholder="Add name"
+              aria-label="Character name"
               value={nameValue}
               onChange={e => setNameValue(e.target.value)}
               onBlur={handleNameCommit}
@@ -136,21 +208,23 @@ export default function AgentDetailPage() {
             </h1>
           )}
           <textarea
-            className="mt-4 w-full rounded border border-zinc-700 p-2 bg-zinc-900 text-sm"
+            className="w-full min-h-[120px] rounded border border-zinc-700 p-2 bg-transparent text-sm"
             value={descriptionValue}
             onChange={e => setDescriptionValue(e.target.value)}
-            onBlur={saveAgent}
+            onBlur={() => saveAgent()}
             placeholder="No description"
+            aria-label="Character description"
             rows={3}
           />
-        </div>
-        <div className="flex gap-2">
-          <Link href="/characters/list">
-            <Button variant="secondary">Back to list</Button>
-          </Link>
-          <Link href={`/characters/${agent.id}/chat`}>
-            <Button>Open chat</Button>
-          </Link>
+          {agent?.avatarUrl && (
+            <div className="mx-auto relative mt-4 h-56 w-56 overflow-hidden rounded-lg border border-zinc-700">
+              <img
+                src={agent.avatarUrl}
+                alt="Character avatar"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          )}
         </div>
       </div>
     </ContentLayout>

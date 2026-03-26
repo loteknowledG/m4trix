@@ -14,5 +14,16 @@
   "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
   "[typescriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "files.watcherExclude": {
+    "**/globalStorage/github.copilot-chat/**": true,
+    "**/.history/**": true
+  },
+  "files.exclude": {
+    "**/.history/**": true
+  },
+  "search.exclude": {
+    "**/globalStorage/github.copilot-chat/**": true,
+    "**/.history/**": true
   }
 }

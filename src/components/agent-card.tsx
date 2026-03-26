@@ -61,17 +61,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   return (
     <div className="flex flex-col gap-2 w-full">
       <div className="flex gap-2 items-center">
-        <label
-          className="relative group cursor-pointer"
-          onDragOver={e => {
-            e.preventDefault();
-          }}
-          onDrop={e => {
-            e.preventDefault();
-            const file = e.dataTransfer.files[0];
-            if (file && onAvatarUpload) onAvatarUpload(file);
-          }}
-        >
+        <label className="relative group cursor-pointer">
           <Avatar className="h-8 w-8 shrink-0 border transition-all hover:border-primary/50 relative">
             <AvatarImage
               src={avatarUrl}
@@ -127,6 +117,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             type="file"
             className="hidden"
             accept="image/*"
+            aria-label="Upload avatar image"
             onChange={e => {
               const file = e.target.files?.[0];
               if (file && onAvatarUpload) onAvatarUpload(file);
@@ -141,12 +132,13 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
           title="Import Role/Profile (.md or image)"
         >
-          <label style={{ margin: 0 }}>
+          <label className="m-0">
             <FileUp className="h-3.5 w-3.5" />
             <input
               type="file"
               className="hidden"
               accept=".md,image/*"
+              aria-label="Import role or profile file"
               onChange={e => {
                 const file = e.target.files?.[0];
                 if (!file) return;

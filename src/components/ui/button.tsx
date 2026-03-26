@@ -5,7 +5,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 pushable-effect',
   {
     variants: {
       variant: {
@@ -58,6 +58,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       return (
         <Comp
           className={cn(buttonVariants({ variant, size, className }), 'pushable')}
+          data-state={state}
           ref={ref}
           onMouseEnter={() => setState('hover')}
           onMouseLeave={() => setState('rest')}
@@ -72,36 +73,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           <span
             className="shadow absolute inset-0 rounded-md bg-black/25 will-change-transform pointer-events-none"
             aria-hidden="true"
-            style={{
-              transform: shadowTransforms[state],
-              transition:
-                state === 'active'
-                  ? 'transform 34ms'
-                  : state === 'hover'
-                  ? 'transform 250ms cubic-bezier(0.3,0.7,0.4,1.5)'
-                  : 'transform 600ms cubic-bezier(0.3,0.7,0.4,1)',
-            }}
           />
           <span
             className="edge absolute inset-0 rounded-md pointer-events-none"
             aria-hidden="true"
-            style={{
-              background:
-                'linear-gradient(to left, hsl(240deg 4% 16%) 0%, hsl(240deg 4% 32%) 8%, hsl(240deg 4% 32%) 92%, hsl(240deg 4% 16%) 100%)',
-            }}
           />
-          <span
-            className="front relative block rounded-md px-4 py-2 text-base font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 will-change-transform select-none"
-            style={{
-              transform: frontTransforms[state],
-              transition:
-                state === 'active'
-                  ? 'transform 34ms'
-                  : state === 'hover'
-                  ? 'transform 250ms cubic-bezier(0.3,0.7,0.4,1.5)'
-                  : 'transform 600ms cubic-bezier(0.3,0.7,0.4,1)',
-            }}
-          >
+          <span className="front relative block rounded-md px-4 py-2 text-base font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 will-change-transform select-none">
             {children}
           </span>
         </Comp>

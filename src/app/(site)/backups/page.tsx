@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useRef, useState } from 'react';
-import { get, set, clear } from 'idb-keyval';
+import { get, set, clear, keys } from 'idb-keyval';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -444,7 +444,10 @@ export default function BackupsPage() {
       {/* buttons in two-column grid align with preview panels below */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="flex justify-start">
-          <button onClick={handleExport} className="px-4 py-2 rounded bg-slate-800 text-white">
+          <button
+            onClick={handleExport}
+            className="px-4 py-2 rounded bg-slate-800 text-white pushable-effect"
+          >
             Export JSON
           </button>
         </div>
@@ -459,7 +462,7 @@ export default function BackupsPage() {
           />
           <button
             onClick={() => importRef.current?.click()}
-            className="px-4 py-2 rounded border"
+            className="px-4 py-2 rounded border pushable-effect"
             aria-label="Open JSON backup file picker"
           >
             Import JSON

@@ -147,7 +147,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setKoboldUrl(storedKoboldUrl);
       setKoboldConnected(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {

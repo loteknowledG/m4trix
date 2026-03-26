@@ -133,15 +133,6 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            {(pathname === '/characters' || pathname === '/characters/list') && (
-              <button
-                onClick={createUntitledCharacter}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Create character"
-              >
-                <GrUserAdd size={18} />
-              </button>
-            )}
             {isStoryDetail && selectedCount > 0 ? (
               <TooltipProvider>
                 <div className="flex items-center gap-3">
@@ -149,6 +140,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onAction('move-to-heap')}
+                        title="Move to Heap"
                         className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
                       >
                         <LayoutGrid size={18} />
@@ -163,6 +155,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onAction('move-to-chapter')}
+                        title="Move to Chapter"
                         className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
                       >
                         <SquarePen size={18} />
@@ -177,6 +170,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onAction('move-to-trash')}
+                        title="Move to Trash"
                         className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
                       >
                         <Trash2 size={18} />

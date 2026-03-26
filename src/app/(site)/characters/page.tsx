@@ -1609,17 +1609,6 @@ export default function CharactersPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Characters
                   </p>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      onClick={addAgent}
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
-                      title="Add New Agent"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
                 </div>
               </div>
 
@@ -1954,6 +1943,15 @@ export default function CharactersPage() {
               </DialogFooter>
             </div>
           </DialogContent>
+          <Button
+            onClick={addAgent}
+            size="icon"
+            variant="default"
+            className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow"
+            title="Add New Character"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
         </Dialog>
       </div>
     </ContentLayout>

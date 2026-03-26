@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { get, set } from 'idb-keyval';
 import useSelection from '@/hooks/use-selection';
+import { useSidebar } from '@/hooks/use-sidebar';
 import { logger } from '@/lib/logger';
 import { Marquee } from '@/components/ui/marquee';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
@@ -13,6 +14,7 @@ import CollectionOverlay from '@/components/collection-overlay';
 import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Trash2, Upload } from 'lucide-react';
+import { LuNotebookText } from 'react-icons/lu';
 import { IoBanOutline } from 'react-icons/io5';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -410,6 +412,7 @@ export default function StoryPage() {
   }, [id, title]);
 
   const router = useRouter();
+  const setSidebarOpen = useSidebar(s => s.setIsOpen);
 
   async function handleDeleteStory() {
     if (!id) return;
@@ -591,57 +594,78 @@ export default function StoryPage() {
           />
         }
         navRight={
-          (selectedIds || []).length > 0 ? (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            {!(selectedIds || []).length ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        moveToHeap();
-                      }}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-destructive hover:text-destructive/80 transition-colors"
-                      aria-label="Remove from story"
+                      type="button"
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-foreground hover:bg-accent/10 transition-colors"
+                      aria-label="Story info"
+                      onClick={() => setSidebarOpen(true)}
                     >
-                      <IoBanOutline size={18} />
+                      <LuNotebookText size={18} />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={10}>
-                    <p>Remove from story</p>
+                    <p>Story info</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            ) : null}
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        moveToTrash();
-                      }}
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                      aria-label="Move selected to trash"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={10}>
-                    <p>Move to Trash</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          ) : null
+            {(selectedIds || []).length > 0 ? (
+              <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          moveToHeap();
+                        }}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-destructive hover:text-destructive/80 transition-colors"
+                        aria-label="Remove from story"
+                      >
+                        <IoBanOutline size={18} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={10}>
+                      <p>Remove from story</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          moveToTrash();
+                        }}
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                        aria-label="Move selected to trash"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={10}>
+                      <p>Move to Trash</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </>
+            ) : null}
+          </div>
         }
       >
         <ErrorBoundary>
           <div
-            className="overflow-auto"
-            style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
+            className="overflow-auto h-[calc(100vh_-_var(--app-header-height,56px))]"
             onDragOver={e => e.preventDefault()}
             onDrop={handleExternalDrop}
           >
@@ -650,6 +674,7 @@ export default function StoryPage() {
                 {editingTitle ? (
                   <input
                     autoFocus
+                    aria-label="Edit story title"
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     onBlur={async () => {
