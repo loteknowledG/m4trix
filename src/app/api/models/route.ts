@@ -38,6 +38,60 @@ function deriveModelsUrlFromChatUrl(chatUrl: string | undefined): string | null 
 }
 
 export async function GET(req: NextRequest) {
+  // Debug: Log incoming request and provider selection
+  console.log('[API/models] Incoming request:', req.url);
+
+  // Check for LM Studio provider
+  const { searchParams } = new URL(req.url);
+  const provider = searchParams.get('provider');
+  if (provider === 'lmstudio') {
+    console.log('[API/models] Provider: LM Studio');
+    // Support custom LM Studio URL via query param
+    let lmstudioUrlParam = searchParams.get('lmstudio_url');
+    if (lmstudioUrlParam) {
+      lmstudioUrlParam = decodeURIComponent(lmstudioUrlParam).trim().replace(/\/$/, '');
+    }
+    const baseUrl = lmstudioUrlParam || process.env.LMSTUDIO_URL || 'http://192.168.12.48:1234';
+    const modelsUrl = `${baseUrl}/v1/models`;
+    try {
+      const resp = await fetch(modelsUrl, { method: 'GET' });
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(
+          `[API/models] LM Studio fetch failed: ${resp.status} ${resp.statusText} - ${text}`
+        );
+        return new Response(
+          `Failed to fetch LM Studio models: ${resp.status} ${resp.statusText} - ${text}`,
+          { status: 500 }
+        );
+      }
+      const data = await resp.json();
+      // Normalize to array of { id, display_name }
+      const rawModels = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.models)
+        ? data.models
+        : Array.isArray(data?.data)
+        ? data.data
+        : [];
+      const mapped = rawModels
+        .map((m: any) => ({
+          id: m?.id || m?.model_id || m?.name || '',
+          display_name: m?.display_name || m?.name || m?.id || '',
+        }))
+        .filter((x: any) => x.id);
+      return new Response(JSON.stringify(mapped), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      console.error('[API/models] Exception fetching LM Studio models:', err);
+      return new Response(
+        'Failed to fetch LM Studio models: ' + (err instanceof Error ? err.message : String(err)),
+        { status: 500 }
+      );
+    }
+  }
   const overrideKey = req.headers.get('x-zen-api-key')?.trim() || null;
   const googleOverrideKey = req.headers.get('x-google-api-key')?.trim() || null;
   const nvidiaOverrideKey = req.headers.get('x-nvidia-api-key')?.trim() || null;
@@ -48,8 +102,9 @@ export async function GET(req: NextRequest) {
   const hfApiKey = hfOverrideKey || process.env.HUGGINGFACE_API_KEY;
   const nvidiaApiKey = nvidiaOverrideKey || process.env.NVIDIA_API_KEY;
 
-  if (!zenApiKey && !googleApiKey && !hfApiKey && !nvidiaApiKey) {
-    return new Response('No API keys configured (Zen, Google, Hugging Face, or NVIDIA)', {
+  // If no provider is specified and no valid API key is present, return an error (do not default to Zen)
+  if (!provider && !zenApiKey && !googleApiKey && !hfApiKey && !nvidiaApiKey) {
+    return new Response('No provider or API key specified. Please select a provider in the UI.', {
       status: 400,
     });
   }
@@ -57,6 +112,7 @@ export async function GET(req: NextRequest) {
   // If a NVIDIA key was provided, attempt real model discovery against an NVIDIA models endpoint.
   // The endpoint can be overridden by setting NVIDIA_MODELS_URL in the environment.
   if (Boolean(nvidiaOverrideKey)) {
+    console.log('[API/models] Provider: NVIDIA', { nvidiaOverrideKey });
     const nvidiaModelsUrl = process.env.NVIDIA_MODELS_URL || 'https://api.ngc.nvidia.com/v2/models';
 
     try {
@@ -139,13 +195,51 @@ export async function GET(req: NextRequest) {
   );
   const isHF = Boolean(hfOverrideKey);
 
-  const modelsUrl = isHF
-    ? HUGGINGFACE_MODELS_URL
-    : isGoogle
-    ? GOOGLE_MODELS_URL
-    : ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL);
+  console.log('[API/models] Provider selection:', {
+    isGoogle,
+    isHF,
+    zenApiKey,
+    googleApiKey,
+    hfApiKey,
+    nvidiaApiKey,
+    overrideKey,
+    googleOverrideKey,
+    nvidiaOverrideKey,
+    provider,
+    modelsUrl: isHF
+      ? HUGGINGFACE_MODELS_URL
+      : isGoogle
+      ? GOOGLE_MODELS_URL
+      : ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL),
+  });
 
-  const apiKeyToUse = isHF ? hfApiKey : isGoogle ? googleApiKey : zenApiKey;
+  // Strict provider selection: require explicit provider or API key
+  let modelsUrl: string | null = null;
+  let apiKeyToUse: string | null = null;
+
+  if (provider === 'lmstudio') {
+    // Handled above
+    return;
+  } else if (Boolean(nvidiaOverrideKey)) {
+    // Handled above
+    return;
+  } else if (isHF) {
+    modelsUrl = HUGGINGFACE_MODELS_URL;
+    apiKeyToUse = hfApiKey ?? null;
+  } else if (isGoogle) {
+    modelsUrl = GOOGLE_MODELS_URL;
+    apiKeyToUse = googleApiKey ?? null;
+  } else if (zenApiKey) {
+    modelsUrl = ZEN_MODELS_URL || deriveModelsUrlFromChatUrl(ZEN_CHAT_URL);
+    apiKeyToUse = zenApiKey ?? null;
+  } else {
+    return new Response(
+      'No valid provider or API key specified. Please select a provider in the UI.',
+      {
+        status: 400,
+      }
+    );
+  }
 
   try {
     const response = await fetch(modelsUrl!, {

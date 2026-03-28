@@ -17,8 +17,9 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
-type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'kobold';
+type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
 
 export interface ConnectionSheetProps {
   /** Side to open the sheet from */
@@ -29,17 +30,21 @@ export interface ConnectionSheetProps {
 
 export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSheetProps) {
   const [activeProvider, setActiveProvider] = useState<Provider>('zen');
+  const [lmstudioUrl, setLmstudioUrl] = useState('');
+  const [lmstudioConnected, setLmstudioConnected] = useState(false);
+  const [lmstudioHealth, setLmstudioHealth] = useState<{
+    state: 'idle' | 'checking' | 'healthy' | 'error';
+    message?: string;
+    modelCount?: number;
+  }>({ state: 'idle' });
   const [zenApiKey, setZenApiKey] = useState('');
   const [googleApiKey, setGoogleApiKey] = useState('');
   const [hfApiKey, setHfApiKey] = useState('');
   const [nvidiaApiKey, setNvidiaApiKey] = useState('');
-  const [koboldUrl, setKoboldUrl] = useState('http://localhost:5000');
-  const [koboldModel, setKoboldModel] = useState('');
   const [zenConnected, setZenConnected] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [hfConnected, setHfConnected] = useState(false);
   const [nvidiaConnected, setNvidiaConnected] = useState(false);
-  const [koboldConnected, setKoboldConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [model, setModel] = useState('');
@@ -48,7 +53,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   >([]);
 
   const connected =
-    zenConnected || googleConnected || hfConnected || nvidiaConnected || koboldConnected;
+    zenConnected || googleConnected || hfConnected || nvidiaConnected || lmstudioConnected;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -66,8 +71,8 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       ? googleApiKey
       : activeProvider === 'nvidia'
       ? nvidiaApiKey
-      : activeProvider === 'kobold'
-      ? koboldUrl
+      : activeProvider === 'lmstudio'
+      ? 'local' // LM Studio does not require a key
       : hfApiKey || ''
     ).trim().length > 0;
 
@@ -78,9 +83,39 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       ? googleConnected
       : activeProvider === 'nvidia'
       ? nvidiaConnected
-      : activeProvider === 'kobold'
-      ? koboldConnected
+      : activeProvider === 'lmstudio'
+      ? lmstudioConnected
       : hfConnected;
+
+  const probeLmstudioHealth = async (urlOverride?: string) => {
+    const targetUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
+    setLmstudioHealth({ state: 'checking' });
+
+    try {
+      const res = await fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`);
+      const payload = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: string; modelCount?: number }
+        | null;
+
+      if (!res.ok || !payload?.ok) {
+        setLmstudioHealth({
+          state: 'error',
+          message: payload?.error || `Unable to reach ${targetUrl}`,
+        });
+        return;
+      }
+
+      setLmstudioHealth({
+        state: 'healthy',
+        modelCount: payload.modelCount ?? 0,
+      });
+    } catch (err) {
+      setLmstudioHealth({
+        state: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
 
   const storeSession = () => {
     if (typeof window === 'undefined') return;
@@ -96,16 +131,16 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     if (nvidiaApiKey) window.sessionStorage.setItem('NVIDIA_API_KEY_SESSION', nvidiaApiKey);
     else window.sessionStorage.removeItem('NVIDIA_API_KEY_SESSION');
 
-    if (koboldUrl) window.sessionStorage.setItem('KOBOLD_URL_SESSION', koboldUrl);
-    else window.sessionStorage.removeItem('KOBOLD_URL_SESSION');
-
-    if (koboldModel) window.sessionStorage.setItem('KOBOLD_MODEL_SESSION', koboldModel);
-    else window.sessionStorage.removeItem('KOBOLD_MODEL_SESSION');
-
     if (model) window.sessionStorage.setItem('ACTIVE_MODEL_SESSION', model);
     else window.sessionStorage.removeItem('ACTIVE_MODEL_SESSION');
 
     window.sessionStorage.setItem('ACTIVE_PROVIDER_SESSION', activeProvider);
+    window.sessionStorage.setItem('LMSTUDIO_CONNECTED', lmstudioConnected ? '1' : '');
+    if (lmstudioUrl.trim()) {
+      window.sessionStorage.setItem('LMSTUDIO_URL_SESSION', normalizeLmstudioUrl(lmstudioUrl));
+    } else {
+      window.sessionStorage.removeItem('LMSTUDIO_URL_SESSION');
+    }
   };
 
   useEffect(() => {
@@ -118,14 +153,14 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     const storedProvider = window.sessionStorage.getItem(
       'ACTIVE_PROVIDER_SESSION'
     ) as Provider | null;
+    const storedLmstudio = window.sessionStorage.getItem('LMSTUDIO_CONNECTED');
+    const storedLmstudioUrl = window.sessionStorage.getItem('LMSTUDIO_URL_SESSION');
 
     const storedModel = window.sessionStorage.getItem('ACTIVE_MODEL_SESSION');
-    const storedKoboldUrl = window.sessionStorage.getItem('KOBOLD_URL_SESSION');
-    const storedKoboldModel = window.sessionStorage.getItem('KOBOLD_MODEL_SESSION');
-
     if (storedModel) setModel(storedModel);
-    if (storedKoboldModel) setKoboldModel(storedKoboldModel);
     if (storedProvider) setActiveProvider(storedProvider);
+    if (storedLmstudio === '1') setLmstudioConnected(true);
+    if (storedLmstudioUrl) setLmstudioUrl(normalizeLmstudioUrl(storedLmstudioUrl));
 
     if (storedZen) {
       setZenApiKey(storedZen);
@@ -143,18 +178,123 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setNvidiaApiKey(storedNvidia);
       void validateAndFetchModels('nvidia', storedNvidia);
     }
-    if (storedKoboldUrl) {
-      setKoboldUrl(storedKoboldUrl);
-      setKoboldConnected(true);
-    }
-     
+    // LM Studio is local, no key needed, just mark as connected if previously set
   }, []);
 
   useEffect(() => {
     storeSession();
-  }, [zenApiKey, googleApiKey, hfApiKey, nvidiaApiKey, activeProvider, model]);
+  }, [zenApiKey, googleApiKey, hfApiKey, nvidiaApiKey, activeProvider, model, lmstudioUrl, lmstudioConnected]);
+
+  useEffect(() => {
+    if (activeProvider !== 'lmstudio') {
+      setLmstudioHealth({ state: 'idle' });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void probeLmstudioHealth();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [activeProvider, lmstudioUrl]);
+
+  // When activeProvider changes, auto-select a valid model for that provider
+  useEffect(() => {
+    if (!modelOptions.length) return;
+    // Only allow models from the active provider
+    const validModels = modelOptions.filter(o => o.provider === activeProvider);
+    if (validModels.length === 0) {
+      setModel('');
+      return;
+    }
+    // If current model is not valid for this provider, select the first one
+    if (!validModels.some(m => m.id === model)) {
+      setModel(validModels[0].id);
+    }
+  }, [activeProvider, modelOptions]);
+
+  // Ensure that when sending requests, the selected model is from the active provider
+  // (This is enforced by the above effect, but double-check before sending any request)
 
   const validateAndFetchModels = async (provider: Provider, keyToUse: string) => {
+    if (provider === 'lmstudio') {
+      // LM Studio is local or remote, no key required, just mark as connected and fetch models
+      setLmstudioConnected(true);
+      setConnectionError(null);
+      setIsConnecting(true);
+      try {
+        // Default to localhost for LM Studio URL
+        const normalizedLmstudioUrl = normalizeLmstudioUrl(lmstudioUrl || DEFAULT_LMSTUDIO_URL);
+        const res = await fetch(
+          `/api/models?provider=lmstudio&lmstudio_url=${encodeURIComponent(
+            normalizedLmstudioUrl
+          )}`,
+          {
+            method: 'GET',
+          }
+        );
+        if (!res.ok) throw new Error('Failed to fetch LM Studio models');
+        const payload = (await res.json().catch(() => null)) as any;
+        // Debug: log the raw payload from the backend
+        setTimeout(() => {
+          // eslint-disable-next-line no-console
+          console.log('LM Studio raw payload:', payload);
+        }, 0);
+        // Explicitly handle LM Studio response structure
+        let rawModels: any[] = [];
+        if (Array.isArray(payload)) {
+          rawModels = payload;
+        } else if (payload && Array.isArray(payload.data)) {
+          rawModels = payload.data;
+        } else if (payload && Array.isArray(payload.models)) {
+          rawModels = payload.models;
+        } else if (payload && payload.object === 'list' && Array.isArray(payload.data)) {
+          // LM Studio OpenAI-compatible response
+          rawModels = payload.data;
+        }
+        const options: Array<{ id: string; label: string; provider: Provider }> = rawModels
+          .map((m: any) => {
+            const id =
+              (typeof m?.id === 'string' && m.id) ||
+              (typeof m?.model_id === 'string' && m.model_id) ||
+              (typeof m?.name === 'string' && m.name);
+            if (!id) return null;
+            const label =
+              (typeof m?.display_name === 'string' && m.display_name) ||
+              (typeof m?.name === 'string' && m.name) ||
+              id;
+            return { id, label, provider };
+          })
+          .filter((m: any): m is any => Boolean(m));
+        setModelOptions(prev => {
+          // Always remove old lmstudio models and add new ones
+          const filtered = prev.filter(p => p.provider !== 'lmstudio');
+          const combined = [
+            ...filtered,
+            ...options.map(o => ({ ...o, provider: 'lmstudio' as Provider })),
+          ];
+          // Debug: log the model options after update
+          setTimeout(() => {
+            // eslint-disable-next-line no-console
+            console.log('LM Studio modelOptions:', combined);
+          }, 0);
+          return combined;
+        });
+        if (options.length && (!model || activeProvider === provider)) {
+          setModel(options[0]!.id);
+        }
+        toast.success(
+          `LM Studio connected — ${options.length} model${options.length > 1 ? 's' : ''} loaded`
+        );
+      } catch (e) {
+        setConnectionError('Failed to connect to LM Studio');
+        setLmstudioConnected(false);
+        toast.error('Failed to connect to LM Studio');
+      } finally {
+        setIsConnecting(false);
+      }
+      return;
+    }
     const trimmedKey = keyToUse.trim();
     if (!trimmedKey) return;
 
@@ -262,9 +402,17 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   const connectWithKey = async (event?: React.FormEvent<HTMLFormElement>) => {
     if (event) event.preventDefault();
 
-    if (activeProvider === 'kobold') {
-      // KoboldCPP is an always-available local endpoint; just consider it "connected".
-      setKoboldConnected(true);
+    // Enforce: only allow models from the active provider
+    const validModels = modelOptions.filter(o => o.provider === activeProvider);
+    if (validModels.length && !validModels.some(m => m.id === model)) {
+      setModel(validModels[0].id);
+      // Wait for state update before proceeding
+      setTimeout(() => connectWithKey(event), 0);
+      return;
+    }
+
+    if (activeProvider === 'lmstudio') {
+      await validateAndFetchModels('lmstudio', '');
       return;
     }
 
@@ -334,15 +482,40 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                   {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
                   {!nvidiaConnected && <SelectItem value="nvidia">NVIDIA</SelectItem>}
                   {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
-                  <SelectItem value="kobold">KoboldCPP (local)</SelectItem>
+                  {!lmstudioConnected && (
+                    <SelectItem value="lmstudio">LM Studio (local)</SelectItem>
+                  )}
+                  {modelOptions.some(o => o.provider === 'lmstudio') && (
+                    <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                      LM Studio
+                    </div>
+                  )}
+                  {modelOptions
+                    .filter(o => o.provider === 'lmstudio')
+                    .map(option => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
+                {lmstudioConnected && (
+                  <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
+                    <div className="size-2 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] text-muted-foreground">LM Studio</span>
+                    <button
+                      onClick={() => {
+                        setLmstudioConnected(false);
+                        setModelOptions(m => m.filter(o => o.provider !== 'lmstudio'));
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-destructive ml-1"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </Select>
 
-              {(zenConnected ||
-                googleConnected ||
-                hfConnected ||
-                nvidiaConnected ||
-                koboldConnected) && (
+              {zenConnected || googleConnected || hfConnected || nvidiaConnected || (
                 <div className="hidden sm:inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background/5 text-xs">
                   {zenConnected && (
                     <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
@@ -415,11 +588,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
               )}
             </div>
 
-            {(zenConnected ||
-              googleConnected ||
-              hfConnected ||
-              nvidiaConnected ||
-              koboldConnected) && (
+            {zenConnected || googleConnected || hfConnected || nvidiaConnected || (
               <div className="w-full sm:col-span-3 sm:col-start-2 sm:row-start-1 flex justify-end sm:hidden">
                 <div className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background/5 text-xs">
                   {zenConnected && (
@@ -494,40 +663,76 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
             )}
 
             <div className="w-full sm:col-span-3 sm:row-start-2 sm:col-start-1 flex items-start gap-3">
-              <Input
-                type="password"
-                disabled={activeProviderConnected}
-                className="h-8 w-full sm:w-auto sm:min-w-[220px] text-xs"
-                placeholder={
-                  activeProviderConnected
-                    ? 'Connected'
-                    : `Paste ${
-                        activeProvider === 'zen'
-                          ? 'OpenCode'
-                          : activeProvider === 'google'
-                          ? 'Google'
-                          : activeProvider === 'nvidia'
-                          ? 'NVIDIA'
-                          : 'Hugging Face'
-                      } key`
-                }
-                value={
-                  activeProvider === 'zen'
-                    ? zenApiKey
-                    : activeProvider === 'google'
-                    ? googleApiKey
-                    : activeProvider === 'nvidia'
-                    ? nvidiaApiKey
-                    : hfApiKey
-                }
-                onChange={e => {
-                  const val = e.target.value;
-                  if (activeProvider === 'zen') setZenApiKey(val);
-                  else if (activeProvider === 'google') setGoogleApiKey(val);
-                  else if (activeProvider === 'nvidia') setNvidiaApiKey(val);
-                  else setHfApiKey(val);
-                }}
-              />
+              {activeProvider === 'lmstudio' ? (
+                <div className="space-y-1">
+                  <Input
+                    type="text"
+                    disabled={activeProviderConnected}
+                    className="h-8 w-full sm:w-auto sm:min-w-[220px] text-xs"
+                    placeholder={
+                      activeProviderConnected
+                        ? 'Connected'
+                        : 'Enter LM Studio IP address (e.g. http://192.168.12.48:1234)'
+                    }
+                    value={lmstudioUrl}
+                    onChange={e => setLmstudioUrl(e.target.value)}
+                  />
+                  <div className="text-[11px] leading-4 text-muted-foreground">
+                    {lmstudioHealth.state === 'checking' ? (
+                      'Checking LM Studio...'
+                    ) : lmstudioHealth.state === 'healthy' ? (
+                      <>
+                        LM Studio reachable{lmstudioHealth.modelCount !== undefined
+                          ? `, ${lmstudioHealth.modelCount} model${
+                              lmstudioHealth.modelCount === 1 ? '' : 's'
+                            } found`
+                          : ''}
+                      </>
+                    ) : lmstudioHealth.state === 'error' ? (
+                      <span className="text-rose-400">
+                        LM Studio not reachable{lmstudioHealth.message ? `: ${lmstudioHealth.message}` : ''}
+                      </span>
+                    ) : (
+                      'LM Studio health will appear here'
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <Input
+                  type="password"
+                  disabled={activeProviderConnected}
+                  className="h-8 w-full sm:w-auto sm:min-w-[220px] text-xs"
+                  placeholder={
+                    activeProviderConnected
+                      ? 'Connected'
+                      : `Paste ${
+                          activeProvider === 'zen'
+                            ? 'OpenCode'
+                            : activeProvider === 'google'
+                            ? 'Google'
+                            : activeProvider === 'nvidia'
+                            ? 'NVIDIA'
+                            : 'Hugging Face'
+                        } key`
+                  }
+                  value={
+                    activeProvider === 'zen'
+                      ? zenApiKey
+                      : activeProvider === 'google'
+                      ? googleApiKey
+                      : activeProvider === 'nvidia'
+                      ? nvidiaApiKey
+                      : hfApiKey
+                  }
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (activeProvider === 'zen') setZenApiKey(val);
+                    else if (activeProvider === 'google') setGoogleApiKey(val);
+                    else if (activeProvider === 'nvidia') setNvidiaApiKey(val);
+                    else setHfApiKey(val);
+                  }}
+                />
+              )}
 
               <Button
                 disabled={isConnecting || !hasKeyForActiveProvider || activeProviderConnected}
@@ -603,6 +808,19 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                       )}
                       {modelOptions
                         .filter(o => o.provider === 'huggingface')
+                        .map(option => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+
+                      {modelOptions.some(o => o.provider === 'lmstudio') && (
+                        <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
+                          LM Studio
+                        </div>
+                      )}
+                      {modelOptions
+                        .filter(o => o.provider === 'lmstudio')
                         .map(option => (
                           <SelectItem key={option.id} value={option.id}>
                             {option.label}

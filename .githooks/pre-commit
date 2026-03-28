@@ -1,17 +1,19 @@
 #!/bin/sh
-# Run ESLint --fix before committing and stage any autofixes.
-# Exit non-zero to block the commit if ESLint reports errors.
+# Run ESLint --fix on staged source files only.
+# This avoids linting generated output like .next/.
+echo "Running eslint --fix on staged source files..."
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
+if [ -n "$staged_files" ]; then
+  echo "$staged_files" | grep -vE '(^|/)(node_modules|\.next|dist|out|build|coverage|playwright-report|test-results)/' | xargs pnpm exec eslint --fix
+  status=$?
+  if [ $status -ne 0 ]; then
+    echo "ESLint reported problems. Please fix them before committing."
+    exit $status
+  fi
 
-echo "Running eslint --fix..."
-pnpm exec eslint --ext .js,.jsx,.ts,.tsx . --fix
-status=$?
-if [ $status -ne 0 ]; then
-  echo "ESLint reported problems. Please fix them before committing."
-  exit $status
+  # Stage any fixes made by eslint --fix
+  git add -A
 fi
-
-# Stage any fixes made by eslint --fix
-git add -A
 
 # Run TypeScript type-check to block commits that introduce type errors
 echo "Running tsc --noEmit..."

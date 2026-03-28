@@ -48,3 +48,9 @@ docs/file_tree.md
 
 # ReCode local database
 .recode
+/playwright-report
+/playwright-report
+/test-results
+/playwright-report
+playwright-report/index.html
+pnpm-lock.yaml

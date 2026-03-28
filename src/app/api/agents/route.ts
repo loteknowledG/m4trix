@@ -2,6 +2,8 @@ import type { NextRequest } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+const LMSTUDIO_CHAT_URL = 'http://192.168.12.48:1234/v1/chat/completions';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +17,6 @@ const GOOGLE_CHAT_URL =
 // Hugging Face Router API endpoint (better compatibility for models like GLM-4.5).
 const HUGGINGFACE_CHAT_URL = 'https://router.huggingface.co/v1/chat/completions';
 
-// Basic agent identifiers used by the demo UI.
-// You can freely change or extend this list as you evolve your system.
 type AgentId = 'researcher' | 'critic' | 'summarizer';
 
 export type Agent = {
@@ -148,22 +148,6 @@ async function getDefaultAgents(): Promise<Agent[]> {
   return agents;
 }
 
-function selectAgentsForPrompt(prompt: string, agents: Agent[]): Agent[] {
-  const mentionMatch = prompt.match(/^\s*@?(researcher|critic|summarizer)\b/i);
-  if (!mentionMatch) return [];
-
-  const addressedId = mentionMatch[1].toLowerCase() as AgentId;
-  return agents.filter(agent => agent.id === addressedId);
-}
-
-// In a real implementation you would:
-// - Map AgentId -> model + system prompt
-// - Use the `ai` SDK (or any other client) to call those models
-// - Implement a loop where agents take turns, possibly with a coordinator
-// For now we keep it simple and just return a deterministic script so the UI
-// has a concrete shape to integrate with.
-// Demo agents constant removed (unused)
-
 /**
  * Heuristic to detect agent->agent instructions in the user's prompt.
  * If true, we prefer sequential orchestration so the addressed agent
@@ -288,6 +272,7 @@ async function callProvider(
     personaModeNote =
       "Compete with other agents: argue for your solution, highlight weaknesses in other proposals, and try to earn the user's preference.";
   }
+  if (personaModeNote) context += `${personaModeNote} `;
 
   const systemPrompt = context
     ? `${systemPromptBase} ${context} Do not simply repeat the user input; answer the user with a helpful and informative response.`
@@ -317,22 +302,33 @@ async function callProvider(
     temperature: typeof temperature === 'number' ? temperature : 0.7,
   };
 
-  console.log('[agents][llm-request]', {
-    provider: providerName,
-    url,
-    agentId: agent.id,
-    agentName: agent.name,
-    payload: providerPayload,
-  });
+  if (providerName.toLowerCase() === 'lmstudio' && !String(model || '').trim()) {
+    throw new Error('LM Studio model is missing. Select a model before sending a request.');
+  }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(providerPayload),
-  });
+  const controller = new AbortController();
+  const timeoutMs = providerName.toLowerCase() === 'lmstudio' ? 90000 : 60000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(providerPayload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if ((error as any)?.name === 'AbortError') {
+      throw new Error(`${providerName} request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
@@ -432,10 +428,7 @@ async function callProvider(
           .map(line => line.replace(leadingMentionRe, '').replace(firstPersonRe, '[the user]'))
           .join('\n')
           .trim();
-
-        // allow prompter impersonation to pass through; the orchestrator will attribute it
-        // (do not modify `content` here)
-        /* no-op to preserve original content */
+        content = cleaned;
       }
     }
   } catch (e) {
@@ -558,32 +551,25 @@ async function callHuggingFaceForAgent(
   });
 }
 
-function buildDemoTranscript(prompt: string): OrchestratedMessage[] {
-  const baseId = Date.now().toString(36);
-
-  return [
-    {
-      id: `${baseId}-u0`,
-      from: 'user',
-      text: prompt,
-    },
-  ];
-}
-
 async function buildModelTranscript(
   prompt: string,
   agents: Agent[],
-  apiKeys: { zenApiKey?: string; googleApiKey?: string; hfApiKey?: string; nvidiaApiKey?: string },
+  apiKeys: {
+    zenApiKey?: string;
+    googleApiKey?: string;
+    hfApiKey?: string;
+    nvidiaApiKey?: string;
+    lmstudioUrl?: string;
+  },
   modelOverride?: string,
   story?: string,
   coordinatorAgent?: Agent,
-  // Prompter mode (tell | do | think) — influences how models interpret the user's input
   coordinatorMode?: 'tell' | 'do' | 'think',
-  // Optional initial conversation history provided by the client.
   initialHistory?: OrchestratedMessage[],
   orchestration: 'sequential' | 'parallel' = 'sequential',
   interactionMode: 'neutral' | 'cooperative' | 'competitive' = 'neutral',
-  includeHistory: boolean = true
+  includeHistory: boolean = true,
+  providerOverride?: string
 ): Promise<OrchestratedMessage[]> {
   const baseId = Date.now().toString(36);
 
@@ -613,6 +599,19 @@ async function buildModelTranscript(
   // Decide which provider to use.
   const isGoogle = Boolean(apiKeys.googleApiKey);
   const isHF = Boolean(apiKeys.hfApiKey);
+  const isLmstudio = providerOverride === 'lmstudio';
+  let lmstudioUrl = LMSTUDIO_CHAT_URL;
+  if (
+    providerOverride === 'lmstudio' &&
+    typeof arguments[2]?.lmstudioUrl === 'string' &&
+    arguments[2].lmstudioUrl
+  ) {
+    // Remove trailing slash
+    let base = arguments[2].lmstudioUrl.replace(/\/$/, '');
+    // Remove any trailing /v1/chat/completions or /v1/chat/completions/
+    base = base.replace(/\/v1\/chat\/completions\/?$/, '');
+    lmstudioUrl = base + '/v1/chat/completions';
+  }
 
   // Helper: detect/sanitize attempts by an agent to speak *as* another agent.
   const sanitizeAgentImpersonation = (raw: string | undefined, currentAgent: Agent) => {
@@ -661,53 +660,71 @@ async function buildModelTranscript(
       : interactionMode === 'competitive'
       ? 'parallel'
       : orchestration;
+  const lmstudioOrchestration = isLmstudio ? 'sequential' : orchestrationToUse;
+  const agentsToRun = isLmstudio ? agents.slice(0, 1) : agents;
 
-  if (orchestrationToUse === 'parallel') {
+  if (lmstudioOrchestration === 'parallel') {
     // Parallel: call all agents at once; they only see the user's prompt.
     const agentReplies = await Promise.all(
-      agents.map(async agent => {
+      agentsToRun.map(async agent => {
         // If the client requested history, give every agent the last N
         // entries of the shared transcript.  No more per-agent queues.
         const historyForAgent = includeHistory ? sliceHistory(messages) : undefined;
 
-        const text = isGoogle
-          ? await callGoogleAIForAgent(
-              prompt,
-              agent,
-              modelOverride,
-              story,
-              coordinatorAgent,
-              coordinatorMode,
-              apiKeys.googleApiKey,
-              historyForAgent,
-              0.3,
-              interactionMode
-            )
-          : isHF
-          ? await callHuggingFaceForAgent(
-              prompt,
-              agent,
-              modelOverride,
-              story,
-              coordinatorAgent,
-              coordinatorMode,
-              apiKeys.hfApiKey,
-              historyForAgent,
-              0.3,
-              interactionMode
-            )
-          : await callOpenCodeForAgent(
-              prompt,
-              agent,
-              modelOverride,
-              story,
-              coordinatorAgent,
-              coordinatorMode,
-              apiKeys.zenApiKey,
-              historyForAgent,
-              0.3,
-              interactionMode
-            );
+        let text;
+        if (isLmstudio) {
+        text = await callProvider(prompt, agent, {
+          url: lmstudioUrl,
+          apiKey: '', // LM Studio may not require an API key
+          model: modelOverride || '',
+          providerName: 'lmstudio',
+            story,
+            coordinatorAgent,
+            coordinatorMode,
+            history: historyForAgent,
+            temperature: 0.3,
+            interactionMode,
+          });
+        } else if (isGoogle) {
+          text = await callGoogleAIForAgent(
+            prompt,
+            agent,
+            modelOverride,
+            story,
+            coordinatorAgent,
+            coordinatorMode,
+            apiKeys.googleApiKey,
+            historyForAgent,
+            0.3,
+            interactionMode
+          );
+        } else if (isHF) {
+          text = await callHuggingFaceForAgent(
+            prompt,
+            agent,
+            modelOverride,
+            story,
+            coordinatorAgent,
+            coordinatorMode,
+            apiKeys.hfApiKey,
+            historyForAgent,
+            0.3,
+            interactionMode
+          );
+        } else {
+          text = await callOpenCodeForAgent(
+            prompt,
+            agent,
+            modelOverride,
+            story,
+            coordinatorAgent,
+            coordinatorMode,
+            apiKeys.zenApiKey,
+            historyForAgent,
+            0.3,
+            interactionMode
+          );
+        }
         // If the agent's reply begins with another agent's name, consider it
         // as that agent speaking (change heading). If it impersonates the
         // prompter/user, sanitize instead.
@@ -964,48 +981,64 @@ async function buildModelTranscript(
   } else {
     // Sequential: each agent sees the running transcript and may reference or
     // instruct earlier agents.
-    for (const agent of agents) {
+    for (const agent of agentsToRun) {
       // sequential runs also honour includeHistory by slicing the transcript
       // to the most recent entries.  Every agent sees the same slice.
       const historyArg = includeHistory ? sliceHistory(messages) : undefined;
-      const raw = isGoogle
-        ? await callGoogleAIForAgent(
-            prompt,
-            agent,
-            modelOverride,
-            story,
-            coordinatorAgent,
-            coordinatorMode,
-            apiKeys.googleApiKey,
-            historyArg,
-            0.3,
-            interactionMode
-          )
-        : isHF
-        ? await callHuggingFaceForAgent(
-            prompt,
-            agent,
-            modelOverride,
-            story,
-            coordinatorAgent,
-            coordinatorMode,
-            apiKeys.hfApiKey,
-            historyArg,
-            0.3,
-            interactionMode
-          )
-        : await callOpenCodeForAgent(
-            prompt,
-            agent,
-            modelOverride,
-            story,
-            coordinatorAgent,
-            coordinatorMode,
-            apiKeys.zenApiKey,
-            historyArg,
-            0.3,
-            interactionMode
-          );
+      let raw;
+      if (isLmstudio) {
+        raw = await callProvider(prompt, agent, {
+          url: lmstudioUrl,
+          apiKey: '', // LM Studio may not require an API key
+          model: modelOverride || '',
+          providerName: 'lmstudio',
+          story,
+          coordinatorAgent,
+          coordinatorMode,
+          history: historyArg,
+          temperature: 0.3,
+          interactionMode,
+        });
+      } else if (isGoogle) {
+        raw = await callGoogleAIForAgent(
+          prompt,
+          agent,
+          modelOverride,
+          story,
+          coordinatorAgent,
+          coordinatorMode,
+          apiKeys.googleApiKey,
+          historyArg,
+          0.3,
+          interactionMode
+        );
+      } else if (isHF) {
+        raw = await callHuggingFaceForAgent(
+          prompt,
+          agent,
+          modelOverride,
+          story,
+          coordinatorAgent,
+          coordinatorMode,
+          apiKeys.hfApiKey,
+          historyArg,
+          0.3,
+          interactionMode
+        );
+      } else {
+        raw = await callOpenCodeForAgent(
+          prompt,
+          agent,
+          modelOverride,
+          story,
+          coordinatorAgent,
+          coordinatorMode,
+          apiKeys.zenApiKey,
+          historyArg,
+          0.3,
+          interactionMode
+        );
+      }
 
       // If the agent's reply begins with an @mention of another agent,
       // treat that mentioned agent as the speaker (change heading).
@@ -1144,154 +1177,89 @@ async function buildModelTranscript(
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => null)) as AgentsRequest | null;
+    const body = await req.json();
+    const {
+      prompt,
+      model,
+      agents: agentsOverride,
+      story,
+      coordinatorAgent,
+      coordinatorMode,
+      history,
+      orchestration = 'auto',
+      interactionMode = 'neutral',
+      stateless = false,
+      provider: providerOverride,
+      lmstudioUrl,
+    } = body;
 
-    if (!body || typeof body.prompt !== 'string' || !body.prompt.trim()) {
-      return new Response('Missing or invalid `prompt` in request body', {
-        status: 400,
-      });
-    }
-
-    const prompt = body.prompt.trim();
-    const modelOverride =
-      typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
-    const story =
-      typeof body.story === 'string' && body.story.trim() ? body.story.trim() : undefined;
-    const zenApiKeyOverride =
-      typeof (body as any).zenApiKey === 'string' && (body as any).zenApiKey.trim()
-        ? (body as any).zenApiKey.trim()
-        : undefined;
-    const googleApiKeyOverride =
-      typeof (body as any).googleApiKey === 'string' && (body as any).googleApiKey.trim()
-        ? (body as any).googleApiKey.trim()
-        : undefined;
-    const nvidiaApiKeyOverride =
-      typeof (body as any).nvidiaApiKey === 'string' && (body as any).nvidiaApiKey.trim()
-        ? (body as any).nvidiaApiKey.trim()
-        : undefined;
-    const hfApiKeyOverride =
-      typeof (body as any).hfApiKey === 'string' && (body as any).hfApiKey.trim()
-        ? (body as any).hfApiKey.trim()
-        : undefined;
-
-    const incomingAgents = Array.isArray((body as any).agents) ? (body as any).agents : undefined;
-
-    const effectiveAgents: Agent[] =
-      incomingAgents && incomingAgents.length
-        ? incomingAgents.map((agent: any) => ({
-            id: agent.id as AgentId,
-            name: typeof agent.name === 'string' ? agent.name : '',
-            description: typeof agent.description === 'string' ? agent.description : '',
-            avatarUrl: typeof agent.avatarUrl === 'string' ? agent.avatarUrl : undefined,
-            avatarCrop: agent.avatarCrop
-              ? {
-                  x: Number(agent.avatarCrop.x),
-                  y: Number(agent.avatarCrop.y),
-                  zoom: Number(agent.avatarCrop.zoom),
-                }
-              : undefined,
-          }))
+    // Load agents
+    const agents =
+      agentsOverride && Array.isArray(agentsOverride) && agentsOverride.length
+        ? agentsOverride
         : await getDefaultAgents();
 
-    const addressedAgents = selectAgentsForPrompt(prompt, effectiveAgents);
-    const agentsForRun = addressedAgents.length ? addressedAgents : effectiveAgents;
-
-    // Determine orchestration mode: accept explicit overrides from the client
-    // or decide automatically using heuristics. Interaction mode can also
-    // influence orchestration (cooperative -> sequential, competitive -> parallel).
-    const requestedOrchestration =
-      typeof (body as any).orchestration === 'string' ? (body as any).orchestration : 'auto';
-
-    const requestedInteractionMode =
-      typeof (body as any).interactionMode === 'string' ? (body as any).interactionMode : 'neutral';
-
-    const effectiveInteractionMode: 'neutral' | 'cooperative' | 'competitive' =
-      requestedInteractionMode === 'cooperative' || requestedInteractionMode === 'competitive'
-        ? (requestedInteractionMode as any)
-        : 'neutral';
-
-    let effectiveOrchestration: 'sequential' | 'parallel' =
-      requestedOrchestration === 'sequential'
-        ? 'sequential'
-        : requestedOrchestration === 'parallel'
-        ? 'parallel'
-        : decideOrchestrationAuto(prompt, agentsForRun);
-
-    if (effectiveInteractionMode === 'cooperative') effectiveOrchestration = 'sequential';
-    if (effectiveInteractionMode === 'competitive') effectiveOrchestration = 'parallel';
-
-    const zenModelFromEnv = process.env.ZEN_MODEL;
-    const googleModelFromEnv = process.env.GOOGLE_MODEL;
-
-    const hasZenConfig = Boolean(
-      (zenApiKeyOverride || process.env.ZEN_API_KEY) && (modelOverride || zenModelFromEnv)
-    );
-    const hasGoogleConfig = Boolean(
-      (googleApiKeyOverride || process.env.GOOGLE_GENERATIVE_AI_API_KEY) &&
-        (modelOverride || googleModelFromEnv || true) // Fallback to a default if not set
-    );
-    const hasNvidiaConfig = Boolean(nvidiaApiKeyOverride || process.env.NVIDIA_API_KEY);
-    const hasHFConfig = Boolean(hfApiKeyOverride || process.env.HUGGINGFACE_API_KEY);
-
-    let messages: OrchestratedMessage[];
-    let mode: AgentsResponse['mode'] = 'demo';
-    let error: string | undefined;
-
-    if (!hasZenConfig && !hasGoogleConfig && !hasNvidiaConfig && !hasHFConfig) {
-      messages = buildDemoTranscript(prompt);
+    // Orchestration mode
+    let orchestrationMode: 'sequential' | 'parallel';
+    if (orchestration === 'auto') {
+      orchestrationMode = decideOrchestrationAuto(prompt, agents);
     } else {
-      try {
-        messages = await buildModelTranscript(
-          prompt,
-          agentsForRun,
-          {
-            zenApiKey: zenApiKeyOverride,
-            googleApiKey: googleApiKeyOverride,
-            nvidiaApiKey: nvidiaApiKeyOverride,
-            hfApiKey: hfApiKeyOverride,
-          },
-          modelOverride,
-          story,
-          body.coordinatorAgent,
-          body.coordinatorMode as any,
-          // pass client-side conversation history unless stateless
-          Array.isArray((body as any).history) && !(body as any).stateless
-            ? (body as any).history
-            : undefined,
-          effectiveOrchestration,
-          effectiveInteractionMode,
-          !Boolean((body as any).stateless)
-        );
-        mode = 'live';
-      } catch (e) {
-        const err = e instanceof Error ? e.message : String(e);
-        console.error('/api/agents error', err);
-        error = err;
-        // Fall back to deterministic demo transcript so the
-        // UI still works instead of surfacing a server error.
-        messages = buildDemoTranscript(prompt);
-      }
+      orchestrationMode = orchestration;
     }
 
-    const payload: AgentsResponse = {
-      agents: effectiveAgents,
-      messages,
-      mode,
-      ...(error ? { error } : {}),
+    // API keys from env
+    const apiKeys = {
+      zenApiKey: process.env.ZEN_API_KEY,
+      googleApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      hfApiKey: process.env.HUGGINGFACE_API_KEY,
+      nvidiaApiKey: process.env.NVIDIA_API_KEY,
     };
 
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Internal error';
+    // PATCH: Force LM Studio routing if lmstudioUrl is present, regardless of providerOverride
+    let apiKeysWithLmstudio = { ...apiKeys };
+    let effectiveProvider = providerOverride;
+    if (lmstudioUrl) {
+      (apiKeysWithLmstudio as any).lmstudioUrl = lmstudioUrl;
+      effectiveProvider = 'lmstudio';
+    }
+    const transcript = await buildModelTranscript(
+      prompt,
+      agents,
+      apiKeysWithLmstudio,
+      model,
+      story,
+      coordinatorAgent,
+      coordinatorMode,
+      history,
+      orchestrationMode,
+      interactionMode,
+      !stateless,
+      effectiveProvider
+    );
 
-    return new Response(message, {
-      status: 500,
-    });
+    return new Response(
+      JSON.stringify({
+        agents,
+        messages: transcript,
+        mode: 'live',
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (err: any) {
+    return new Response(
+      JSON.stringify({
+        agents: [],
+        messages: [],
+        mode: 'live',
+        error: err?.message || String(err),
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   }
 }

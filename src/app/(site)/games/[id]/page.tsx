@@ -12,6 +12,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { CustomChatWindow, type CustomChatMessage } from '@/components/ai/custom-chat-window';
 import { GameCard } from '@/components/game-card';
 import { Pressable } from '@/components/ui/pressable';
+import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export default function GamePage() {
   const params = useParams();
@@ -32,9 +33,13 @@ export default function GamePage() {
     },
   ]);
   const [chatInput, setChatInput] = useState('');
-  const [chatDisabled, setChatDisabled] = useState(false);
   const [connected, setConnected] = useState(false);
   const [connectionModel, setConnectionModel] = useState<string | null>(null);
+  const [lmstudioHealth, setLmstudioHealth] = useState<{
+    state: 'idle' | 'checking' | 'healthy' | 'error';
+    message?: string;
+    modelCount?: number;
+  }>({ state: 'idle' });
 
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
@@ -48,7 +53,6 @@ export default function GamePage() {
 
     setChatMessages(messages => [...messages, userMessage]);
     setChatInput('');
-    setChatDisabled(true);
 
     if (!connected) {
       // Fallback local response when no LLM connection is configured
@@ -59,36 +63,58 @@ export default function GamePage() {
           text: `You said: "${trimmed}". This is a demo response.`,
         };
         setChatMessages(messages => [...messages, botMessage]);
-        setChatDisabled(false);
       }, 450);
       return;
     }
 
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setChatMessages(messages => [
+      ...messages,
+      {
+        id: pendingId,
+        from: 'agent',
+        text: `Working on that request${connectionModel ? ` with ${connectionModel}` : ''}...`,
+      },
+    ]);
+
     try {
+      // ===> THE REQUEST TO /api/agents IS MADE RIGHT HERE <===
       const zenKey = window.sessionStorage.getItem('ZEN_API_KEY_SESSION') ?? undefined;
       const googleKey = window.sessionStorage.getItem('GOOGLE_API_KEY_SESSION') ?? undefined;
       const hfKey = window.sessionStorage.getItem('HF_API_KEY_SESSION') ?? undefined;
       const nvidiaKey = window.sessionStorage.getItem('NVIDIA_API_KEY_SESSION') ?? undefined;
 
+      // Patch: Always use the active provider and lmstudioUrl from session storage
+      const activeProvider = window.sessionStorage.getItem('ACTIVE_PROVIDER_SESSION') || 'zen';
+      const lmstudioUrl = normalizeLmstudioUrl(
+        window.sessionStorage.getItem('LMSTUDIO_URL_SESSION') || DEFAULT_LMSTUDIO_URL
+      );
+      const requestBody: any = {
+        prompt: trimmed,
+        model: connectionModel,
+        zenApiKey: zenKey,
+        googleApiKey: googleKey,
+        hfApiKey: hfKey,
+        nvidiaApiKey: nvidiaKey,
+        provider: activeProvider,
+      };
+      if (activeProvider === 'lmstudio') {
+        requestBody.lmstudioUrl = lmstudioUrl;
+      }
       const res = await fetch('/api/agents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prompt: trimmed,
-          model: connectionModel,
-          zenApiKey: zenKey,
-          googleApiKey: googleKey,
-          hfApiKey: hfKey,
-          nvidiaApiKey: nvidiaKey,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || !Array.isArray(data.messages)) {
         throw new Error(data?.error || 'Failed to get response from LLM');
       }
+
+      setChatMessages(messages => messages.filter(m => m.id !== pendingId));
 
       const botMessages: CustomChatMessage[] = data.messages.map((m: any, idx: number) => ({
         id: m.id || `agent-${Date.now()}-${idx}`,
@@ -99,14 +125,19 @@ export default function GamePage() {
       setChatMessages(messages => [...messages, ...botMessages]);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const botMessage: CustomChatMessage = {
-        id: `agent-${Date.now()}`,
-        from: 'agent',
-        text: `Error: ${message}`,
-      };
-      setChatMessages(messages => [...messages, botMessage]);
-    } finally {
-      setChatDisabled(false);
+      console.error('[game][api-agents][error]', { message, err });
+      setChatMessages(messages =>
+        messages.some(m => m.id === pendingId)
+          ? messages.map(m => (m.id === pendingId ? { ...m, text: `Error: ${message}` } : m))
+          : [
+              ...messages,
+              {
+                id: `agent-${Date.now()}`,
+                from: 'agent',
+                text: `Error: ${message}`,
+              },
+            ]
+      );
     }
   };
 
@@ -128,7 +159,9 @@ export default function GamePage() {
         'HF_API_KEY_SESSION',
         'NVIDIA_API_KEY_SESSION',
       ].some(k => !!window.sessionStorage.getItem(k));
-      setConnected(hasKey);
+      const lmstudioConnected = window.sessionStorage.getItem('LMSTUDIO_CONNECTED') === '1';
+      const activeProvider = window.sessionStorage.getItem('ACTIVE_PROVIDER_SESSION');
+      setConnected(hasKey || (lmstudioConnected && activeProvider === 'lmstudio'));
     };
 
     update();
@@ -153,8 +186,16 @@ export default function GamePage() {
       const google = window.sessionStorage.getItem('GOOGLE_API_KEY_SESSION');
       const hf = window.sessionStorage.getItem('HF_API_KEY_SESSION');
       const nvidia = window.sessionStorage.getItem('NVIDIA_API_KEY_SESSION');
+      const lmstudioConnected = window.sessionStorage.getItem('LMSTUDIO_CONNECTED') === '1';
+      const activeProvider = window.sessionStorage.getItem('ACTIVE_PROVIDER_SESSION');
 
-      const isConnected = Boolean(zen?.trim() || google?.trim() || hf?.trim() || nvidia?.trim());
+      const isConnected = Boolean(
+        zen?.trim() ||
+          google?.trim() ||
+          hf?.trim() ||
+          nvidia?.trim() ||
+          (lmstudioConnected && activeProvider === 'lmstudio')
+      );
 
       setConnected(isConnected);
       setConnectionModel(isConnected && model ? model : null);
@@ -168,7 +209,9 @@ export default function GamePage() {
         event.key === 'ZEN_API_KEY_SESSION' ||
         event.key === 'GOOGLE_API_KEY_SESSION' ||
         event.key === 'HF_API_KEY_SESSION' ||
-        event.key === 'NVIDIA_API_KEY_SESSION'
+        event.key === 'NVIDIA_API_KEY_SESSION' ||
+        event.key === 'LMSTUDIO_CONNECTED' ||
+        event.key === 'ACTIVE_PROVIDER_SESSION'
       ) {
         updateConnectionState();
       }
@@ -177,6 +220,52 @@ export default function GamePage() {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const activeProvider = window.sessionStorage.getItem('ACTIVE_PROVIDER_SESSION');
+    if (activeProvider !== 'lmstudio') {
+      setLmstudioHealth({ state: 'idle' });
+      return;
+    }
+
+    const lmstudioUrl = normalizeLmstudioUrl(
+      window.sessionStorage.getItem('LMSTUDIO_URL_SESSION') || DEFAULT_LMSTUDIO_URL
+    );
+    setLmstudioHealth({ state: 'checking' });
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+
+    fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(lmstudioUrl)}`, {
+      signal: controller.signal,
+    })
+      .then(async res => {
+        const payload = (await res.json().catch(() => null)) as
+          | { ok?: boolean; error?: string; modelCount?: number }
+          | null;
+        if (!res.ok || !payload?.ok) {
+          setLmstudioHealth({
+            state: 'error',
+            message: payload?.error || 'LM Studio is not reachable',
+          });
+          return;
+        }
+        setLmstudioHealth({
+          state: 'healthy',
+          modelCount: payload.modelCount ?? 0,
+        });
+      })
+      .catch(err => {
+        setLmstudioHealth({
+          state: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+      });
+  }, [connected, connectionModel]);
 
   useEffect(() => {
     // Prevent accidental back navigation while the game modal is open.
@@ -358,7 +447,15 @@ export default function GamePage() {
               >
                 <div className="mb-3 flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">Chat</div>
-                  <div className="text-xs text-muted-foreground">Talk with the assistant</div>
+                  <div className="text-xs text-muted-foreground">
+                    {lmstudioHealth.state === 'checking'
+                      ? 'Checking LM Studio...'
+                      : lmstudioHealth.state === 'healthy'
+                      ? `LM Studio reachable${lmstudioHealth.modelCount !== undefined ? `, ${lmstudioHealth.modelCount} models` : ''}`
+                      : lmstudioHealth.state === 'error'
+                      ? 'LM Studio not reachable'
+                      : 'Talk with the assistant'}
+                  </div>
                 </div>
                 <div className="flex-1 min-h-0">
                   <CustomChatWindow
@@ -366,7 +463,7 @@ export default function GamePage() {
                     input={chatInput}
                     onInputChange={setChatInput}
                     onSend={sendChatMessage}
-                    disabled={chatDisabled}
+                    disabled={false}
                     connected={connected}
                     connectionModel={connectionModel}
                     sendIcon={<FaArrowUp className="h-4 w-4" />}
