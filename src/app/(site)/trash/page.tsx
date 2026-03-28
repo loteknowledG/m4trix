@@ -124,7 +124,7 @@ export default function TrashPage() {
                   <button
                     onClick={restoreSelected}
                     title="Restore selected moments"
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                    className="pushable-effect inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
                   >
                     <RotateCcw size={18} />
                   </button>
@@ -139,7 +139,7 @@ export default function TrashPage() {
                   <button
                     onClick={deleteSelectedPermanently}
                     title="Delete selected moments permanently"
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                    className="pushable-effect inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
                   >
                     <Trash2 size={18} />
                   </button>

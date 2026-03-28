@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,6 @@ export default function AgentsListPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -56,23 +55,6 @@ export default function AgentsListPage() {
     setAgents(next);
     await idbSet(AGENTS_KEY, next);
     window.dispatchEvent(new Event('characters-updated'));
-  };
-
-  const addAgent = async (nameOverride?: string) => {
-    const rawName = nameOverride?.trim() ?? name.trim();
-    const trimmedName = rawName || `Character ${agents.length + 1}`;
-
-    const next: Agent = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      name: trimmedName,
-      description: nameOverride ? '' : description.trim(),
-    };
-
-    setName('');
-    setDescription('');
-    setError(null);
-    await saveAgents([...agents, next]);
-    setSelectedAgentId(next.id);
   };
 
   const addAgentViaFab = async () => {
@@ -112,8 +94,6 @@ export default function AgentsListPage() {
     }
     window.dispatchEvent(new Event('characters-updated'));
   };
-
-  const agentCount = useMemo(() => agents.length, [agents]);
 
   const navRight = selectedAgentId ? (
     <Pressable
@@ -183,7 +163,7 @@ export default function AgentsListPage() {
                     onClick={() => setSelectedAgentId(isSelected ? null : agent.id)}
                   >
                     <Card
-                      className={`overflow-hidden transition-shadow duration-150 cursor-pointer pushable-effect ${
+                      className={`overflow-hidden transition-shadow duration-150 cursor-pointer ${
                         isSelected ? 'bg-primary/10 shadow-lg' : 'shadow-sm'
                       }`}
                     >
@@ -208,7 +188,7 @@ export default function AgentsListPage() {
         onClick={addAgentViaFab}
         size="icon"
         variant="default"
-        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-transform duration-150 active:scale-95"
+        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150"
         aria-label="Add character"
       >
         <GrUserAdd className="h-5 w-5" />

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export const pressableClass =
-  'inline-flex items-center justify-center shadow-sm mc-shadow-hover mc-shadow-active pushable-effect cursor-pointer';
+  'inline-flex items-center justify-center pushable-effect cursor-pointer';
 
 export type PressableProps<T extends React.ElementType> = {
   as?: T;

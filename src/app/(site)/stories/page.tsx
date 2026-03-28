@@ -5,10 +5,8 @@ import { useEffect, useState } from 'react';
 import { get } from 'idb-keyval';
 import { logger } from '@/lib/logger';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
-// removed unused imports
-import CountBadge from '@/components/ui/count-badge';
 
 type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
 
@@ -94,7 +92,7 @@ export default function StoriesPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {stories.map(s => (
                   <Link key={s.id} href={`/stories/${s.id}`}>
-                    <Card className="overflow-hidden hover:shadow-2xl transition-shadow duration-150 transition-transform duration-150 ease-out hover:-translate-y-2 hover:-translate-x-2 active:translate-y-2 active:translate-x-2 cursor-pointer">
+                    <Card className="overflow-hidden hover:shadow-2xl transition-shadow duration-150 transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 cursor-pointer">
                       <div className="relative aspect-square">
                         {previews[s.id] ? (
                           <img

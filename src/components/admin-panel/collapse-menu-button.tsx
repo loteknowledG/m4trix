@@ -63,7 +63,10 @@ export function CollapseMenuButton({
       <CollapsibleTrigger className="[&[data-state=open]>div>div>svg]:rotate-180 mb-1" asChild>
         <Button
           variant={active ? 'secondary' : 'ghost'}
-          className="relative z-30 w-full justify-start h-10 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
+          className={cn(
+            'relative z-30 w-full justify-start h-10 shadow-sm transition-transform transform hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active',
+            active ? 'menu-color-slab' : ''
+          )}
           asChild={!!href}
         >
           {href ? (
@@ -174,7 +177,10 @@ export function CollapseMenuButton({
           <Button
             key={index}
             variant={(active === undefined && pathname === href) || active ? 'secondary' : 'ghost'}
-            className="relative z-30 w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
+            className={cn(
+              'relative z-30 w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active',
+              (active === undefined && pathname === href) || active ? 'menu-color-slab' : ''
+            )}
             asChild
           >
             <Link
@@ -216,14 +222,14 @@ export function CollapseMenuButton({
             <DropdownMenuTrigger asChild>
               <Button
                 variant={active ? 'secondary' : 'ghost'}
-                className={cn(
-                  'w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active',
+              className={cn(
+                  'w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active',
                   // when sidebar is collapsed and this top-level menu is active, give stronger lift (same as Stories)
                   collapsedActiveHighlight || (isStories && isOpen === false)
                     ? 'hover:-translate-y-2 shadow-2xl'
                     : '',
                   // show the same active/bg ring when the menu is active OR when collapsed and a submenu is active
-                  active || collapsedActiveHighlight ? 'bg-secondary/95 ring-1 ring-primary/60' : ''
+                  active || collapsedActiveHighlight ? 'bg-secondary/95 ring-1 ring-primary/60 menu-color-slab' : ''
                 )}
                 onClick={e => {
                   if (href) {
@@ -277,7 +283,7 @@ export function CollapseMenuButton({
               href={href}
               className={cn(
                 'cursor-pointer w-full block',
-                active ? 'bg-secondary text-secondary-foreground' : ''
+                active ? 'bg-secondary text-secondary-foreground menu-color-slab' : ''
               )}
             >
               <div className="flex items-center justify-between w-full px-3 py-1">
@@ -306,8 +312,8 @@ export function CollapseMenuButton({
             <Link
               href={href}
               className={cn(
-                'cursor-pointer block w-full px-2 py-1 transition-transform transform hover:-translate-y-1 hover:-translate-x-1 mc-shadow-hover',
-                (active === undefined && pathname === href) || active ? 'bg-secondary' : ''
+                'cursor-pointer block w-full px-2 py-1 transition-transform transform hover:-translate-y-0.5 hover:-translate-x-0.5 mc-shadow-hover',
+                (active === undefined && pathname === href) || active ? 'bg-secondary menu-color-slab' : ''
               )}
             >
               <div className="flex items-center justify-between w-full">

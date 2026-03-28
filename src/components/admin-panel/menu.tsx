@@ -24,12 +24,11 @@ interface MenuProps {
 export function Menu({ isOpen }: MenuProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [storiesList, setStoriesList] = useState<{ id: string; title?: string; count?: number }[]>(
+    const [storiesList, setStoriesList] = useState<{ id: string; title?: string; count?: number }[]>(
     []
   );
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [agentsList, setAgentsList] = useState<{ id: string; name: string }[]>([]);
-  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [heapCount, setHeapCount] = useState<number>(0);
   const [trashCount, setTrashCount] = useState<number>(0);
 
@@ -61,8 +60,6 @@ export function Menu({ isOpen }: MenuProps) {
       try {
         const savedAgents = (await get<{ id: string; name: string }[]>('PLAYGROUND_AGENTS')) || [];
         if (mounted) setAgentsList(savedAgents);
-        const activeAgent = pathname?.startsWith('/agents/') ? pathname.split('/')[2] : null;
-        if (mounted) setActiveAgentId(activeAgent || null);
       } catch (err) {
         logger.error('Failed to load agents for menu', err);
       }
@@ -120,13 +117,6 @@ export function Menu({ isOpen }: MenuProps) {
       else setActiveStoryId(null);
     }
 
-    // update activeAgentId on agents route changes
-    if (pathname?.startsWith('/agents/')) {
-      const id = pathname.split('/')[2];
-      setActiveAgentId(id || null);
-    } else {
-      setActiveAgentId(null);
-    }
   }, [pathname, searchParams]);
 
   const menuList = getMenuList();
@@ -169,11 +159,13 @@ export function Menu({ isOpen }: MenuProps) {
                               : 'ghost'
                           }
                           className={cn(
-                            'relative z-40 pointer-events-auto w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active',
-                            // when sidebar is collapsed and this top-level menu is active, apply stronger lift and visible outline
+                            'relative z-40 pointer-events-auto w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active',
+                            ((active === undefined && pathname.startsWith(href)) || active)
+                              ? 'menu-color-slab'
+                              : '',
                             isOpen === false &&
                               ((active === undefined && pathname.startsWith(href)) || active)
-                              ? 'hover:-translate-y-2 shadow-2xl bg-secondary/95 ring-1 ring-primary/60'
+                              ? 'hover:-translate-y-0.5 shadow-2xl bg-secondary/95 ring-1 ring-primary/60'
                               : ''
                           )}
                           asChild

@@ -446,7 +446,7 @@ export default function BackupsPage() {
         <div className="flex justify-start">
           <button
             onClick={handleExport}
-            className="px-4 py-2 rounded bg-slate-800 text-white pushable-effect"
+            className="px-4 py-2 rounded bg-slate-800 text-white"
           >
             Export JSON
           </button>
@@ -462,7 +462,7 @@ export default function BackupsPage() {
           />
           <button
             onClick={() => importRef.current?.click()}
-            className="px-4 py-2 rounded border pushable-effect"
+            className="px-4 py-2 rounded border"
             aria-label="Open JSON backup file picker"
           >
             Import JSON

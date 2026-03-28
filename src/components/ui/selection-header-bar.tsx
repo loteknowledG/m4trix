@@ -34,7 +34,7 @@ export function SelectionHeaderBar({ selectedIds, moments, onSelectAll, onClearS
                       onSelectAll();
                     }
                   }}
-                  className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  className="pushable-effect inline-flex items-center justify-center w-8 h-8 rounded"
                   aria-label={selectedIds.length === moments.length ? "Clear selection" : "Select all"}
                   disabled={moments.length === 0}
                 >

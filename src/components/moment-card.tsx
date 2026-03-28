@@ -1,9 +1,8 @@
 'use client';
 
 import { Circle, Check, CheckCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { normalizeMomentSrc } from '@/lib/moments';
-import { ShineBorder } from '@/components/ui/shine-border';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
@@ -31,17 +30,6 @@ export default function MomentCard({
   const pathname = usePathname();
   const momentsCtx = useMomentsContext();
   const [open, setOpen] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimerRef.current) {
-        clearTimeout(hoverTimerRef.current);
-        hoverTimerRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -103,58 +91,20 @@ export default function MomentCard({
         }
       }}
       className={[
-        'pushable-moment pushable-effect relative group rounded-md overflow-visible border-none bg-transparent cursor-pointer',
+        'relative group overflow-visible cursor-pointer rounded-xl border-2 border-border bg-card text-card-foreground shadow-[2px_2px_0_0_hsl(var(--foreground))] transition-transform transition-shadow duration-150 ease-out hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[3px_3px_0_0_hsl(var(--foreground))] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_0_hsl(var(--foreground))]',
         item.selected ? 'ring-2 ring-primary/60' : '',
         fullHeight ? 'h-full' : '',
       ].join(' ')}
       tabIndex={0}
-      // 3D movement handlers + hover preview
-      onMouseEnter={e => {
-        const card = e.currentTarget;
-        card.querySelector('.front-moment')?.setAttribute('data-state', 'hover');
-        card.querySelector('.shadow')?.setAttribute('data-state', 'hover');
-        if (hoverTimerRef.current) {
-          clearTimeout(hoverTimerRef.current);
-        }
-        hoverTimerRef.current = setTimeout(() => setHovered(true), 120);
-      }}
-      onMouseLeave={e => {
-        const card = e.currentTarget;
-        card.querySelector('.front-moment')?.setAttribute('data-state', 'base');
-        card.querySelector('.shadow')?.setAttribute('data-state', 'base');
-        if (hoverTimerRef.current) {
-          clearTimeout(hoverTimerRef.current);
-          hoverTimerRef.current = null;
-        }
-        setHovered(false);
-      }}
-      onMouseDown={e => {
-        const card = e.currentTarget;
-        card.querySelector('.front-moment')?.setAttribute('data-state', 'active');
-        card.querySelector('.shadow')?.setAttribute('data-state', 'active');
-      }}
-      onMouseUp={e => {
-        const card = e.currentTarget;
-        card.querySelector('.front-moment')?.setAttribute('data-state', 'hover');
-        card.querySelector('.shadow')?.setAttribute('data-state', 'hover');
-      }}
     >
-      <span
-        className={`front-moment relative block rounded-2xl w-full h-full min-h-[120px] bg-zinc-100 dark:bg-zinc-800 will-change-transform select-none overflow-hidden transition-all duration-220 ease-[cubic-bezier(0.24,0.8,0.32,1)] origin-bottom ${
-          hovered
-            ? 'scale-[1.05] shadow-[0_16px_36px_rgba(0,0,0,0.65)] border border-white/30'
-            : 'scale-100 shadow-[0_8px_18px_rgba(0,0,0,0.5)] border border-white/10'
-        }`}
-      >
+      <div className="relative block rounded-xl w-full h-full min-h-[120px] bg-zinc-100 dark:bg-zinc-800 select-none overflow-hidden">
         <button
           onClick={e => {
             e.stopPropagation();
             e.preventDefault();
             toggleSelect(item.id);
           }}
-          className={`absolute z-30 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center ${
-            hovered ? 'opacity-100' : 'opacity-0'
-          } transition-opacity pointer-events-auto`}
+          className="absolute z-30 top-1 left-1 rounded-full w-7 h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto bg-black/35 hover:bg-black/50 backdrop-blur-[1px]"
           aria-label="Select moment"
           aria-pressed={item.selected}
         >
@@ -168,7 +118,7 @@ export default function MomentCard({
             </div>
           )}
           {item.selected && (
-            <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground">
               <CheckCircle size={16} />
             </span>
           )}
@@ -179,20 +129,7 @@ export default function MomentCard({
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover block"
         />
-        {hovered && !open && (
-          <div className="absolute inset-0 z-20 pointer-events-none">
-            <div className="absolute inset-0 rounded-2xl border-2 border-white/30" />
-            <div className="absolute inset-0 rounded-2xl bg-black/10 backdrop-blur-sm" />
-            <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
-              <img
-                src={normalizeMomentSrc(item.src)}
-                alt={item.name || 'Moment preview'}
-                className="h-full w-full object-cover opacity-90"
-              />
-            </div>
-          </div>
-        )}
-      </span>
+      </div>
       {open && (
         <div
           className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center"
@@ -211,7 +148,7 @@ export default function MomentCard({
               e.preventDefault();
               setOpen(false);
             }}
-            className="absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+            className="pushable-effect absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-white z-10"
             aria-label="Close"
           >
             <svg

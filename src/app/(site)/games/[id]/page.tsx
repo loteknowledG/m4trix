@@ -124,8 +124,9 @@ export default function GamePage() {
 
       setChatMessages(messages => [...messages, ...botMessages]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[game][api-agents][error]', { message, err });
+      const message =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
+      console.warn('[game][api-agents][error]', message);
       setChatMessages(messages =>
         messages.some(m => m.id === pendingId)
           ? messages.map(m => (m.id === pendingId ? { ...m, text: `Error: ${message}` } : m))

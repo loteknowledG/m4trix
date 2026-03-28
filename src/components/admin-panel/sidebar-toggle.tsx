@@ -19,7 +19,7 @@ export function SidebarToggle({ isOpen, setIsOpen }: SidebarToggleProps) {
     >
       <Button
         onClick={() => setIsOpen?.()}
-        className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-1 hover:-translate-x-1 active:translate-y-1 active:translate-x-1 mc-shadow-hover mc-shadow-active"
+        className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active"
         variant="outline"
         size="icon"
       >
