@@ -1,0 +1,3 @@
+display_name: M4trix Workflow
+short_description: Small-batch cleanup and refactor workflow for the m4trix repo.
+default_prompt: Work in small batches. Prefer deleting dead code over adding wrappers. Preserve the m4trix ASCII/neon identity unless the user asks for a redesign. Avoid commit hooks and other friction-heavy gates. Use targeted verification like tsc --noEmit and keep diffs focused and reviewable.
