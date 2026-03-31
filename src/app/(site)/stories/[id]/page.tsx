@@ -16,9 +16,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Trash2, Upload } from 'lucide-react';
 import { LuNotebookText } from 'react-icons/lu';
 import { IoBanOutline } from 'react-icons/io5';
+import { GrUserFemale } from 'react-icons/gr';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetClose,
+} from '@/components/ui/sheet';
 import { useRouter, useParams } from 'next/navigation';
 
 type Moment = { id: string; src: string; name?: string; fingerprint?: string };
+type Character = { id: string; name?: string };
 
 export default function StoryPage() {
   const params = useParams();
@@ -29,6 +39,9 @@ export default function StoryPage() {
   const [title, setTitle] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [storyInfoOpen, setStoryInfoOpen] = useState(false);
+  const [assignNpcOpen, setAssignNpcOpen] = useState(false);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [assignedNpcId, setAssignedNpcId] = useState<string | null>(null);
 
   const selectedIds = useSelection(s => s.selections['stories'] || []);
   const toggleSelect = useSelection(s => s.toggle);
@@ -77,9 +90,10 @@ export default function StoryPage() {
         let t = stored && stored.title ? stored.title : '';
         try {
           const saved =
-            (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
+            (await get<{ id: string; title?: string; count?: number; npcId?: string }[]>('stories')) || [];
           const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
+          setAssignedNpcId(meta?.npcId || null);
         } catch (e) {
           /* ignore */
         }
@@ -414,6 +428,55 @@ export default function StoryPage() {
 
   const router = useRouter();
   const setSidebarOpen = useSidebar(s => s.setIsOpen);
+
+  const loadCharacters = useCallback(async () => {
+    try {
+      const saved = (await get<Character[]>('PLAYGROUND_AGENTS')) || [];
+      setCharacters(Array.isArray(saved) ? saved : []);
+    } catch (e) {
+      setCharacters([]);
+    }
+  }, []);
+
+  const createCharacter = useCallback(async () => {
+    try {
+      const saved = (await get<any[]>('PLAYGROUND_AGENTS')) || [];
+      const newCharacter = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        name: '',
+        description: '',
+      };
+      const next = [...saved, newCharacter];
+      await set('PLAYGROUND_AGENTS', next);
+      setCharacters(next);
+      try {
+        window.dispatchEvent(new Event('characters-updated'));
+      } catch (e) {
+        /* ignore */
+      }
+    } catch (e) {
+      logger.error('Failed to create character', e);
+    }
+  }, []);
+
+  const assignNpcToStory = useCallback(
+    async (characterId: string) => {
+      if (!id) return;
+      try {
+        const saved = (await get<any[]>('stories')) || [];
+        const idx = saved.findIndex((s: any) => s.id === id);
+        if (idx > -1) {
+          saved[idx] = { ...saved[idx], npcId: characterId };
+          await set('stories', saved);
+        }
+        setAssignedNpcId(characterId);
+        setAssignNpcOpen(false);
+      } catch (e) {
+        logger.error('Failed to assign NPC', e);
+      }
+    },
+    [id]
+  );
 
   async function handleDeleteStory() {
     if (!id) return;
@@ -789,14 +852,39 @@ export default function StoryPage() {
         <div className="h-full flex flex-col p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium">Story info</h3>
-            <button
-              type="button"
-              onClick={() => setStoryInfoOpen(false)}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
-              aria-label="Close story info"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        loadCharacters();
+                        setAssignNpcOpen(true);
+                        setStoryInfoOpen(false);
+                      }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
+                      aria-label="Assign NPC"
+                    >
+                      <GrUserFemale size={16} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" sideOffset={8}>
+                    <p>Assign NPC</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <button
+                type="button"
+                onClick={() => setStoryInfoOpen(false)}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
+                aria-label="Close story info"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto space-y-4 text-sm">
@@ -839,6 +927,55 @@ export default function StoryPage() {
           </div>
         </div>
       </div>
+      <Sheet open={assignNpcOpen} onOpenChange={setAssignNpcOpen}>
+        <SheetContent side="center" onClick={e => e.stopPropagation()}>
+          <SheetHeader>
+            <div className="flex items-center justify-between">
+              <SheetTitle>Assign NPC</SheetTitle>
+              <SheetClose />
+            </div>
+            <SheetDescription className="text-sm">
+              Create a new character or select one to assign to this story.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-3 overflow-y-auto max-h-[60vh]">
+            <button
+              type="button"
+              onClick={createCharacter}
+              className="flex items-center gap-3 w-full p-3 rounded border"
+            >
+              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">+</div>
+              <div className="text-sm">New character</div>
+            </button>
+            {characters.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No characters yet.</div>
+            ) : (
+              characters.map(character => (
+                <button
+                  key={character.id}
+                  type="button"
+                  onClick={() => assignNpcToStory(character.id)}
+                  className={`flex items-center justify-between gap-3 w-full p-3 rounded hover:bg-accent text-left ${
+                    assignedNpcId === character.id ? 'border border-primary/60' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
+                      <GrUserFemale size={16} />
+                    </div>
+                    <div className="text-sm truncate">
+                      {character.name && character.name.trim() ? character.name : 'Untitled'}
+                    </div>
+                  </div>
+                  {assignedNpcId === character.id ? (
+                    <span className="text-xs text-primary">Assigned</span>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
