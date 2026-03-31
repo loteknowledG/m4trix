@@ -28,6 +28,7 @@ export default function StoryPage() {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
+  const [storyInfoOpen, setStoryInfoOpen] = useState(false);
 
   const selectedIds = useSelection(s => s.selections['stories'] || []);
   const toggleSelect = useSelection(s => s.toggle);
@@ -603,7 +604,11 @@ export default function StoryPage() {
                       type="button"
                       className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-foreground hover:bg-accent/10 transition-colors"
                       aria-label="Story info"
-                      onClick={() => setSidebarOpen(true)}
+                      onClick={e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setStoryInfoOpen(true);
+                      }}
                     >
                       <LuNotebookText size={18} />
                     </button>
@@ -773,6 +778,67 @@ export default function StoryPage() {
           </div>
         </ErrorBoundary>
       </ContentLayout>{' '}
+      {/* Right-side drawer for story info, similar to the moment tag drawer */}
+      <div
+        className={`fixed right-0 top-0 h-full w-80 max-w-full bg-background/95 border-l border-border z-[1150] transform transition-transform duration-300 ease-in-out ${
+          storyInfoOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        role="dialog"
+        aria-hidden={storyInfoOpen ? 'false' : 'true'}
+      >
+        <div className="h-full flex flex-col p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium">Story info</h3>
+            <button
+              type="button"
+              onClick={() => setStoryInfoOpen(false)}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
+              aria-label="Close story info"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto space-y-4 text-sm">
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">Title</div>
+              <div className="font-medium break-words">
+                {title && title.trim().length > 0 ? title : 'Untitled story'}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <div className="text-muted-foreground mb-0.5">Moments</div>
+                <div className="text-base font-semibold">{moments.length}</div>
+              </div>
+              {id ? (
+                <div>
+                  <div className="text-muted-foreground mb-0.5">Story ID</div>
+                  <div className="text-[11px] break-all text-foreground/80">{id}</div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="pt-2 border-t border-border/40 space-y-2">
+              <div className="text-xs text-muted-foreground">
+                Story metadata is stored locally in your browser (IndexedDB). Deleting the story
+                will remove its moments from this view, but not from Heap or Trash.
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleDeleteStory();
+                  setStoryInfoOpen(false);
+                }}
+                className="inline-flex items-center justify-center px-3 py-1.5 rounded border text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
+              >
+                Delete story
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
