@@ -25,5 +25,6 @@
   "search.exclude": {
     "**/globalStorage/github.copilot-chat/**": true,
     "**/.history/**": true
-  }
+  },
+  "kiroAgent.configureMCP": "Disabled"
 }

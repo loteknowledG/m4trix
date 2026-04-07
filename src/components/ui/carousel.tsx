@@ -176,8 +176,12 @@ const CarouselItem = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLD
 );
 CarouselItem.displayName = 'CarouselItem';
 
-const CarouselPrevious = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof Button>>(
-  ({ className, variant = 'raised', size = 'icon', ...props }, ref) => {
+type CarouselControlProps = React.ComponentProps<typeof Button> & {
+  buttonClassName?: string;
+};
+
+const CarouselPrevious = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
+  ({ className, buttonClassName, variant = 'raised', size = 'icon', ...props }, ref) => {
     const { orientation, scrollPrev, canScrollPrev } = useCarousel();
 
     return (
@@ -194,7 +198,7 @@ const CarouselPrevious = React.forwardRef<HTMLButtonElement, React.ComponentProp
           ref={ref}
           variant={variant}
           size={size}
-          className="h-8 w-8 rounded-full"
+          className={cn('h-8 w-8 rounded-full', buttonClassName)}
           disabled={!canScrollPrev}
           onClick={scrollPrev}
           {...props}
@@ -208,8 +212,8 @@ const CarouselPrevious = React.forwardRef<HTMLButtonElement, React.ComponentProp
 );
 CarouselPrevious.displayName = 'CarouselPrevious';
 
-const CarouselNext = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof Button>>(
-  ({ className, variant = 'raised', size = 'icon', ...props }, ref) => {
+const CarouselNext = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
+  ({ className, buttonClassName, variant = 'raised', size = 'icon', ...props }, ref) => {
     const { orientation, scrollNext, canScrollNext } = useCarousel();
 
     return (
@@ -226,7 +230,7 @@ const CarouselNext = React.forwardRef<HTMLButtonElement, React.ComponentProps<ty
           ref={ref}
           variant={variant}
           size={size}
-          className="h-8 w-8 rounded-full"
+          className={cn('h-8 w-8 rounded-full', buttonClassName)}
           disabled={!canScrollNext}
           onClick={scrollNext}
           {...props}

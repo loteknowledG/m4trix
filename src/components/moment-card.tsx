@@ -31,6 +31,18 @@ export default function MomentCard({
   const momentsCtx = useMomentsContext();
   const [open, setOpen] = useState(false);
 
+  const openFullscreen = () => {
+    if (momentsCtx && momentsCtx.open) {
+      momentsCtx.open(item.id);
+      return;
+    }
+    if (onOpen) {
+      onOpen(item);
+      return;
+    }
+    setOpen(true);
+  };
+
   useEffect(() => {
     if (!open) return;
     const prevOverflow = document.body.style.overflow || '';

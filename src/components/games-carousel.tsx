@@ -142,10 +142,12 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
         ))}
       </CarouselContent>
       <CarouselPrevious
-        className={`left-1 top-[54%] -mt-6 h-12 w-12 bg-[#c90084]/80 z-10 ${pressableClass}`}
+        className="left-1 top-[54%] -mt-6 z-10"
+        buttonClassName={`h-12 w-12 bg-[#c90084]/80 ${pressableClass}`}
       />
       <CarouselNext
-        className={`right-1 top-[54%] -mt-6 h-12 w-12 bg-[#c90084]/80 z-10 ${pressableClass}`}
+        className="right-1 top-[54%] -mt-6 z-10"
+        buttonClassName={`h-12 w-12 bg-[#c90084]/80 ${pressableClass}`}
       />
     </Carousel>
   );

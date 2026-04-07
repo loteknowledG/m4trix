@@ -1,4 +1,0 @@
-vosk
-sounddevice
-pyttsx3
-numpy

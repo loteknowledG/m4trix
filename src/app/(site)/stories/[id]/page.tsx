@@ -1,34 +1,42 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { get, set } from 'idb-keyval';
-import useSelection from '@/hooks/use-selection';
-import { useSidebar } from '@/hooks/use-sidebar';
-import { logger } from '@/lib/logger';
-import { Marquee } from '@/components/ui/marquee';
-import { ContentLayout } from '@/components/admin-panel/content-layout';
-import ErrorBoundary from '@/components/error-boundary';
-import { MomentsProvider } from '@/context/moments-collection';
-import MomentsGrid from '@/components/moments-grid';
-import CollectionOverlay from '@/components/collection-overlay';
-import { SelectionHeaderBar } from '@/components/ui/selection-header-bar';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Trash2, Upload } from 'lucide-react';
-import { LuNotebookText } from 'react-icons/lu';
-import { IoBanOutline } from 'react-icons/io5';
-import { GrUserFemale } from 'react-icons/gr';
+import { get, set } from "idb-keyval";
+import { Trash2, Upload } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GrUserFemale } from "react-icons/gr";
+import { IoBanOutline } from "react-icons/io5";
+import { LuNotebookText } from "react-icons/lu";
+import { ContentLayout } from "@/components/admin-panel/content-layout";
+import CollectionOverlay from "@/components/collection-overlay";
+import { QuillEditor } from "@/components/quill-editor";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import ErrorBoundary from "@/components/error-boundary";
+import MomentsGrid from "@/components/moments-grid";
+import { Marquee } from "@/components/ui/marquee";
+import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetClose,
-} from '@/components/ui/sheet';
-import { useRouter, useParams } from 'next/navigation';
+} from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { MomentsProvider } from "@/context/moments-collection";
+import useSelection from "@/hooks/use-selection";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { logger } from "@/lib/logger";
 
 type Moment = { id: string; src: string; name?: string; fingerprint?: string };
-type Character = { id: string; name?: string };
+type Character = { id: string; name?: string; avatarUrl?: string };
 
 export default function StoryPage() {
   const params = useParams();
@@ -36,18 +44,21 @@ export default function StoryPage() {
 
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [storyInfoOpen, setStoryInfoOpen] = useState(false);
   const [assignNpcOpen, setAssignNpcOpen] = useState(false);
+  const [assignPlayerOpen, setAssignPlayerOpen] = useState(false);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [assignedNpcId, setAssignedNpcId] = useState<string | null>(null);
+  const [assignedPlayerId, setAssignedPlayerId] = useState<string | null>(null);
+  const [storyDescription, setStoryDescription] = useState("");
 
-  const selectedIds = useSelection(s => s.selections['stories'] || []);
-  const toggleSelect = useSelection(s => s.toggle);
-  const setSelectionStore = useSelection(s => s.set);
-  const clearSelection = useSelection(s => s.clear);
-  const scope = 'stories';
+  const selectedIds = useSelection((s) => s.selections["stories"] || []);
+  const toggleSelect = useSelection((s) => s.toggle);
+  const setSelectionStore = useSelection((s) => s.set);
+  const clearSelection = useSelection((s) => s.clear);
+  const scope = "stories";
 
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -87,19 +98,23 @@ export default function StoryPage() {
         setMoments(loadedMoments);
 
         // try to get title from stored object or stories metadata
-        let t = stored && stored.title ? stored.title : '';
+        let t = stored && stored.title ? stored.title : "";
         try {
           const saved =
-            (await get<{ id: string; title?: string; count?: number; npcId?: string }[]>('stories')) || [];
+            (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string }[]>(
+              "stories",
+            )) || [];
           const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
           setAssignedNpcId(meta?.npcId || null);
+          setAssignedPlayerId(meta?.playerId || null);
+          setStoryDescription(meta?.description || "");
         } catch (e) {
           /* ignore */
         }
         setTitle(t);
       } catch (err) {
-        logger.error('Failed to load story items', err);
+        logger.error("Failed to load story items", err);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -108,6 +123,27 @@ export default function StoryPage() {
     return () => {
       mounted = false;
     };
+  }, [id]);
+
+  // refresh assignedNpcId when stories-updated event fires
+  useEffect(() => {
+    if (!id) return;
+    const handler = async () => {
+      try {
+        const saved =
+          (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string }[]>(
+            "stories",
+          )) || [];
+        const meta = saved.find((m: any) => m.id === id);
+        setAssignedNpcId(meta?.npcId || null);
+        setAssignedPlayerId(meta?.playerId || null);
+        setStoryDescription(meta?.description || "");
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    window.addEventListener("stories-updated", handler);
+    return () => window.removeEventListener("stories-updated", handler);
   }, [id]);
 
   // listen for toolbar actions dispatched from navbar
@@ -120,18 +156,18 @@ export default function StoryPage() {
       if (!ids.length) return;
 
       try {
-        if (action === 'move-to-heap') {
-          const heap = (await get<any[]>('heap-moments')) || (await get<any[]>('heap-gifs')) || [];
-          const moving = moments.filter(g => ids.includes(g.id));
+        if (action === "move-to-heap") {
+          const heap = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
+          const moving = moments.filter((g) => ids.includes(g.id));
           const newHeap = [...heap, ...moving];
-          await set('heap-moments', newHeap);
+          await set("heap-moments", newHeap);
           // remove from story
           const storyKey = `story:${id}`;
           const stored = (await get<any>(storyKey)) || [];
           let remaining: any[] = [];
           if (Array.isArray(stored)) {
             try {
-              window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+              window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
             } catch (e) {
               /* ignore */
             }
@@ -142,16 +178,16 @@ export default function StoryPage() {
           }
           await set(storyKey, remaining);
           // update local state
-          setMoments(prev => prev.filter(g => !ids.includes(g.id)));
+          setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
           // update stories metadata count
           try {
-            const saved = (await get<any>('stories')) || [];
+            const saved = (await get<any>("stories")) || [];
             const idx = saved.findIndex((s: any) => s.id === id);
             if (idx > -1) {
               saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
-              await set('stories', saved);
+              await set("stories", saved);
               try {
-                window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+                window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
               } catch (e) {
                 /* ignore */
               }
@@ -161,25 +197,25 @@ export default function StoryPage() {
           }
           try {
             window.dispatchEvent(
-              new CustomEvent('moments-updated', { detail: { count: newHeap.length } })
+              new CustomEvent("moments-updated", { detail: { count: newHeap.length } }),
             );
           } catch (e) {
             /* ignore */
           }
         }
 
-        if (action === 'move-to-trash') {
+        if (action === "move-to-trash") {
           const trash =
-            (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
-          const moving = moments.filter(g => ids.includes(g.id));
+            (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
+          const moving = moments.filter((g) => ids.includes(g.id));
           const newTrash = [...trash, ...moving];
-          await set('trash-moments', newTrash);
+          await set("trash-moments", newTrash);
           // remove from story (same as above)
           const storyKey = `story:${id}`;
           const stored = (await get<any>(storyKey)) || [];
           let remaining: any[] = [];
           try {
-            window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
           } catch (e) {
             /* ignore */
           }
@@ -195,15 +231,15 @@ export default function StoryPage() {
           } catch (e) {
             /* ignore */
           }
-          setMoments(prev => prev.filter(g => !ids.includes(g.id)));
+          setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
           try {
-            const saved = (await get<any>('stories')) || [];
+            const saved = (await get<any>("stories")) || [];
             const idx = saved.findIndex((s: any) => s.id === id);
             if (idx > -1) {
               saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
-              await set('stories', saved);
+              await set("stories", saved);
               try {
-                window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+                window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
               } catch (e) {
                 /* ignore */
               }
@@ -213,7 +249,7 @@ export default function StoryPage() {
           }
         }
       } catch (e) {
-        logger.error('Failed to perform story action', e);
+        logger.error("Failed to perform story action", e);
       } finally {
         // clear selection
         try {
@@ -223,15 +259,15 @@ export default function StoryPage() {
         }
       }
     };
-    window.addEventListener('story-action', handler as EventListener);
-    return () => window.removeEventListener('story-action', handler as EventListener);
+    window.addEventListener("story-action", handler as EventListener);
+    return () => window.removeEventListener("story-action", handler as EventListener);
   }, [selectedIds, moments, id, clearSelection, scope]);
 
   const onDragStart = useCallback((e: React.DragEvent, idx: number) => {
     dragIndexRef.current = idx;
     try {
-      e.dataTransfer.setData('text/plain', String(idx));
-      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData("text/plain", String(idx));
+      e.dataTransfer.effectAllowed = "move";
     } catch (err) {
       /* ignore */
     }
@@ -242,27 +278,27 @@ export default function StoryPage() {
     async (count: number) => {
       if (!id) return;
       try {
-        const saved = (await get<any[]>('stories')) || [];
-        const idx = saved.findIndex(s => s.id === id);
+        const saved = (await get<any[]>("stories")) || [];
+        const idx = saved.findIndex((s) => s.id === id);
         if (idx > -1) {
           saved[idx].count = count;
-          await set('stories', saved);
+          await set("stories", saved);
           try {
-            window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
           } catch {}
         }
       } catch (e) {
         /* ignore */
       }
     },
-    [id]
+    [id],
   );
 
   const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
     e.preventDefault();
     setDragOverIndex(idx);
     try {
-      e.dataTransfer.dropEffect = 'move';
+      e.dataTransfer.dropEffect = "move";
     } catch (err) {
       /* ignore */
     }
@@ -291,9 +327,9 @@ export default function StoryPage() {
       e.preventDefault();
       const fromStr = (() => {
         try {
-          return e.dataTransfer.getData('text/plain');
+          return e.dataTransfer.getData("text/plain");
         } catch (err) {
-          return String(dragIndexRef.current ?? '');
+          return String(dragIndexRef.current ?? "");
         }
       })();
       const from = fromStr ? Number(fromStr) : null;
@@ -313,15 +349,15 @@ export default function StoryPage() {
         // Persist the reordered array (store raw items)
         await set(storyKey, next);
         try {
-          window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+          window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
         } catch (e) {
           /* ignore */
         }
       } catch (err) {
-        logger.error('Failed to persist reordered story', err);
+        logger.error("Failed to persist reordered story", err);
       }
     },
-    [moments, id]
+    [moments, id],
   );
 
   // allow dropping external images/URLs to append to story
@@ -329,11 +365,11 @@ export default function StoryPage() {
     async (e: React.DragEvent) => {
       e.preventDefault();
       const addSrc = async (src: string, fingerprint?: string) => {
-        setMoments(ms => {
+        setMoments((ms) => {
           // avoid duplicates by fingerprint (when available) or by src
           if (
-            ms.some(m =>
-              fingerprint && m.fingerprint ? m.fingerprint === fingerprint : m.src === src
+            ms.some((m) =>
+              fingerprint && m.fingerprint ? m.fingerprint === fingerprint : m.src === src,
             )
           ) {
             setStoryCount(ms.length).catch(() => {});
@@ -350,7 +386,7 @@ export default function StoryPage() {
 
       if (e.dataTransfer.files && e.dataTransfer.files.length) {
         for (const file of Array.from(e.dataTransfer.files)) {
-          if (file.type.startsWith('image/')) {
+          if (file.type.startsWith("image/")) {
             const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
             const dataUrl = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader();
@@ -363,14 +399,14 @@ export default function StoryPage() {
         }
         return;
       }
-      const text = e.dataTransfer.getData('text/plain');
+      const text = e.dataTransfer.getData("text/plain");
       if (text) {
         // normalize URL for dedupe by stripping query params
-        const normalized = text.split('?')[0];
+        const normalized = text.split("?")[0];
         await addSrc(text, normalized);
       }
     },
-    [id]
+    [id],
   );
 
   function startAutoScroll() {
@@ -404,9 +440,9 @@ export default function StoryPage() {
       setDragOverIndex(null);
       stopAutoScroll();
     };
-    window.addEventListener('dragend', onDragEndWin);
+    window.addEventListener("dragend", onDragEndWin);
     return () => {
-      window.removeEventListener('dragend', onDragEndWin);
+      window.removeEventListener("dragend", onDragEndWin);
       // clear any selections scoped to this story when leaving
       clearSelection(scope);
     };
@@ -416,75 +452,145 @@ export default function StoryPage() {
     const prev = document.title;
     if (!id)
       return () => {
-        document.title = prev ?? 'm4trix';
+        document.title = prev ?? "m4trix";
       };
 
-    const base = 'm4trix - story';
+    const base = "m4trix - story";
     document.title = title ? `${base} - ${title}` : base;
     return () => {
-      document.title = prev ?? 'm4trix';
+      document.title = prev ?? "m4trix";
     };
   }, [id, title]);
 
   const router = useRouter();
-  const setSidebarOpen = useSidebar(s => s.setIsOpen);
+  const setSidebarOpen = useSidebar((s) => s.setIsOpen);
 
   const loadCharacters = useCallback(async () => {
     try {
-      const saved = (await get<Character[]>('PLAYGROUND_AGENTS')) || [];
+      const saved = (await get<Character[]>("PLAYGROUND_AGENTS")) || [];
       setCharacters(Array.isArray(saved) ? saved : []);
     } catch (e) {
       setCharacters([]);
     }
   }, []);
 
+  // load characters when story info drawer opens
+  useEffect(() => {
+    if (storyInfoOpen) {
+      loadCharacters();
+    }
+  }, [storyInfoOpen, loadCharacters]);
+
   const createCharacter = useCallback(async () => {
     try {
-      const saved = (await get<any[]>('PLAYGROUND_AGENTS')) || [];
+      const saved = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
       const newCharacter = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        name: '',
-        description: '',
+        name: "",
+        description: "",
       };
       const next = [...saved, newCharacter];
-      await set('PLAYGROUND_AGENTS', next);
+      await set("PLAYGROUND_AGENTS", next);
       setCharacters(next);
       try {
-        window.dispatchEvent(new Event('characters-updated'));
+        window.dispatchEvent(new Event("characters-updated"));
       } catch (e) {
         /* ignore */
       }
+      if (id) {
+        const storyList = (await get<any[]>("stories")) || [];
+        const idx = storyList.findIndex((s: any) => s.id === id);
+        if (idx > -1) {
+          storyList[idx] = { ...storyList[idx], npcId: newCharacter.id };
+          await set("stories", storyList);
+          try {
+            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        setAssignedNpcId(newCharacter.id);
+      }
+      router.push(`/characters/${newCharacter.id}`);
     } catch (e) {
-      logger.error('Failed to create character', e);
+      logger.error("Failed to create character", e);
     }
-  }, []);
+  }, [router, id]);
 
   const assignNpcToStory = useCallback(
     async (characterId: string) => {
       if (!id) return;
       try {
-        const saved = (await get<any[]>('stories')) || [];
+        const saved = (await get<any[]>("stories")) || [];
         const idx = saved.findIndex((s: any) => s.id === id);
         if (idx > -1) {
           saved[idx] = { ...saved[idx], npcId: characterId };
-          await set('stories', saved);
+          await set("stories", saved);
+          try {
+            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+          } catch (e) {
+            /* ignore */
+          }
         }
         setAssignedNpcId(characterId);
         setAssignNpcOpen(false);
       } catch (e) {
-        logger.error('Failed to assign NPC', e);
+        logger.error("Failed to assign NPC", e);
       }
     },
-    [id]
+    [id],
   );
+
+  const assignPlayerToStory = useCallback(
+    async (characterId: string) => {
+      if (!id) return;
+      try {
+        const saved = (await get<any[]>("stories")) || [];
+        const idx = saved.findIndex((s: any) => s.id === id);
+        if (idx > -1) {
+          saved[idx] = { ...saved[idx], playerId: characterId };
+          await set("stories", saved);
+          try {
+            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        setAssignedPlayerId(characterId);
+        setAssignPlayerOpen(false);
+      } catch (e) {
+        logger.error("Failed to assign player", e);
+      }
+    },
+    [id],
+  );
+
+  const saveStoryDescription = useCallback(async () => {
+    if (!id) return;
+    try {
+      const saved = (await get<any[]>("stories")) || [];
+      const idx = saved.findIndex((s: any) => s.id === id);
+      if (idx > -1) {
+        saved[idx] = { ...saved[idx], description: storyDescription };
+        await set("stories", saved);
+        try {
+          window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    } catch (e) {
+      logger.error("Failed to save story description", e);
+    }
+  }, [id, storyDescription]);
 
   async function handleDeleteStory() {
     if (!id) return;
     try {
       // confirm destructive action with user
       const ok =
-        typeof window !== 'undefined'
-          ? window.confirm('Delete this story? This cannot be undone.')
+        typeof window !== "undefined"
+          ? window.confirm("Delete this story? This cannot be undone.")
           : true;
       if (!ok) return;
 
@@ -494,15 +600,15 @@ export default function StoryPage() {
 
       // remove from stories metadata
       try {
-        const saved = (await get<any>('stories')) || [];
+        const saved = (await get<any>("stories")) || [];
         const remaining = (Array.isArray(saved) ? saved : []).filter((s: any) => s.id !== id);
-        await set('stories', remaining);
+        await set("stories", remaining);
       } catch (e) {
         // ignore
       }
 
       try {
-        window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+        window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
       } catch (e) {
         /* ignore */
       }
@@ -514,12 +620,12 @@ export default function StoryPage() {
       setMoments([]);
       // navigate back to stories list
       try {
-        router.push('/stories');
+        router.push("/stories");
       } catch (e) {
         /* ignore */
       }
     } catch (err) {
-      logger.error('Failed to delete story', err);
+      logger.error("Failed to delete story", err);
     }
   }
 
@@ -537,15 +643,15 @@ export default function StoryPage() {
       }
 
       // update stories metadata
-      const saved = (await get<any>('stories')) || [];
+      const saved = (await get<any>("stories")) || [];
       const idx = saved.findIndex((s: any) => s.id === id);
       if (idx > -1) {
         saved[idx].title = title;
-        await set('stories', saved);
+        await set("stories", saved);
       }
-      window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+      window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
     } catch (e) {
-      logger.error('Failed to save story title', e);
+      logger.error("Failed to save story title", e);
     }
   }
 
@@ -553,14 +659,14 @@ export default function StoryPage() {
     try {
       const ids = selectedIds || [];
       if (!ids.length) return;
-      const toMove = moments.filter(m => ids.includes(m.id));
+      const toMove = moments.filter((m) => ids.includes(m.id));
       const existingTrash =
-        (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
+        (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
       const newTrash = [...existingTrash, ...toMove];
-      await set('trash-moments', newTrash);
+      await set("trash-moments", newTrash);
 
       // remove moved items from this story
-      setMoments(prev => prev.filter(m => !ids.includes(m.id)));
+      setMoments((prev) => prev.filter((m) => !ids.includes(m.id)));
 
       // update stored story list
       const storyKey = `story:${id}`;
@@ -580,16 +686,16 @@ export default function StoryPage() {
 
       try {
         window.dispatchEvent(
-          new CustomEvent('moments-updated', {
-            detail: { count: newTrash.length, source: 'story' },
-          })
+          new CustomEvent("moments-updated", {
+            detail: { count: newTrash.length, source: "story" },
+          }),
         );
       } catch (e) {
         /* ignore */
       }
       clearSelection(scope);
     } catch (err) {
-      logger.error('Failed to move selected to trash', err);
+      logger.error("Failed to move selected to trash", err);
     }
   }, [clearSelection, id, moments, scope, selectedIds]);
 
@@ -597,14 +703,14 @@ export default function StoryPage() {
     try {
       const ids = selectedIds || [];
       if (!ids.length) return;
-      const toMove = moments.filter(m => ids.includes(m.id));
+      const toMove = moments.filter((m) => ids.includes(m.id));
       const existingHeap =
-        (await get<any[]>('heap-moments')) || (await get<any[]>('heap-gifs')) || [];
+        (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
       const newHeap = [...existingHeap, ...toMove];
-      await set('heap-moments', newHeap);
+      await set("heap-moments", newHeap);
 
       // remove moved items from this story
-      setMoments(prev => prev.filter(m => !ids.includes(m.id)));
+      setMoments((prev) => prev.filter((m) => !ids.includes(m.id)));
 
       const storyKey = `story:${id}`;
       const stored = (await get<any>(storyKey)) || [];
@@ -621,23 +727,23 @@ export default function StoryPage() {
       setStoryCount(remaining.length).catch(() => {});
       try {
         window.dispatchEvent(
-          new CustomEvent('moments-updated', {
-            detail: { count: newHeap.length, source: 'heap' },
-          })
+          new CustomEvent("moments-updated", {
+            detail: { count: newHeap.length, source: "heap" },
+          }),
         );
       } catch (e) {
         /* ignore */
       }
       clearSelection(scope);
     } catch (err) {
-      logger.error('Failed to move selected to heap', err);
+      logger.error("Failed to move selected to heap", err);
     }
   }, [clearSelection, id, moments, scope, selectedIds]);
 
   return (
     <>
       <ContentLayout
-        title={title || 'Stories'}
+        title={title || "Stories"}
         titleMarquee
         navLeft={
           <SelectionHeaderBar
@@ -648,7 +754,7 @@ export default function StoryPage() {
               if ((selectedIds || []).length !== moments.length) {
                 setSelectionStore(
                   scope,
-                  moments.map(m => m.id)
+                  moments.map((m) => m.id),
                 );
               } else {
                 clearSelection(scope);
@@ -667,7 +773,7 @@ export default function StoryPage() {
                       type="button"
                       className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-foreground hover:bg-accent/10 transition-colors"
                       aria-label="Story info"
-                      onClick={e => {
+                      onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
                         setStoryInfoOpen(true);
@@ -689,7 +795,7 @@ export default function StoryPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={e => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
                           moveToHeap();
@@ -710,7 +816,7 @@ export default function StoryPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={e => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
                           moveToTrash();
@@ -734,7 +840,7 @@ export default function StoryPage() {
         <ErrorBoundary>
           <div
             className="overflow-auto h-[calc(100vh_-_var(--app-header-height,56px))]"
-            onDragOver={e => e.preventDefault()}
+            onDragOver={(e) => e.preventDefault()}
             onDrop={handleExternalDrop}
           >
             <div className="py-4">
@@ -744,16 +850,16 @@ export default function StoryPage() {
                     autoFocus
                     aria-label="Edit story title"
                     value={title}
-                    onChange={e => setTitle(e.target.value)}
+                    onChange={(e) => setTitle(e.target.value)}
                     onBlur={async () => {
                       await handleTitleBlur();
                       setEditingTitle(false);
                     }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
                         e.preventDefault();
                         (e.target as HTMLInputElement).blur();
-                      } else if (e.key === 'Escape') {
+                      } else if (e.key === "Escape") {
                         e.preventDefault();
                         setEditingTitle(false);
                       }
@@ -773,7 +879,7 @@ export default function StoryPage() {
                       gap="13rem"
                       distance="200%"
                     >
-                      {title.trim() ? title : 'Add a title'}
+                      {title.trim() ? title : "Add a title"}
                     </Marquee>
                   </button>
                 )}
@@ -840,16 +946,20 @@ export default function StoryPage() {
             </div>
           </div>
         </ErrorBoundary>
-      </ContentLayout>{' '}
-      {/* Right-side drawer for story info, similar to the moment tag drawer */}
-      <div
-        className={`fixed right-0 top-0 h-full w-80 max-w-full bg-background/95 border-l border-border z-[1150] transform transition-transform duration-300 ease-in-out ${
-          storyInfoOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-        role="dialog"
-        aria-hidden={storyInfoOpen ? 'false' : 'true'}
-      >
-        <div className="h-full flex flex-col p-4">
+      </ContentLayout>{" "}
+      <Dialog open={storyInfoOpen} onOpenChange={setStoryInfoOpen}>
+        <DialogContent
+          className="max-w-2xl p-0"
+          aria-describedby="story-info-description"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Story info</DialogTitle>
+            <DialogDescription id="story-info-description">
+              View and edit story metadata, assignments, and description.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex max-h-[85vh] min-h-[520px] flex-col p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium">Story info</h3>
             <div className="flex items-center gap-1">
@@ -858,7 +968,7 @@ export default function StoryPage() {
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      onClick={e => {
+                      onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
                         loadCharacters();
@@ -873,6 +983,29 @@ export default function StoryPage() {
                   </TooltipTrigger>
                   <TooltipContent side="bottom" sideOffset={8}>
                     <p>Assign NPC</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        loadCharacters();
+                        setAssignPlayerOpen(true);
+                        setStoryInfoOpen(false);
+                      }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
+                      aria-label="Assign Player"
+                    >
+                      <GrUserFemale size={16} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" sideOffset={8}>
+                    <p>Assign Player</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -891,7 +1024,7 @@ export default function StoryPage() {
             <div>
               <div className="text-xs uppercase text-muted-foreground mb-1">Title</div>
               <div className="font-medium break-words">
-                {title && title.trim().length > 0 ? title : 'Untitled story'}
+                {title && title.trim().length > 0 ? title : "Untitled story"}
               </div>
             </div>
 
@@ -906,6 +1039,105 @@ export default function StoryPage() {
                   <div className="text-[11px] break-all text-foreground/80">{id}</div>
                 </div>
               ) : null}
+            </div>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setAssignNpcOpen(true);
+                      setStoryInfoOpen(false);
+                    }}
+                    className="flex items-center gap-2 w-full p-2 rounded border border-dashed text-sm text-muted-foreground hover:bg-accent/20"
+                    aria-label="Assign NPC"
+                  >
+                    {assignedNpcId && characters.find((c) => c.id === assignedNpcId) ? (
+                      <>
+                        {characters.find((c) => c.id === assignedNpcId)?.avatarUrl ? (
+                          <img
+                            src={characters.find((c) => c.id === assignedNpcId)?.avatarUrl}
+                            alt="Character"
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <GrUserFemale size={16} />
+                        )}
+                        <span>
+                          {characters.find((c) => c.id === assignedNpcId)?.name || "Untitled"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <GrUserFemale size={16} />
+                        <span>Assign character</span>
+                      </>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={8}>
+                  <p>{assignedNpcId ? "Reassign character" : "Assign character"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setAssignPlayerOpen(true);
+                      setStoryInfoOpen(false);
+                    }}
+                    className="flex items-center gap-2 w-full p-2 rounded border border-dashed text-sm text-muted-foreground hover:bg-accent/20"
+                    aria-label="Assign player"
+                  >
+                    {assignedPlayerId && characters.find((c) => c.id === assignedPlayerId) ? (
+                      <>
+                        {characters.find((c) => c.id === assignedPlayerId)?.avatarUrl ? (
+                          <img
+                            src={characters.find((c) => c.id === assignedPlayerId)?.avatarUrl}
+                            alt="Player"
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <GrUserFemale size={16} />
+                        )}
+                        <span>
+                          {characters.find((c) => c.id === assignedPlayerId)?.name || "Untitled"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <GrUserFemale size={16} />
+                        <span>Assign player</span>
+                      </>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={8}>
+                  <p>{assignedPlayerId ? "Reassign player" : "Assign player"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <div className="space-y-1">
+              <div className="text-xs uppercase text-muted-foreground">Description</div>
+              <QuillEditor
+                className="character-description-editor"
+                value={storyDescription}
+                onChange={setStoryDescription}
+                onBlur={() => {
+                  void saveStoryDescription();
+                }}
+                placeholder="No description"
+              />
             </div>
 
             <div className="pt-2 border-t border-border/40 space-y-2">
@@ -925,10 +1157,11 @@ export default function StoryPage() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Sheet open={assignNpcOpen} onOpenChange={setAssignNpcOpen}>
-        <SheetContent side="center" onClick={e => e.stopPropagation()}>
+        <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
           <SheetHeader>
             <div className="flex items-center justify-between">
               <SheetTitle>Assign NPC</SheetTitle>
@@ -944,30 +1177,99 @@ export default function StoryPage() {
               onClick={createCharacter}
               className="flex items-center gap-3 w-full p-3 rounded border"
             >
-              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">+</div>
+              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
+                +
+              </div>
               <div className="text-sm">New character</div>
             </button>
             {characters.length === 0 ? (
               <div className="text-sm text-muted-foreground">No characters yet.</div>
             ) : (
-              characters.map(character => (
+              characters.map((character) => (
                 <button
                   key={character.id}
                   type="button"
                   onClick={() => assignNpcToStory(character.id)}
                   className={`flex items-center justify-between gap-3 w-full p-3 rounded hover:bg-accent text-left ${
-                    assignedNpcId === character.id ? 'border border-primary/60' : ''
+                    assignedNpcId === character.id ? "border border-primary/60" : ""
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
-                      <GrUserFemale size={16} />
+                    <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                      {character.avatarUrl ? (
+                        <img
+                          src={character.avatarUrl}
+                          alt={character.name || "Character"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <GrUserFemale size={16} />
+                      )}
                     </div>
                     <div className="text-sm truncate">
-                      {character.name && character.name.trim() ? character.name : 'Untitled'}
+                      {character.name && character.name.trim() ? character.name : "Untitled"}
                     </div>
                   </div>
                   {assignedNpcId === character.id ? (
+                    <span className="text-xs text-primary">Assigned</span>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+      <Sheet open={assignPlayerOpen} onOpenChange={setAssignPlayerOpen}>
+        <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
+          <SheetHeader>
+            <div className="flex items-center justify-between">
+              <SheetTitle>Assign Player</SheetTitle>
+              <SheetClose />
+            </div>
+            <SheetDescription className="text-sm">
+              Select a character to assign as the player for this story.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-3 overflow-y-auto max-h-[60vh]">
+            <button
+              type="button"
+              onClick={createCharacter}
+              className="flex items-center gap-3 w-full p-3 rounded border"
+            >
+              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
+                +
+              </div>
+              <div className="text-sm">New character</div>
+            </button>
+            {characters.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No characters yet.</div>
+            ) : (
+              characters.map((character) => (
+                <button
+                  key={character.id}
+                  type="button"
+                  onClick={() => assignPlayerToStory(character.id)}
+                  className={`flex items-center justify-between gap-3 w-full p-3 rounded hover:bg-accent text-left ${
+                    assignedPlayerId === character.id ? "border border-primary/60" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                      {character.avatarUrl ? (
+                        <img
+                          src={character.avatarUrl}
+                          alt={character.name || "Character"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <GrUserFemale size={16} />
+                      )}
+                    </div>
+                    <div className="text-sm truncate">
+                      {character.name && character.name.trim() ? character.name : "Untitled"}
+                    </div>
+                  </div>
+                  {assignedPlayerId === character.id ? (
                     <span className="text-xs text-primary">Assigned</span>
                   ) : null}
                 </button>

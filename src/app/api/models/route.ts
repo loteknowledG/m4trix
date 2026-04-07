@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,10 +50,10 @@ export async function GET(req: NextRequest) {
     // Support custom LM Studio URL via query param
     let lmstudioUrlParam = searchParams.get('lmstudio_url');
     if (lmstudioUrlParam) {
-      lmstudioUrlParam = decodeURIComponent(lmstudioUrlParam).trim().replace(/\/$/, '');
+      lmstudioUrlParam = normalizeLmstudioUrl(decodeURIComponent(lmstudioUrlParam));
     }
-    const baseUrl = lmstudioUrlParam || process.env.LMSTUDIO_URL || 'http://192.168.12.48:1234';
-    const modelsUrl = `${baseUrl}/v1/models`;
+    const baseUrl = lmstudioUrlParam || normalizeLmstudioUrl(process.env.LMSTUDIO_URL) || 'http://192.168.12.48:1234';
+    const modelsUrl = getLmstudioModelsUrl(baseUrl);
     try {
       const resp = await fetch(modelsUrl, { method: 'GET' });
       if (!resp.ok) {

@@ -16,6 +16,12 @@ import {
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  CONNECTION_STORAGE_KEYS,
+  getConnectionItem,
+  removeConnectionItem,
+  setConnectionItem,
+} from '@/lib/connection-storage';
 import { cn } from '@/lib/utils';
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
@@ -29,6 +35,8 @@ export interface ConnectionSheetProps {
 }
 
 export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSheetProps) {
+  const [open, setOpen] = useState(false);
+  const [didExplicitlySelectModel, setDidExplicitlySelectModel] = useState(false);
   const [activeProvider, setActiveProvider] = useState<Provider>('zen');
   const [lmstudioUrl, setLmstudioUrl] = useState('');
   const [lmstudioConnected, setLmstudioConnected] = useState(false);
@@ -87,6 +95,9 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       ? lmstudioConnected
       : hfConnected;
 
+  const validModelsForActiveProvider = modelOptions.filter((option) => option.provider === activeProvider);
+  const hasValidSelectedModel = validModelsForActiveProvider.some((option) => option.id === model);
+
   const probeLmstudioHealth = async (urlOverride?: string) => {
     const targetUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
     setLmstudioHealth({ state: 'checking' });
@@ -119,46 +130,54 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
 
   const storeSession = () => {
     if (typeof window === 'undefined') return;
-    if (zenApiKey) window.sessionStorage.setItem('ZEN_API_KEY_SESSION', zenApiKey);
-    else window.sessionStorage.removeItem('ZEN_API_KEY_SESSION');
+    if (zenApiKey) setConnectionItem(CONNECTION_STORAGE_KEYS.zenKey, zenApiKey);
+    else removeConnectionItem(CONNECTION_STORAGE_KEYS.zenKey);
 
-    if (googleApiKey) window.sessionStorage.setItem('GOOGLE_API_KEY_SESSION', googleApiKey);
-    else window.sessionStorage.removeItem('GOOGLE_API_KEY_SESSION');
+    if (googleApiKey) setConnectionItem(CONNECTION_STORAGE_KEYS.googleKey, googleApiKey);
+    else removeConnectionItem(CONNECTION_STORAGE_KEYS.googleKey);
 
-    if (hfApiKey) window.sessionStorage.setItem('HF_API_KEY_SESSION', hfApiKey);
-    else window.sessionStorage.removeItem('HF_API_KEY_SESSION');
+    if (hfApiKey) setConnectionItem(CONNECTION_STORAGE_KEYS.hfKey, hfApiKey);
+    else removeConnectionItem(CONNECTION_STORAGE_KEYS.hfKey);
 
-    if (nvidiaApiKey) window.sessionStorage.setItem('NVIDIA_API_KEY_SESSION', nvidiaApiKey);
-    else window.sessionStorage.removeItem('NVIDIA_API_KEY_SESSION');
+    if (nvidiaApiKey) setConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey, nvidiaApiKey);
+    else removeConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey);
 
-    if (model) window.sessionStorage.setItem('ACTIVE_MODEL_SESSION', model);
-    else window.sessionStorage.removeItem('ACTIVE_MODEL_SESSION');
+    if (model) setConnectionItem(CONNECTION_STORAGE_KEYS.activeModel, model);
+    else removeConnectionItem(CONNECTION_STORAGE_KEYS.activeModel);
 
-    window.sessionStorage.setItem('ACTIVE_PROVIDER_SESSION', activeProvider);
-    window.sessionStorage.setItem('LMSTUDIO_CONNECTED', lmstudioConnected ? '1' : '');
-    if (lmstudioUrl.trim()) {
-      window.sessionStorage.setItem('LMSTUDIO_URL_SESSION', normalizeLmstudioUrl(lmstudioUrl));
+    const selectedModel = modelOptions.find((option) => option.id === model);
+    if (selectedModel) {
+      setConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider, selectedModel.provider);
     } else {
-      window.sessionStorage.removeItem('LMSTUDIO_URL_SESSION');
+      removeConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider);
+    }
+
+    setConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider, activeProvider);
+    setConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioConnected, lmstudioConnected ? '1' : '');
+    if (lmstudioUrl.trim()) {
+      setConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl, normalizeLmstudioUrl(lmstudioUrl));
+    } else {
+      removeConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl);
     }
   };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const storedZen = window.sessionStorage.getItem('ZEN_API_KEY_SESSION');
-    const storedGoogle = window.sessionStorage.getItem('GOOGLE_API_KEY_SESSION');
-    const storedHf = window.sessionStorage.getItem('HF_API_KEY_SESSION');
-    const storedNvidia = window.sessionStorage.getItem('NVIDIA_API_KEY_SESSION');
-    const storedProvider = window.sessionStorage.getItem(
-      'ACTIVE_PROVIDER_SESSION'
-    ) as Provider | null;
-    const storedLmstudio = window.sessionStorage.getItem('LMSTUDIO_CONNECTED');
-    const storedLmstudioUrl = window.sessionStorage.getItem('LMSTUDIO_URL_SESSION');
+    const storedZen = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey);
+    const storedGoogle = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey);
+    const storedHf = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey);
+    const storedNvidia = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey);
+    const storedProvider = getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) as Provider | null;
+    const storedModelProvider = getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) as Provider | null;
+    const storedLmstudio = getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioConnected);
+    const storedLmstudioUrl = getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl);
 
-    const storedModel = window.sessionStorage.getItem('ACTIVE_MODEL_SESSION');
+    const storedModel = getConnectionItem(CONNECTION_STORAGE_KEYS.activeModel);
     if (storedModel) setModel(storedModel);
-    if (storedProvider) setActiveProvider(storedProvider);
+    if (storedModelProvider) setActiveProvider(storedModelProvider);
+    else if (storedLmstudio === '1' && storedModel) setActiveProvider('lmstudio');
+    else if (storedProvider) setActiveProvider(storedProvider);
     if (storedLmstudio === '1') setLmstudioConnected(true);
     if (storedLmstudioUrl) setLmstudioUrl(normalizeLmstudioUrl(storedLmstudioUrl));
 
@@ -178,12 +197,22 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setNvidiaApiKey(storedNvidia);
       void validateAndFetchModels('nvidia', storedNvidia);
     }
-    // LM Studio is local, no key needed, just mark as connected if previously set
+    if (storedLmstudio === '1' || storedLmstudioUrl) {
+      void validateAndFetchModels('lmstudio', '');
+    }
   }, []);
 
   useEffect(() => {
     storeSession();
   }, [zenApiKey, googleApiKey, hfApiKey, nvidiaApiKey, activeProvider, model, lmstudioUrl, lmstudioConnected]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!activeProviderConnected) return;
+    if (!hasValidSelectedModel) return;
+    if (!didExplicitlySelectModel) return;
+    setOpen(false);
+  }, [open, activeProviderConnected, hasValidSelectedModel, didExplicitlySelectModel]);
 
   useEffect(() => {
     if (activeProvider !== 'lmstudio') {
@@ -212,6 +241,15 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setModel(validModels[0].id);
     }
   }, [activeProvider, modelOptions]);
+
+  useEffect(() => {
+    if (!model) return;
+    const selectedModel = modelOptions.find((option) => option.id === model);
+    if (!selectedModel) return;
+    if (selectedModel.provider !== activeProvider) {
+      setActiveProvider(selectedModel.provider);
+    }
+  }, [activeProvider, model, modelOptions]);
 
   // Ensure that when sending requests, the selected model is from the active provider
   // (This is enforced by the above effect, but double-check before sending any request)
@@ -427,8 +465,24 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     await validateAndFetchModels(activeProvider, key);
   };
 
+  const handleModelChange = (nextModel: string) => {
+    setDidExplicitlySelectModel(true);
+    setModel(nextModel);
+    const selectedModel = modelOptions.find((option) => option.id === nextModel);
+    if (selectedModel && selectedModel.provider !== activeProvider) {
+      setActiveProvider(selectedModel.provider);
+    }
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) {
+      setDidExplicitlySelectModel(false);
+    }
+  };
+
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -478,25 +532,11 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {!zenConnected && <SelectItem value="zen">OpenCode</SelectItem>}
-                  {!googleConnected && <SelectItem value="google">Google Gemini</SelectItem>}
-                  {!nvidiaConnected && <SelectItem value="nvidia">NVIDIA</SelectItem>}
-                  {!hfConnected && <SelectItem value="huggingface">Hugging Face</SelectItem>}
-                  {!lmstudioConnected && (
-                    <SelectItem value="lmstudio">LM Studio (local)</SelectItem>
-                  )}
-                  {modelOptions.some(o => o.provider === 'lmstudio') && (
-                    <div className="mt-2 px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase border-t">
-                      LM Studio
-                    </div>
-                  )}
-                  {modelOptions
-                    .filter(o => o.provider === 'lmstudio')
-                    .map(option => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
+                  <SelectItem value="zen">OpenCode</SelectItem>
+                  <SelectItem value="google">Google Gemini</SelectItem>
+                  <SelectItem value="nvidia">NVIDIA</SelectItem>
+                  <SelectItem value="huggingface">Hugging Face</SelectItem>
+                  <SelectItem value="lmstudio">LM Studio (local)</SelectItem>
                 </SelectContent>
                 {lmstudioConnected && (
                   <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-sm">
@@ -755,7 +795,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
             </div>
 
             <div className="w-full sm:col-span-4 sm:row-start-3">
-              <Select value={model} onValueChange={setModel}>
+              <Select value={model} onValueChange={handleModelChange}>
                 <SelectTrigger className="h-8 w-full sm:w-auto sm:min-w-[160px] text-xs">
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>

@@ -54,3 +54,4 @@ docs/file_tree.md
 /playwright-report
 playwright-report/index.html
 pnpm-lock.yaml
+/samus-voice-copy

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  CONNECTION_STORAGE_KEYS as SESSION_KEYS,
+  getConnectionItem,
+  removeConnectionItem,
+  setConnectionItem,
+} from '@/lib/connection-storage';
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
@@ -16,17 +22,6 @@ type UseCharacterConnectionsArgs = {
   activeProvider: Provider;
   setActiveProvider: (value: Provider) => void;
 };
-
-const SESSION_KEYS = {
-  activeModel: 'ACTIVE_MODEL_SESSION',
-  activeProvider: 'ACTIVE_PROVIDER_SESSION',
-  googleKey: 'GOOGLE_API_KEY_SESSION',
-  hfKey: 'HF_API_KEY_SESSION',
-  lmstudioConnected: 'LMSTUDIO_CONNECTED',
-  lmstudioUrl: 'LMSTUDIO_URL_SESSION',
-  nvidiaKey: 'NVIDIA_API_KEY_SESSION',
-  zenKey: 'ZEN_API_KEY_SESSION',
-} as const;
 
 function mapModelOptions(rawModels: any[], provider: Provider): ModelOption[] {
   return rawModels
@@ -109,19 +104,23 @@ export function useCharacterConnections({
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const storedModel = window.sessionStorage.getItem(SESSION_KEYS.activeModel);
-    const storedProvider = window.sessionStorage.getItem(SESSION_KEYS.activeProvider) as
+    const storedModel = getConnectionItem(SESSION_KEYS.activeModel);
+    const storedProvider = getConnectionItem(SESSION_KEYS.activeProvider) as
       | Provider
       | null;
-    const storedZen = window.sessionStorage.getItem(SESSION_KEYS.zenKey);
-    const storedGoogle = window.sessionStorage.getItem(SESSION_KEYS.googleKey);
-    const storedHf = window.sessionStorage.getItem(SESSION_KEYS.hfKey);
-    const storedNvidia = window.sessionStorage.getItem(SESSION_KEYS.nvidiaKey);
-    const storedLmstudioUrl = window.sessionStorage.getItem(SESSION_KEYS.lmstudioUrl);
-    const storedLmstudioConnected = window.sessionStorage.getItem(SESSION_KEYS.lmstudioConnected);
+    const storedModelProvider = getConnectionItem(SESSION_KEYS.activeModelProvider) as
+      | Provider
+      | null;
+    const storedZen = getConnectionItem(SESSION_KEYS.zenKey);
+    const storedGoogle = getConnectionItem(SESSION_KEYS.googleKey);
+    const storedHf = getConnectionItem(SESSION_KEYS.hfKey);
+    const storedNvidia = getConnectionItem(SESSION_KEYS.nvidiaKey);
+    const storedLmstudioUrl = getConnectionItem(SESSION_KEYS.lmstudioUrl);
+    const storedLmstudioConnected = getConnectionItem(SESSION_KEYS.lmstudioConnected);
 
     if (storedModel) setModel(storedModel);
-    if (storedProvider) setActiveProvider(storedProvider);
+    if (storedModelProvider) setActiveProvider(storedModelProvider);
+    else if (storedProvider) setActiveProvider(storedProvider);
     if (storedZen) setZenApiKey(storedZen);
     if (storedGoogle) setGoogleApiKey(storedGoogle);
     if (storedHf) setHfApiKey(storedHf);
@@ -144,33 +143,34 @@ export function useCharacterConnections({
     if (typeof window === 'undefined') return;
     if (!hasLoadedRef.current) return;
 
-    if (zenApiKey) window.sessionStorage.setItem(SESSION_KEYS.zenKey, zenApiKey);
-    else window.sessionStorage.removeItem(SESSION_KEYS.zenKey);
+    if (zenApiKey) setConnectionItem(SESSION_KEYS.zenKey, zenApiKey);
+    else removeConnectionItem(SESSION_KEYS.zenKey);
 
-    if (googleApiKey) window.sessionStorage.setItem(SESSION_KEYS.googleKey, googleApiKey);
-    else window.sessionStorage.removeItem(SESSION_KEYS.googleKey);
+    if (googleApiKey) setConnectionItem(SESSION_KEYS.googleKey, googleApiKey);
+    else removeConnectionItem(SESSION_KEYS.googleKey);
 
-    if (hfApiKey) window.sessionStorage.setItem(SESSION_KEYS.hfKey, hfApiKey);
-    else window.sessionStorage.removeItem(SESSION_KEYS.hfKey);
+    if (hfApiKey) setConnectionItem(SESSION_KEYS.hfKey, hfApiKey);
+    else removeConnectionItem(SESSION_KEYS.hfKey);
 
-    if (nvidiaApiKey) window.sessionStorage.setItem(SESSION_KEYS.nvidiaKey, nvidiaApiKey);
-    else window.sessionStorage.removeItem(SESSION_KEYS.nvidiaKey);
+    if (nvidiaApiKey) setConnectionItem(SESSION_KEYS.nvidiaKey, nvidiaApiKey);
+    else removeConnectionItem(SESSION_KEYS.nvidiaKey);
 
-    if (model) window.sessionStorage.setItem(SESSION_KEYS.activeModel, model);
-    else window.sessionStorage.removeItem(SESSION_KEYS.activeModel);
+    if (model) setConnectionItem(SESSION_KEYS.activeModel, model);
+    else removeConnectionItem(SESSION_KEYS.activeModel);
 
-    window.sessionStorage.setItem(SESSION_KEYS.activeProvider, activeProvider);
+    const selectedModel = modelOptions.find(option => option.id === model);
+    if (selectedModel) setConnectionItem(SESSION_KEYS.activeModelProvider, selectedModel.provider);
+    else removeConnectionItem(SESSION_KEYS.activeModelProvider);
 
-    if (lmstudioConnected) window.sessionStorage.setItem(SESSION_KEYS.lmstudioConnected, '1');
-    else window.sessionStorage.removeItem(SESSION_KEYS.lmstudioConnected);
+    setConnectionItem(SESSION_KEYS.activeProvider, activeProvider);
+
+    if (lmstudioConnected) setConnectionItem(SESSION_KEYS.lmstudioConnected, '1');
+    else removeConnectionItem(SESSION_KEYS.lmstudioConnected);
 
     if (lmstudioUrl.trim()) {
-      window.sessionStorage.setItem(
-        SESSION_KEYS.lmstudioUrl,
-        normalizeLmstudioUrl(lmstudioUrl)
-      );
+      setConnectionItem(SESSION_KEYS.lmstudioUrl, normalizeLmstudioUrl(lmstudioUrl));
     } else {
-      window.sessionStorage.removeItem(SESSION_KEYS.lmstudioUrl);
+      removeConnectionItem(SESSION_KEYS.lmstudioUrl);
     }
   }, [
     activeProvider,
@@ -199,11 +199,9 @@ export function useCharacterConnections({
   }, [activeProvider, model, modelOptions, setModel]);
 
   useEffect(() => {
-    if (!model || activeProvider === 'lmstudio') return;
-
     const selectedModel = modelOptions.find(option => option.id === model);
-    if (selectedModel?.provider === 'lmstudio') {
-      setActiveProvider('lmstudio');
+    if (selectedModel && selectedModel.provider !== activeProvider) {
+      setActiveProvider(selectedModel.provider);
     }
   }, [activeProvider, model, modelOptions, setActiveProvider]);
 

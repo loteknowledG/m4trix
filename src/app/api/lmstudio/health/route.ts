@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import { DEFAULT_LMSTUDIO_URL, getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const lmstudioUrl = normalizeLmstudioUrl(
     searchParams.get('lmstudio_url') || DEFAULT_LMSTUDIO_URL
   );
-  const modelsUrl = `${lmstudioUrl.replace(/\/$/, '')}/v1/models`;
+  const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);

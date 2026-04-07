@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
+import { QuillEditor } from '@/components/quill-editor';
 import { cn } from '@/lib/utils';
 
 type Agent = {
@@ -169,16 +170,17 @@ export default function AgentDetailPage() {
 
   return (
     <ContentLayout title="" navLeft={null}>
-      <div
-        className={cn(
-          'space-y-6 p-6 rounded-lg border border-dashed',
-          isDragActive ? 'border-primary bg-primary/10' : 'border-transparent'
-        )}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-      >
-        <div className="space-y-4 w-full">
+      <div className="flex h-[calc(100vh_-_var(--app-header-height,_56px)_-_4rem)] min-h-0 flex-col overflow-hidden">
+        <div
+          className={cn(
+            'flex-1 min-h-0 overflow-y-auto rounded-lg border border-dashed p-6',
+            isDragActive ? 'border-primary bg-primary/10' : 'border-transparent'
+          )}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
+          <div className="w-full space-y-4">
           {isEditingName ? (
             <input
               className="w-full text-5xl font-light bg-transparent border border-zinc-600 rounded px-3 py-2"
@@ -207,14 +209,14 @@ export default function AgentDetailPage() {
               {nameValue.trim() ? nameValue : 'Untitled'}
             </h1>
           )}
-          <textarea
-            className="w-full min-h-[120px] rounded border border-zinc-700 p-2 bg-transparent text-sm"
+          <QuillEditor
+            className="character-description-editor"
             value={descriptionValue}
-            onChange={e => setDescriptionValue(e.target.value)}
-            onBlur={() => saveAgent()}
+            onChange={setDescriptionValue}
+            onBlur={() => {
+              void saveAgent();
+            }}
             placeholder="No description"
-            aria-label="Character description"
-            rows={3}
           />
           {agent?.avatarUrl && (
             <div className="mx-auto relative mt-4 h-56 w-56 overflow-hidden rounded-lg border border-zinc-700">
@@ -226,6 +228,7 @@ export default function AgentDetailPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </ContentLayout>
   );
