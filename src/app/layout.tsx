@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { Mrs_Saint_Delafield, Satisfy } from 'next/font/google';
-import { headers } from 'next/headers';
 
 import './globals.css';
 
@@ -58,32 +57,15 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Removed unused CSP / env helpers to satisfy linter
-
-  const reqHeaders = await headers();
-  const nonce = reqHeaders.get('x-csp-nonce') ?? '';
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        {process.env.NODE_ENV === 'production' ? (
-          <meta
-            httpEquiv="Content-Security-Policy"
-            content={`default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: https://lh3.googleusercontent.com https://*.googleusercontent.com; connect-src 'self' https://m4trix.vercel.app;`}
-          />
-        ) : null}
-        {nonce ? (
-          <script
-            nonce={nonce}
-            dangerouslySetInnerHTML={{ __html: `window.__CSP_NONCE = ${JSON.stringify(nonce)}` }}
-          />
-        ) : null}
       </head>
       <body
         className={`${GeistSans.className} ${SignatureScript.variable} ${SatisfyScript.variable} h-screen overflow-y-hidden overflow-x-auto`}
       >
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" forcedTheme="dark">
           <div className="app-min-width-wrapper">
             {children}
             <script suppressHydrationWarning={true} />

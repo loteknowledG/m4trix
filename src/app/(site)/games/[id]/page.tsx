@@ -30,6 +30,8 @@ export default function GamePage() {
   const [dialogOpen, setDialogOpen] = useState(true);
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [title, setTitle] = useState("Game");
+  const [storyMoments, setStoryMoments] = useState<any[]>([]);
+  const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
 
   const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([
     {
@@ -83,6 +85,13 @@ export default function GamePage() {
     }
     return null;
   });
+  const currentMoment = storyMoments[currentMomentIndex] ?? null;
+  const hasMoments = storyMoments.length > 0;
+
+  useEffect(() => {
+    const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
+    setPreviewSrc(typeof src === "string" ? src : undefined);
+  }, [currentMoment]);
 
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
@@ -128,7 +137,8 @@ export default function GamePage() {
         try {
           const stories = (await get<any[]>("stories")) || [];
           const storyMeta = stories.find((s) => s.id === id);
-          currentStoryDescription = typeof storyMeta?.description === "string" ? storyMeta.description : "";
+          currentStoryDescription =
+            typeof storyMeta?.description === "string" ? storyMeta.description : "";
           const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
           const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
           const player = storyMeta?.playerId
@@ -474,18 +484,17 @@ export default function GamePage() {
           : storyObj && Array.isArray(storyObj.items)
             ? storyObj.items
             : [];
-
-        // Determine which moment to show: title moment if set, else first moment
-        let previewMoment = null;
-        if (storyObj && storyObj.titleMomentId && Array.isArray(momentsArr)) {
-          previewMoment = momentsArr.find((m: any) => m.id === storyObj.titleMomentId) || null;
-        }
-        if (!previewMoment && momentsArr.length > 0) {
-          previewMoment = momentsArr[0];
-        }
+        setStoryMoments(momentsArr);
         setGameData(storyObj);
-        const src = previewMoment?.src || previewMoment?.url || previewMoment?.image || null;
-        setPreviewSrc(typeof src === "string" ? src : undefined);
+        const initialMomentIndex = (() => {
+          if (!momentsArr.length) return 0;
+          if (storyObj && storyObj.titleMomentId) {
+            const titleMomentIndex = momentsArr.findIndex((m: any) => m.id === storyObj.titleMomentId);
+            return titleMomentIndex >= 0 ? titleMomentIndex : 0;
+          }
+          return 0;
+        })();
+        setCurrentMomentIndex(initialMomentIndex);
 
         // The story object in IndexedDB often doesn’t include a title,
         // so fall back to the stories metadata list (used by the carousel).
@@ -585,14 +594,46 @@ export default function GamePage() {
                 data-testid="game-sidebar-panel"
               >
                 <div className="flex h-full flex-col space-y-4 p-4">
-                  <div className="text-sm text-muted-foreground">{title}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm text-muted-foreground">{title}</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!hasMoments) return;
+                          setCurrentMomentIndex((current) =>
+                            (current - 1 + storyMoments.length) % storyMoments.length,
+                          );
+                        }}
+                        disabled={!hasMoments}
+                        className="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Previous
+                      </button>
+                      <div className="min-w-12 text-center text-xs text-muted-foreground">
+                        {hasMoments ? `${currentMomentIndex + 1}/${storyMoments.length}` : "0/0"}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!hasMoments) return;
+                          setCurrentMomentIndex((current) => (current + 1) % storyMoments.length);
+                        }}
+                        disabled={!hasMoments}
+                        className="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex flex-1 items-stretch justify-end">
                     <GameCard
                       id={id ?? "unknown"}
-                      title={gameData?.title ?? title}
+                      title={currentMoment?.name || gameData?.title || title}
                       subtitle={
-                        gameData?.subtitle ??
-                        gameData?.description ??
+                        currentMoment?.name ||
+                        gameData?.subtitle ||
+                        gameData?.description ||
                         (id ? `Game ID: ${id}` : "No game selected")
                       }
                       previewSrc={previewSrc}

@@ -167,7 +167,7 @@ body,
 
 @layer components {
   .mc-shadow-hover:hover {
-    box-shadow: 12px 12px 36px rgba(0, 0, 0, 0.88);
+    box-shadow: 14px 14px 42px rgba(0, 0, 0, 0.92);
   }
   .pushable-effect,
   .slab-surface {
@@ -175,15 +175,21 @@ body,
     position: relative;
     isolation: isolate;
     transform: translate(0, 0);
-    box-shadow: 2px 2px 0 hsl(var(--foreground));
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+      0 6px 0 hsl(var(--foreground));
   }
   .pushable-effect:hover {
     transform: translate(-1px, -1px);
-    box-shadow: 3px 3px 0 hsl(var(--foreground));
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+      0 8px 0 hsl(var(--foreground));
   }
   .pushable-effect:active {
-    transform: translate(1px, 1px);
-    box-shadow: 1px 1px 0 hsl(var(--foreground));
+    transform: translate(0, 4px);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 2px 0 hsl(var(--foreground));
   }
   .menu-color-slab::after {
     background: hsl(var(--secondary));

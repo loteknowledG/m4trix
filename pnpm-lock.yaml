@@ -156,6 +156,9 @@ importers:
         specifier: ^4.5.7
         version: 4.5.7(@types/react@18.3.28)(immer@10.2.0)(react@18.3.1)
     devDependencies:
+      '@effect/language-service':
+        specifier: ^0.84.3
+        version: 0.84.3
       '@next/eslint-plugin-next':
         specifier: ^16.2.1
         version: 16.2.1
@@ -382,6 +385,10 @@ packages:
 
   '@cropper/utils@2.1.0':
     resolution: {integrity: sha512-wLtpZ4/UWgo+fGmG8NBWge8x5ehjfDe9ovleDfLy8kpwFaw43XXOEXQtRL1UNr0u4JZxaeO8FcXcolRWUUrlRQ==}
+
+  '@effect/language-service@0.84.3':
+    resolution: {integrity: sha512-zpxi6rLCwst/cBQd7ElwDvt36Y6Jvz8v6bCLnNiOL6OXvdLmqjOFWyzWZdMh92vvBQA/aVKhfIAAOP3o4wKt0A==}
+    hasBin: true
 
   '@electron/get@2.0.3':
     resolution: {integrity: sha512-Qkzpg2s9GnVV2I2BjRksUi43U5e6+zaQMcjoJy0C+C5oxaKl+fmckGDQFtRpZpZV0NQekuZZ+tGz7EA9TVnQtQ==}
@@ -4979,6 +4986,8 @@ snapshots:
       '@cropper/element-viewer': 2.1.0
 
   '@cropper/utils@2.1.0': {}
+
+  '@effect/language-service@0.84.3': {}
 
   '@electron/get@2.0.3':
     dependencies:
