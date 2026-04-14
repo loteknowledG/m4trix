@@ -186,35 +186,44 @@ async function streamAgentReply({
   onMomentReset,
   refreshStorySummary,
 }: StreamAgentReplyArgs) {
-  const res = await fetch("/api/agents", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const readStreamedText = async () => {
+    const res = await fetch("/api/agents", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "");
-    throw new Error(errorText || "Failed to get response from LLM");
-  }
-
-  const reader = res.body?.getReader();
-  const decoder = new TextDecoder();
-  let streamedText = "";
-
-  if (reader) {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const decoded = decoder.decode(value, { stream: true });
-      if (!decoded) continue;
-      streamedText += decoded;
-      onChunk(pendingId, streamedText);
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      throw new Error(errorText || "Failed to get response from LLM");
     }
+
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+    let streamedText = "";
+
+    if (reader) {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const decoded = decoder.decode(value, { stream: true });
+        if (!decoded) continue;
+        streamedText += decoded;
+        onChunk(pendingId, streamedText);
+      }
+    }
+
+    return streamedText;
+  };
+
+  let streamedText = await readStreamedText();
+  if (!appendBaseText && !streamedText.trim()) {
+    streamedText = await readStreamedText();
   }
 
-  const assistantText = streamedText.trim() || "No response returned.";
+  const assistantText = streamedText.trim();
   const finalMessageId = `agent-${Date.now()}`;
   const finalMessage: CustomChatMessage = {
     id: finalMessageId,
@@ -222,7 +231,9 @@ async function streamAgentReply({
     text: assistantText,
   };
 
-  const finalText = appendBaseText ? joinContinuationText(appendBaseText, assistantText) : assistantText;
+  const finalText = appendBaseText
+    ? joinContinuationText(appendBaseText, assistantText || "")
+    : assistantText || "The response ended early. Try again.";
   if (appendBaseText) {
     finalMessage.text = finalText;
   }

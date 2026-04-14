@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState, DragEvent } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
 import { QuillEditor } from '@/components/quill-editor';
 import { cn } from '@/lib/utils';
+import { Trash2 } from 'lucide-react';
 
 type Agent = {
   id: string;
@@ -25,6 +26,7 @@ const AGENTS_KEY = 'PLAYGROUND_AGENTS';
 
 export default function AgentDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const rawAgentId = params?.id;
   const agentId = Array.isArray(rawAgentId) ? rawAgentId[0] ?? '' : rawAgentId ?? '';
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -168,8 +170,46 @@ export default function AgentDetailPage() {
     await saveAgent();
   };
 
+  const handleDeleteAgent = async () => {
+    if (!agent) return;
+    const confirmed =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(`Delete ${agent.name.trim() ? agent.name : 'this character'}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+      const nextAgents = (stored ?? []).filter(a => a.id !== agent.id);
+      await idbSet(AGENTS_KEY, nextAgents);
+
+      const currentTrash = (await idbGet('trash-characters')) as Agent[] | undefined;
+      const removed = stored?.find(a => a.id === agent.id) ?? agent;
+      await idbSet('trash-characters', currentTrash ? [...currentTrash, removed] : [removed]);
+      window.dispatchEvent(new Event('characters-updated'));
+      router.push('/characters/list');
+    } catch (err) {
+      console.error('Failed to delete character', err);
+    }
+  };
+
+  const navRight = (
+    <Button
+      variant="destructive"
+      size="icon"
+      onClick={() => {
+        void handleDeleteAgent();
+      }}
+      aria-label="Delete character"
+      title="Delete character"
+      className="h-9 w-9 rounded-full"
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  );
+
   return (
-    <ContentLayout title="" navLeft={null}>
+    <ContentLayout title="" navLeft={null} navRight={navRight}>
       <div className="flex h-[calc(100vh_-_var(--app-header-height,_56px)_-_4rem)] min-h-0 flex-col overflow-hidden">
         <div
           className={cn(

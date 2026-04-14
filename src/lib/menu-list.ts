@@ -71,11 +71,6 @@ export function getMenuList(): Group[] {
           icon: Gamepad,
         },
         {
-          href: '/skunkworx',
-          label: 'Skunkworx',
-          icon: LayoutGrid, // You can replace with a custom icon if desired
-        },
-        {
           href: '/trash',
           label: 'Trash',
           icon: Trash2,

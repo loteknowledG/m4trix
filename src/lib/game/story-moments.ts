@@ -92,3 +92,29 @@ export const pickBestMomentIndex = (
 
   return bestIndex;
 };
+
+export const pickBestMoment = (
+  moments: any[],
+  contextText: string,
+  titleMomentId?: string | null,
+) => {
+  if (!moments.length) {
+    return { index: 0, score: 0 };
+  }
+
+  let bestIndex = 0;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  moments.forEach((moment, index) => {
+    const score = scoreMomentForStory(moment, contextText, titleMomentId);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return {
+    index: bestIndex,
+    score: Number.isFinite(bestScore) ? bestScore : 0,
+  };
+};

@@ -53,6 +53,7 @@ export function CollapseMenuButton({
   const pathname = usePathname();
   const router = useRouter();
   const isStories = label === 'Stories';
+  const isCharacters = label === 'Characters';
   const isSubmenuActive = submenus.some(submenu =>
     submenu.active === undefined ? submenu.href === pathname : submenu.active
   );
@@ -86,6 +87,15 @@ export function CollapseMenuButton({
                     <Icon size={18} />
                   </span>
                   {isStories ? (
+                    <p
+                      className={cn(
+                        'max-w-[150px] truncate',
+                        isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
+                      )}
+                    >
+                      {label}
+                    </p>
+                  ) : isCharacters ? (
                     <p
                       className={cn(
                         'max-w-[150px] truncate',
@@ -132,6 +142,15 @@ export function CollapseMenuButton({
                   <Icon size={18} />
                 </span>
                 {isStories ? (
+                  <p
+                    className={cn(
+                      'max-w-[150px] truncate',
+                      isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
+                    )}
+                  >
+                    {label}
+                  </p>
+                ) : isCharacters ? (
                   <p
                     className={cn(
                       'max-w-[150px] truncate',
@@ -194,16 +213,27 @@ export function CollapseMenuButton({
               <span className="mr-4 ml-2">
                 <Dot size={18} />
               </span>
-              <Marquee
-                className={cn(
-                  'max-w-[170px]',
-                  isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
-                )}
-                gap="1rem"
-                duration="20s"
-              >
-                {label}
-              </Marquee>
+              {isCharacters ? (
+                <p
+                  className={cn(
+                    'max-w-[170px] truncate',
+                    isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
+                  )}
+                >
+                  {label}
+                </p>
+              ) : (
+                <Marquee
+                  className={cn(
+                    'max-w-[170px]',
+                    isOpen ? 'translate-x-0 opacity-100' : '-translate-x-[200%] opacity-0'
+                  )}
+                  gap="1rem"
+                  duration="20s"
+                >
+                  {label}
+                </Marquee>
+              )}
               {typeof count === 'number' && (
                 <span className={cn(isOpen ? 'ml-2' : 'ml-2 hidden')}>
                   <CountBadge value={count} />
@@ -278,7 +308,7 @@ export function CollapseMenuButton({
         )}
       >
         {href ? (
-          <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild>
             <Link
               href={href}
               className={cn(

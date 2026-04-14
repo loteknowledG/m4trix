@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { FaCompass } from 'react-icons/fa';
 import { FaArrowRight } from 'react-icons/fa6';
+import { FiVolume2, FiVolumeX } from 'react-icons/fi';
 import { MdOutlineEditNote } from 'react-icons/md';
 import {
   Select,
@@ -32,6 +33,7 @@ interface CustomChatWindowProps {
   onInputChange: (v: string) => void;
   onSend: () => void;
   onEditMessage?: (messageId: string, nextText: string) => void;
+  onMessageEdited?: (messageId: string, nextText: string) => void;
   onSteerMessage?: (messageId: string, nextText: string) => void;
   onContinueMessage?: (messageId: string) => void;
   steerInstruction?: string;
@@ -53,6 +55,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   onInputChange,
   onSend,
   onEditMessage,
+  onMessageEdited,
   onSteerMessage,
   onContinueMessage,
   steerInstruction,
@@ -178,6 +181,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     }
 
     onEditMessage(editingMessageId, editingText);
+    onMessageEdited?.(editingMessageId, editingText);
     cancelEdit();
   };
 
@@ -504,13 +508,17 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   ) : null}
                   <button
                     className={
-                      'rounded-md border border-zinc-700 px-3 py-1 text-xs ' +
-                      (voiceEnabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-200')
+                      'inline-flex h-8 w-8 items-center justify-center rounded-md border text-xs transition-colors ' +
+                      (voiceEnabled
+                        ? 'border-emerald-500/60 bg-emerald-600 text-white hover:bg-emerald-500'
+                        : 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700')
                     }
                     onClick={() => setVoiceEnabled(prev => !prev)}
                     type="button"
+                    aria-label={voiceEnabled ? 'Voice on' : 'Voice off'}
+                    title={voiceEnabled ? 'Voice on' : 'Voice off'}
                   >
-                    Voice: {voiceEnabled ? 'On' : 'Off'}
+                    {voiceEnabled ? <FiVolume2 className="h-4 w-4" /> : <FiVolumeX className="h-4 w-4" />}
                   </button>
                   {sendIcon ? (
                     <button

@@ -7,8 +7,6 @@ import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
-import { Pressable } from '@/components/ui/pressable';
-import { Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Marquee } from '@/components/ui/marquee';
@@ -18,15 +16,14 @@ type Agent = {
   id: string;
   name: string;
   description: string;
+  avatarUrl?: string;
 };
 
 const AGENTS_KEY = 'PLAYGROUND_AGENTS';
-const SELECTED_AGENT_KEY = 'PLAYGROUND_SELECTED_AGENT_ID';
 
 export default function AgentsListPage() {
   const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
@@ -34,16 +31,10 @@ export default function AgentsListPage() {
     let mounted = true;
     (async () => {
       const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
-      const storedSelected = (await idbGet(SELECTED_AGENT_KEY)) as string | undefined;
       if (!mounted) return;
 
       if (stored && Array.isArray(stored)) {
         setAgents(stored);
-        if (storedSelected && stored.some(agent => agent.id === storedSelected)) {
-          setSelectedAgentId(storedSelected);
-        } else if (stored.length > 0) {
-          setSelectedAgentId(stored[0].id);
-        }
       }
     })();
     return () => {
@@ -71,51 +62,8 @@ export default function AgentsListPage() {
     router.push(`/characters/${newAgent.id}`);
   };
 
-  const moveAgentToTrash = async (id: string) => {
-    const removed = agents.find(a => a.id === id);
-    if (!removed) return;
-
-    // Remove from active characters
-    const nextAgents = agents.filter(a => a.id !== id);
-    await saveAgents(nextAgents);
-
-    // Persist into trash-characters (new bucket)
-    try {
-      const currentTrash = (await idbGet('trash-characters')) as Agent[] | undefined;
-      await idbSet('trash-characters', currentTrash ? [...currentTrash, removed] : [removed]);
-    } catch (e) {
-      /* ignore
-       * In case this app does not currently use trash-characters, at least we still remove from active list.
-       */
-    }
-
-    if (selectedAgentId === id) {
-      setSelectedAgentId(nextAgents.length > 0 ? nextAgents[0].id : null);
-    }
-    window.dispatchEvent(new Event('characters-updated'));
-  };
-
-  const navRight = selectedAgentId ? (
-    <Pressable
-      onClick={() => moveAgentToTrash(selectedAgentId)}
-      className="w-9 h-9 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      title="Move to Trash"
-      aria-label="Move selected character to trash"
-    >
-      <Trash2 size={18} />
-    </Pressable>
-  ) : null;
-
-  useEffect(() => {
-    if (selectedAgentId) {
-      void idbSet(SELECTED_AGENT_KEY, selectedAgentId);
-    } else {
-      void idbSet(SELECTED_AGENT_KEY, null);
-    }
-  }, [selectedAgentId]);
-
   return (
-    <ContentLayout title="Characters" navLeft={null} navRight={navRight}>
+    <ContentLayout title="Characters" navLeft={null} navRight={null}>
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -130,45 +78,25 @@ export default function AgentsListPage() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {agents.map(agent => {
-              const isSelected = selectedAgentId === agent.id;
               return (
-                <div
-                  key={agent.id}
-                  className={`relative group rounded-xl ${
-                    isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
-                  }`}
-                >
-                  <div
-                    className={`absolute top-2 left-2 z-10 h-6 w-6 rounded-full border-2 border-white/70 bg-black/40 flex items-center justify-center transition-opacity ${
-                      isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                    onClick={e => {
-                      e.preventDefault();
-                      setSelectedAgentId(isSelected ? null : agent.id);
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="agent-selection"
-                      checked={isSelected}
-                      onChange={() => setSelectedAgentId(agent.id)}
-                      className="sr-only"
-                      aria-label={isSelected ? 'Selected character' : 'Select character'}
-                    />
-                    {isSelected ? <span className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
-                  </div>
+                <div key={agent.id} className="relative group rounded-xl">
                   <Link
                     href={`/characters/${agent.id}`}
                     className="block"
-                    onClick={() => setSelectedAgentId(isSelected ? null : agent.id)}
                   >
                     <Card
-                      className={`overflow-hidden transition-shadow duration-150 cursor-pointer ${
-                        isSelected ? 'bg-primary/10 shadow-lg' : 'shadow-sm'
-                      }`}
+                      className="overflow-hidden transition-shadow duration-150 cursor-pointer shadow-sm"
                     >
                       <div className="relative aspect-square">
-                        <div className="h-full w-full bg-zinc-900 dark:bg-zinc-800" />
+                        {agent.avatarUrl ? (
+                          <img
+                            src={agent.avatarUrl}
+                            alt={agent.name && agent.name.trim() ? agent.name : 'Untitled'}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-zinc-900 dark:bg-zinc-800" />
+                        )}
                         <div className="absolute inset-0 flex flex-col justify-end p-3 bg-gradient-to-t from-black/65 to-transparent">
                           <Marquee className="font-bold text-lg text-white truncate">
                             {agent.name && agent.name.trim() ? agent.name : 'Untitled'}

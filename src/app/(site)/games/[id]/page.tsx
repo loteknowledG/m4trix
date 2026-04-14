@@ -44,6 +44,7 @@ import {
 import { refreshStorySummary as refreshGameStorySummary } from "@/lib/game/story-memory";
 import {
   pickBestMomentIndex,
+  pickBestMoment,
   storyTextForPrompt,
 } from "@/lib/game/story-moments";
 
@@ -169,7 +170,12 @@ export default function GamePage() {
       .filter(Boolean)
       .join("\n");
 
-    const bestIndex = pickBestMomentIndex(storyMoments, contextText, gameData?.titleMomentId);
+    const { index: bestIndex, score: bestScore } = pickBestMoment(
+      storyMoments,
+      contextText,
+      gameData?.titleMomentId,
+    );
+    if (bestScore <= 0) return;
     setCurrentMomentIndex((current) => (current === bestIndex ? current : bestIndex));
   }, [
     storyMetaLoaded,
@@ -405,9 +411,11 @@ export default function GamePage() {
       const nextHistory = history.map((message) =>
         message.id === messageId ? { ...message, text: nextText } : message,
       );
+
       const lastUserEntry = [...nextHistory]
         .reverse()
         .find((message) => message.from === "user");
+
       void refreshStorySummary({
         sceneSummary: buildSceneSummary({
           title,
@@ -419,7 +427,25 @@ export default function GamePage() {
         assistantText: nextText,
         history: nextHistory,
       });
+
       return nextHistory;
+    });
+  };
+
+  const handleMessageEdited = (messageId: string, nextText: string) => {
+    const editedMessage = chatMessages.find((message) => message.id === messageId);
+    if (!editedMessage || editedMessage.from !== "agent") return;
+    if (typeof window === "undefined") return;
+
+    const text = nextText.trim();
+    if (!text) return;
+
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    }).catch((err) => {
+      console.warn("[tts] failed to speak edited text", err);
     });
   };
 
@@ -890,15 +916,8 @@ export default function GamePage() {
                 style={{ flexShrink: 1 }}
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">Chat</div>
-                  <div className="text-xs text-muted-foreground">
-                    {lmstudioHealth.state === "checking"
-                      ? "Checking LM Studio..."
-                      : lmstudioHealth.state === "healthy"
-                        ? `LM Studio reachable${lmstudioHealth.modelCount !== undefined ? `, ${lmstudioHealth.modelCount} models` : ""}`
-                        : lmstudioHealth.state === "error"
-                          ? "LM Studio not reachable"
-                          : "Talk with the assistant"}
+                  <div className="inline-flex max-w-full items-center rounded-full border border-zinc-700/80 bg-zinc-900/70 px-3 py-1 text-sm font-medium text-zinc-100 shadow-sm">
+                    <span className="truncate">{title}</span>
                   </div>
                 </div>
                 <div className="flex-1 min-h-0">
@@ -908,6 +927,7 @@ export default function GamePage() {
                     onInputChange={setChatInput}
                     onSend={sendChatMessage}
                     onEditMessage={handleEditChatMessage}
+                    onMessageEdited={handleMessageEdited}
                     onSteerMessage={handleSteerChatMessage}
                     onContinueMessage={handleContinueChatMessage}
                     steerInstruction={steerInstruction}
