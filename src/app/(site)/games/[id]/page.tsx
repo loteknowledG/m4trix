@@ -13,6 +13,7 @@ import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
 import { FullscreenDialog } from "@/components/ui/full-screen-dialog";
 import { Pressable } from "@/components/ui/pressable";
+import { CarouselNavButton } from "@/components/ui/carousel";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   CONNECTION_STORAGE_KEYS,
@@ -1046,27 +1047,27 @@ export default function GamePage() {
                       fullHeight
                       className="w-full h-full"
                     />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-3">
-                      <button
+                    <div className="pointer-events-none absolute inset-0 top-[54%] -mt-6 z-10 flex items-center justify-between px-1">
+                      <CarouselNavButton
                         type="button"
                         onClick={goToPreviousMoment}
                         disabled={!hasMoments}
                         aria-label="Previous moment"
                         title="Previous moment"
-                        className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur transition hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-40"
+                        buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]/90 hover:text-white"
                       >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                      <button
+                        <ChevronLeft className="h-4 w-4" />
+                      </CarouselNavButton>
+                      <CarouselNavButton
                         type="button"
                         onClick={goToNextMoment}
                         disabled={!hasMoments}
                         aria-label="Next moment"
                         title="Next moment"
-                        className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur transition hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-40"
+                        buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]/90 hover:text-white"
                       >
-                        <ChevronRight className="h-5 w-5" />
-                      </button>
+                        <ChevronRight className="h-4 w-4" />
+                      </CarouselNavButton>
                     </div>
                   </div>
                 </div>

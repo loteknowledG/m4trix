@@ -180,6 +180,24 @@ type CarouselControlProps = React.ComponentProps<typeof Button> & {
   buttonClassName?: string;
 };
 
+const carouselNavButtonClassName =
+  'pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/40 transition hover:bg-[#c90084]/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40';
+
+const CarouselNavButton = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
+  ({ className, buttonClassName, variant = 'raised', size = 'icon', ...props }, ref) => {
+    return (
+      <Button
+        ref={ref}
+        variant={variant}
+        size={size}
+        className={cn(carouselNavButtonClassName, buttonClassName, className)}
+        {...props}
+      />
+    );
+  }
+);
+CarouselNavButton.displayName = 'CarouselNavButton';
+
 const CarouselPrevious = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
   ({ className, buttonClassName, variant = 'raised', size = 'icon', ...props }, ref) => {
     const { orientation, scrollPrev, canScrollPrev } = useCarousel();
@@ -194,18 +212,18 @@ const CarouselPrevious = React.forwardRef<HTMLButtonElement, CarouselControlProp
           className
         )}
       >
-        <Button
+        <CarouselNavButton
           ref={ref}
           variant={variant}
           size={size}
-          className={cn('h-8 w-8 rounded-full', buttonClassName)}
+          buttonClassName={buttonClassName}
           disabled={!canScrollPrev}
           onClick={scrollPrev}
           {...props}
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="sr-only">Previous slide</span>
-        </Button>
+        </CarouselNavButton>
       </div>
     );
   }
@@ -226,18 +244,18 @@ const CarouselNext = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
           className
         )}
       >
-        <Button
+        <CarouselNavButton
           ref={ref}
           variant={variant}
           size={size}
-          className={cn('h-8 w-8 rounded-full', buttonClassName)}
+          buttonClassName={buttonClassName}
           disabled={!canScrollNext}
           onClick={scrollNext}
           {...props}
         >
           <ArrowRight className="h-4 w-4" />
           <span className="sr-only">Next slide</span>
-        </Button>
+        </CarouselNavButton>
       </div>
     );
   }
@@ -251,4 +269,5 @@ export {
   CarouselItem,
   CarouselPrevious,
   CarouselNext,
+  CarouselNavButton,
 };
