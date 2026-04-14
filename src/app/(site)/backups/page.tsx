@@ -10,6 +10,17 @@ import {
 import JsonTree from '@/components/ui/json-tree';
 import { logger } from '@/lib/logger';
 
+type StoryBackupRecord = {
+  id: string;
+  title?: string;
+  count?: number;
+  description?: string;
+  npcId?: string;
+  playerId?: string;
+  titleMomentId?: string;
+  items: any[];
+};
+
 function removeSrc(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(removeSrc);
@@ -22,6 +33,28 @@ function removeSrc(obj: any): any {
     return out;
   }
   return obj;
+}
+
+function normalizeStoryBackupRecord(meta: any, stored: any): StoryBackupRecord {
+  const storyObject =
+    stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : { items: [] };
+  const items = Array.isArray(storyObject.items)
+    ? storyObject.items
+    : Array.isArray(stored)
+      ? stored
+      : [];
+
+  const merged = {
+    ...storyObject,
+    ...meta,
+    items,
+  } as StoryBackupRecord;
+
+  if (merged.count === undefined) {
+    merged.count = items.length;
+  }
+
+  return merged;
 }
 
 function sanitizeAndStringify(raw: string): string {
@@ -51,16 +84,27 @@ export default function BackupsPage() {
     try {
       const heap = (await get('heap-moments')) || (await get('heap-gifs')) || [];
       const trash = (await get('trash-moments')) || (await get('trash-gifs')) || [];
+      const trashCharacters = (await get('trash-characters')) || [];
       // include stories and per-story items
       const savedStories =
-        (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
+        (await get<
+          Array<{
+            id: string;
+            title?: string;
+            count?: number;
+            description?: string;
+            npcId?: string;
+            playerId?: string;
+            titleMomentId?: string;
+          }>
+        >('stories')) || [];
       const storiesWithItems = await Promise.all(
         savedStories.map(async s => {
           try {
-            const items = (await get<any[]>(`story:${s.id}`)) || [];
-            return { ...s, items };
+            const storedStory = (await get<any>(`story:${s.id}`)) || [];
+            return normalizeStoryBackupRecord(s, storedStory);
           } catch (e) {
-            return { ...s, items: [] };
+            return normalizeStoryBackupRecord(s, []);
           }
         })
       );
@@ -69,20 +113,24 @@ export default function BackupsPage() {
       const prompter = await get('PLAYGROUND_PROMPTER');
       const story = await get('PLAYGROUND_STORY');
       const prompterMode = await get('PLAYGROUND_PROMPTER_MODE');
+      const selectedAgentId = await get('PLAYGROUND_SELECTED_AGENT_ID');
 
       const payload = {
         heap,
         trash,
         stories: storiesWithItems,
         agents,
+        trashCharacters,
         prompter,
         story,
         prompterMode,
+        selectedAgentId,
       };
       previewSummary = {
         heapCount: Array.isArray(heap) ? heap.length : 0,
         trashCount: Array.isArray(trash) ? trash.length : 0,
         storiesCount: Array.isArray(savedStories) ? savedStories.length : 0,
+        charactersCount: Array.isArray(agents) ? agents.length : 0,
       };
       // collect any per-item overlay text saved in indexedDB
       try {
@@ -220,11 +268,13 @@ export default function BackupsPage() {
         let validated: any[] = [];
         let storiesPayload: any[] | null = null;
         let trashPayload: any[] | null = null;
+        let trashCharactersPayload: any[] | null = null;
         let overlaysPayload: any | null = null;
         let agentsPayload: any[] | null = null;
         let prompterPayload: any | null = null;
         let storyPayload: any = null;
         let prompterModePayload: any = null;
+        let selectedAgentIdPayload: string | null | undefined = undefined;
 
         if (Array.isArray(parsed)) {
           validated = parsed.map((p: any) => ({
@@ -247,12 +297,14 @@ export default function BackupsPage() {
           }));
 
           if (Array.isArray(parsed.stories)) {
-            storiesPayload = parsed.stories.map((s: any) => ({
-              id: s.id,
-              title: s.title,
-              count: s.count ?? (Array.isArray(s.items) ? s.items.length : 0),
-              items: Array.isArray(s.items) ? s.items : [],
-            }));
+            storiesPayload = parsed.stories.map((s: any) => {
+              const items = Array.isArray(s.items) ? s.items : [];
+              return {
+                ...s,
+                items,
+                count: s.count ?? items.length,
+              };
+            });
           }
           // legacy or structured trash payloads
           const trashArr = parsed.trash ?? parsed['trash-moments'] ?? parsed['trash-gifs'] ?? null;
@@ -263,12 +315,18 @@ export default function BackupsPage() {
               name: p.name ?? p.title,
             }));
           }
+          const trashCharactersArr =
+            parsed.trashCharacters ?? parsed['trash-characters'] ?? parsed['trashCharacters'] ?? null;
+          if (Array.isArray(trashCharactersArr)) {
+            trashCharactersPayload = trashCharactersArr;
+          }
           // if the backup contains overlay data, keep it for later restoration
           overlaysPayload = parsed.overlays ?? parsed.overlay ?? null;
           agentsPayload = Array.isArray(parsed.agents) ? parsed.agents : null;
           if (parsed.prompter !== undefined) prompterPayload = parsed.prompter;
           if (parsed.story !== undefined) storyPayload = parsed.story;
           if (parsed.prompterMode !== undefined) prompterModePayload = parsed.prompterMode;
+          if (parsed.selectedAgentId !== undefined) selectedAgentIdPayload = parsed.selectedAgentId;
         } else {
           setMessage('Invalid backup file');
           setTimeout(() => setMessage(null), 4000);
@@ -326,16 +384,26 @@ export default function BackupsPage() {
             logger.warn('Failed to restore trash items', e);
           }
         }
+        if (trashCharactersPayload) {
+          try {
+            await set('trash-characters', trashCharactersPayload);
+          } catch (e) {
+            logger.warn('Failed to restore trash characters', e);
+          }
+        }
         // restore stories if present
         if (storiesPayload) {
-          const meta = storiesPayload.map(({ id, title, count }) => ({ id, title, count }));
+          const meta = storiesPayload.map(({ items, ...story }) => ({
+            ...story,
+            count: story.count ?? (Array.isArray(items) ? items.length : 0),
+          }));
           try {
             await set('stories', meta);
             // write per-story items
             await Promise.all(
               storiesPayload.map(async s => {
                 try {
-                  await set(`story:${s.id}`, s.items || []);
+                  await set(`story:${s.id}`, s);
                 } catch (e) {
                   logger.warn('Failed to write story items', s.id, e);
                 }
@@ -362,6 +430,14 @@ export default function BackupsPage() {
             }
           } catch (e) {
             logger.warn('Failed to restore agents list', e);
+          }
+        }
+
+        if (selectedAgentIdPayload !== undefined) {
+          try {
+            await set('PLAYGROUND_SELECTED_AGENT_ID', selectedAgentIdPayload);
+          } catch (e) {
+            logger.warn('Failed to restore selected agent id', e);
           }
         }
 

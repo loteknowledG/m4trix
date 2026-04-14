@@ -1,6 +1,4 @@
 import React, { useRef, useEffect } from 'react';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { User as UserIcon } from 'lucide-react';
 import {
   Select,
   SelectTrigger,
@@ -16,6 +14,7 @@ export interface CustomChatMessage {
   text: string;
   name?: string;
   avatarUrl?: string;
+  details?: string[];
 }
 
 interface CustomChatWindowProps {
@@ -55,11 +54,17 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [voiceEnabled, setVoiceEnabled] = React.useState(true);
 
-  // background gif state
-  const [bgGifUrl, setBgGifUrl] = React.useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
   const lastSpokenIdRef = useRef<string | null>(null);
+  const textForSpeech = (value: string) => {
+    const raw = typeof value === 'string' ? value : '';
+    if (!raw.trim()) return '';
+    if (typeof document === 'undefined') {
+      return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    const container = document.createElement('div');
+    container.innerHTML = raw;
+    return (container.textContent || '').replace(/\u00a0/g, ' ').trim();
+  };
 
   // keep list scrolled to bottom when messages change
   useEffect(() => {
@@ -75,13 +80,16 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     const latest = messages[messages.length - 1];
     if (latest.from !== 'agent') return;
     if (latest.id === lastSpokenIdRef.current) return;
+    if (/^Working on that request\b/i.test(latest.text.trim())) return;
 
     lastSpokenIdRef.current = latest.id;
+    const speechText = textForSpeech(latest.text);
+    if (!speechText) return;
 
     fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: latest.text }),
+      body: JSON.stringify({ text: speechText }),
     }).catch(err => {
       console.warn('[tts] failed to speak text', err);
     });
@@ -102,21 +110,6 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
       textareaRef.current?.focus();
     }, 0);
   };
-
-  // apply gif background style if set
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      if (bgGifUrl) {
-        el.style.backgroundImage = `url(${bgGifUrl})`;
-        el.style.backgroundSize = 'cover';
-        el.style.backgroundRepeat = 'no-repeat';
-        el.style.backgroundPosition = 'center';
-      } else {
-        el.style.backgroundImage = '';
-      }
-    }
-  }, [bgGifUrl]);
 
   // ensure the message list is height-constrained (parent height - footer height)
   useEffect(() => {
@@ -159,12 +152,41 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               >
                 <div
                   className={`px-4 py-3 text-sm whitespace-pre-line ${
-                    msg.from === 'user'
-                      ? 'relative ml-auto inline-block max-w-[70%] text-right bg-violet-700 text-white border border-violet-500 rounded-2xl rounded-br-none shadow'
-                      : 'w-full mr-auto max-w-[calc(100%+20px)] -ml-5 text-left text-muted-foreground'
+                    msg.id === 'story-opening'
+                      ? 'w-full rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-950/80 to-zinc-900/80 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_20px_45px_rgba(0,0,0,0.45)]'
+                      : msg.from === 'user'
+                        ? 'relative ml-auto inline-block max-w-[70%] text-right bg-violet-700 text-white border border-violet-500 rounded-2xl rounded-br-none shadow'
+                        : 'w-full mr-auto max-w-[calc(100%+20px)] -ml-5 text-left text-muted-foreground'
                   }`}
                 >
-                  {msg.text}
+                  {msg.id === 'story-opening' ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-amber-200/80">
+                        <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
+                        Story Opening
+                      </div>
+                      <div
+                        className="story-opening-html text-sm leading-6 text-amber-50/95 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_li]:mb-1 [&_strong]:font-semibold [&_em]:italic"
+                        dangerouslySetInnerHTML={{ __html: msg.text }}
+                      />
+                      {msg.details?.length ? (
+                        <div className="space-y-2">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-amber-100/60">
+                            Story details
+                          </div>
+                          <div className="space-y-1 rounded-xl border border-amber-500/15 bg-black/20 p-3 text-xs text-amber-100/85">
+                            {msg.details.map(detail => (
+                              <div key={detail} className="leading-5">
+                                {detail}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    msg.text
+                  )}
                 </div>
               </div>
             ))

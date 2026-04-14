@@ -13,11 +13,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
     }
 
-    // Use the local voice script copied from samus-manus.
+    // Use the local voice profile helper copied from samus-manus.
     const runner = 'python';
-    const scriptPath = 'samus-voice-copy/voice/voice_loop.py';
+    const scriptPath = 'tools/voice_profile.py';
 
-    await execFileAsync(runner, [scriptPath, text, '--hanna'], {
+    await execFileAsync(runner, [scriptPath, 'speak', 'jenny-neural', text], {
       cwd: process.cwd(),
       timeout: 60_000,
     });

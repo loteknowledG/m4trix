@@ -1,11 +1,12 @@
 "use client";
 
-import { get } from "idb-keyval";
+import { get, set } from "idb-keyval";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FaBug } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { type CustomChatMessage, CustomChatWindow } from "@/components/ai/custom-chat-window";
 import ErrorBoundary from "@/components/error-boundary";
@@ -19,6 +20,98 @@ import {
   setConnectionItem,
 } from "@/lib/connection-storage";
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
+import type { Agent, OrchestratedMessage } from "@/lib/agents/types";
+
+const normalizeMomentText = (value: unknown) => {
+  if (typeof value !== "string") return "";
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+};
+
+const storyTextForPrompt = (value: string) => {
+  const raw = typeof value === "string" ? value : "";
+  if (!raw.trim()) return "";
+  if (typeof document === "undefined") {
+    return raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  const container = document.createElement("div");
+  container.innerHTML = raw;
+  return (container.textContent || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
+const getMomentSearchText = (moment: any) => {
+  const pieces = [
+    moment?.name,
+    moment?.title,
+    moment?.description,
+    moment?.text,
+    moment?.caption,
+    Array.isArray(moment?.tags) ? moment.tags.join(" ") : "",
+  ];
+  return normalizeMomentText(pieces.filter(Boolean).join(" "));
+};
+
+const scoreMomentForStory = (moment: any, contextText: string, titleMomentId?: string | null) => {
+  const normalizedContext = normalizeMomentText(contextText);
+  if (!normalizedContext) return 0;
+
+  let score = 0;
+  const tags = Array.isArray(moment?.tags) ? moment.tags : [];
+
+  for (const rawTag of tags) {
+    const tag = normalizeMomentText(rawTag);
+    if (!tag) continue;
+    if (normalizedContext.includes(tag)) {
+      score += 6;
+      continue;
+    }
+
+    const tagWords = tag.split(/\s+/).filter(Boolean);
+    if (tagWords.length && tagWords.every((word) => normalizedContext.includes(word))) {
+      score += 3;
+      continue;
+    }
+
+    if (tagWords.some((word) => normalizedContext.includes(word))) {
+      score += 1;
+    }
+  }
+
+  const searchText = getMomentSearchText(moment);
+  if (searchText && normalizedContext.includes(searchText)) {
+    score += 2;
+  }
+
+  if (titleMomentId && moment?.id === titleMomentId) {
+    score += 2;
+  }
+
+  return score;
+};
+
+const pickBestMomentIndex = (
+  moments: any[],
+  contextText: string,
+  titleMomentId?: string | null,
+) => {
+  if (!moments.length) return 0;
+
+  let bestIndex = 0;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  moments.forEach((moment, index) => {
+    const score = scoreMomentForStory(moment, contextText, titleMomentId);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+};
 
 export default function GamePage() {
   const params = useParams();
@@ -32,14 +125,26 @@ export default function GamePage() {
   const [title, setTitle] = useState("Game");
   const [storyMoments, setStoryMoments] = useState<any[]>([]);
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
-
-  const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([
-    {
-      id: "welcome",
-      from: "agent",
-      text: "Welcome! This is a chat panel. Ask a question or say something to start the conversation.",
-    },
-  ]);
+  const [storyDescription, setStoryDescription] = useState("");
+  const [storyHistory, setStoryHistory] = useState<OrchestratedMessage[]>([]);
+  const [storySummary, setStorySummary] = useState("");
+  const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
+  const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
+  const buildOpeningDetails = (
+    description: string,
+    npc: typeof assignedNpc,
+    player: typeof assignedPlayer,
+  ) => {
+    const details = [
+      npc ? `NPC: ${npc.name}` : "",
+      player ? `Player: ${player.name}` : "",
+    ].filter(Boolean);
+    return {
+      text: description.trim(),
+      details,
+    };
+  };
+  const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [connected, setConnected] = useState(false);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
@@ -87,11 +192,277 @@ export default function GamePage() {
   });
   const currentMoment = storyMoments[currentMomentIndex] ?? null;
   const hasMoments = storyMoments.length > 0;
+  const gameHistoryKey = id ? `game-history:${id}` : null;
+  const gameSummaryKey = id ? `game-summary:${id}` : null;
+  const summarizeInFlightRef = useRef(false);
+
+  const goToPreviousMoment = () => {
+    if (!hasMoments) return;
+    setMomentSelectionMode("manual");
+    setCurrentMomentIndex((current) => (current - 1 + storyMoments.length) % storyMoments.length);
+  };
+
+  const goToNextMoment = () => {
+    if (!hasMoments) return;
+    setMomentSelectionMode("manual");
+    setCurrentMomentIndex((current) => (current + 1) % storyMoments.length);
+  };
 
   useEffect(() => {
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
     setPreviewSrc(typeof src === "string" ? src : undefined);
   }, [currentMoment]);
+
+  useEffect(() => {
+    if (!storyMetaLoaded) return;
+    if (!storyMoments.length) return;
+    if (momentSelectionMode !== "auto") return;
+
+    const contextText = [
+      storyTextForPrompt(storyDescription),
+      storySummary,
+      title,
+      assignedNpc ? `${assignedNpc.name} ${assignedNpc.description}` : "",
+      assignedPlayer ? `${assignedPlayer.name} ${assignedPlayer.description}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const bestIndex = pickBestMomentIndex(storyMoments, contextText, gameData?.titleMomentId);
+    setCurrentMomentIndex((current) => (current === bestIndex ? current : bestIndex));
+  }, [
+    storyMetaLoaded,
+    storyMoments,
+    storyDescription,
+    storySummary,
+    title,
+    assignedNpc,
+    assignedPlayer,
+    momentSelectionMode,
+    gameData?.titleMomentId,
+  ]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!gameHistoryKey) {
+      setStoryHistory([]);
+      setChatMessages([]);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    if (!storyMetaLoaded) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    (async () => {
+      try {
+        const stored = (await get<OrchestratedMessage[]>(gameHistoryKey)) || [];
+        if (!mounted) return;
+        const nextHistory = Array.isArray(stored) ? stored : [];
+        setStoryHistory(nextHistory);
+        const openingText =
+          storyDescription.trim() ||
+          (typeof gameData?.description === "string" ? gameData.description.trim() : "") ||
+          title.trim();
+        const opening = buildOpeningDetails(openingText, assignedNpc, assignedPlayer);
+        setChatMessages([
+          {
+            id: "story-opening",
+            from: "agent",
+            text: opening.text,
+            details: opening.details,
+          },
+          ...nextHistory.map((entry) => ({
+            id: entry.id,
+            from: entry.from,
+            text: entry.text,
+          })),
+        ]);
+      } catch {
+        if (mounted) setStoryHistory([]);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [gameHistoryKey, storyDescription, assignedNpc, assignedPlayer, storyMetaLoaded, gameData, title]);
+
+  useEffect(() => {
+    if (!gameHistoryKey) return;
+    void set(gameHistoryKey, storyHistory);
+  }, [gameHistoryKey, storyHistory]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!gameSummaryKey) {
+      setStorySummary("");
+      return () => {
+        mounted = false;
+      };
+    }
+
+    (async () => {
+      try {
+        const stored = await get<string>(gameSummaryKey);
+        if (!mounted) return;
+        setStorySummary(typeof stored === "string" ? stored : "");
+      } catch {
+        if (mounted) setStorySummary("");
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [gameSummaryKey]);
+
+  useEffect(() => {
+    if (!gameSummaryKey) return;
+    void set(gameSummaryKey, storySummary);
+  }, [gameSummaryKey, storySummary]);
+
+  const buildSceneSummary = (npc: typeof assignedNpc, player: typeof assignedPlayer) => {
+    if (!id) return "";
+    const sceneParts = [
+      title ? `Story title: ${title}` : "",
+      currentMoment?.name ? `Current moment: ${currentMoment.name}` : "",
+      npc ? `NPC: ${npc.name}${npc.description ? ` - ${npc.description}` : ""}` : "",
+      player ? `Player avatar: ${player.name}${player.description ? ` - ${player.description}` : ""}` : "",
+    ].filter(Boolean);
+    return sceneParts.join("\n");
+  };
+
+  const refreshStorySummary = async (options: {
+    sceneSummary: string;
+    userText: string;
+    assistantText: string;
+    history: OrchestratedMessage[];
+  }) => {
+    if (!gameSummaryKey || summarizeInFlightRef.current) return;
+    summarizeInFlightRef.current = true;
+
+    try {
+      const summaryPrompt = [
+        "Update the running story memory for this game.",
+        "Keep it concise but durable.",
+        "Preserve: current scene, story facts, character relationships, goals, unresolved threads, and immediate next beat.",
+        "Do not include filler, apologies, or meta commentary.",
+        "Write plain text only. Aim for 6-10 short bullet points or short paragraphs.",
+        "",
+        `Previous memory:\n${storySummary || "(none)"}`,
+        "",
+        `Scene context:\n${options.sceneSummary || "(none)"}`,
+        "",
+        `Recent history:\n${options.history
+          .slice(-12)
+          .map((msg) => `${msg.from === "user" ? "User" : "Agent"}: ${msg.text}`)
+          .join("\n")}`,
+        "",
+        `Latest user turn:\n${options.userText}`,
+        "",
+        `Latest assistant turn:\n${options.assistantText}`,
+      ].join("\n");
+
+      if (!connected) {
+        const compact = [
+          storySummary,
+          options.sceneSummary,
+          `Latest user turn: ${options.userText}`,
+          `Latest assistant turn: ${options.assistantText}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+          .trim();
+        setMomentSelectionMode("auto");
+        setStorySummary(compact.slice(0, 2000));
+        return;
+      }
+
+      const summarizerAgent: Agent = {
+        id: "summarizer",
+        name: "Story Memory",
+        description:
+          "Compress the game state into a durable summary that preserves scene facts, character relationships, goals, and unresolved threads.",
+      };
+
+      const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
+      const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
+      const hfKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ?? undefined;
+      const nvidiaKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ?? undefined;
+      const activeProvider =
+        getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
+        getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
+        "zen";
+      const lmstudioUrl = normalizeLmstudioUrl(
+        getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
+      );
+
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: summaryPrompt,
+          model: connectionModel,
+          zenApiKey: zenKey,
+          googleApiKey: googleKey,
+          hfApiKey: hfKey,
+          nvidiaApiKey: nvidiaKey,
+          provider: activeProvider,
+          lmstudioUrl: activeProvider === "lmstudio" ? lmstudioUrl : undefined,
+          agents: [summarizerAgent],
+          stateless: true,
+          orchestration: "parallel",
+          interactionMode: "neutral",
+          story: options.sceneSummary || storySummary,
+          history: options.history.slice(-12),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      const summaryText =
+        res.ok && data && Array.isArray(data.messages) && typeof data.messages[0]?.text === "string"
+          ? data.messages[0].text.trim()
+          : "";
+
+      if (summaryText) {
+        setMomentSelectionMode("auto");
+        setStorySummary(summaryText.slice(0, 2000));
+      } else {
+        const fallback = [
+          storySummary,
+          options.sceneSummary,
+          `Latest user turn: ${options.userText}`,
+          `Latest assistant turn: ${options.assistantText}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+          .trim();
+        setMomentSelectionMode("auto");
+        setStorySummary(fallback.slice(0, 2000));
+      }
+    } catch {
+      const fallback = [
+        storySummary,
+        options.sceneSummary,
+        `Latest user turn: ${options.userText}`,
+        `Latest assistant turn: ${options.assistantText}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim();
+      setMomentSelectionMode("auto");
+      setStorySummary(fallback.slice(0, 2000));
+    } finally {
+      summarizeInFlightRef.current = false;
+    }
+  };
 
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
@@ -104,6 +475,15 @@ export default function GamePage() {
     };
 
     setChatMessages((messages) => [...messages, userMessage]);
+    const userHistoryEntry: OrchestratedMessage = {
+      id: userMessage.id,
+      from: "user",
+      text: trimmed,
+    };
+    setStoryHistory((messages) => [
+      ...messages,
+      userHistoryEntry,
+    ].slice(-20));
     setChatInput("");
 
     if (!connected) {
@@ -115,6 +495,22 @@ export default function GamePage() {
           text: `You said: "${trimmed}". This is a demo response.`,
         };
         setChatMessages((messages) => [...messages, botMessage]);
+        const assistantHistoryEntry: OrchestratedMessage = {
+          id: botMessage.id,
+          from: "agent",
+          text: botMessage.text,
+        };
+        const nextHistorySnapshot = [...storyHistory, userHistoryEntry, assistantHistoryEntry].slice(
+          -20,
+        );
+        setStoryHistory(nextHistorySnapshot);
+        setMomentSelectionMode("auto");
+        void refreshStorySummary({
+          sceneSummary: currentSceneSummary,
+          userText: trimmed,
+          assistantText: botMessage.text,
+          history: nextHistorySnapshot,
+        });
       }, 450);
       return;
     }
@@ -133,12 +529,14 @@ export default function GamePage() {
       let currentNpc = assignedNpc;
       let currentPlayer = assignedPlayer;
       let currentStoryDescription = "";
+      let currentSceneSummary = "";
       if (id) {
         try {
           const stories = (await get<any[]>("stories")) || [];
           const storyMeta = stories.find((s) => s.id === id);
-          currentStoryDescription =
-            typeof storyMeta?.description === "string" ? storyMeta.description : "";
+          currentStoryDescription = storyTextForPrompt(
+            typeof storyMeta?.description === "string" ? storyMeta.description : "",
+          );
           const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
           const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
           const player = storyMeta?.playerId
@@ -161,6 +559,8 @@ export default function GamePage() {
                 avatarUrl: player.avatarUrl,
               }
             : null;
+
+          currentSceneSummary = buildSceneSummary(currentNpc, currentPlayer);
 
           setAssignedNpc(currentNpc);
           setAssignedPlayer(currentPlayer);
@@ -192,8 +592,15 @@ export default function GamePage() {
         nvidiaApiKey: nvidiaKey,
         provider: activeProvider,
       };
-      if (currentStoryDescription.trim()) {
-        requestBody.story = currentStoryDescription;
+      const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim();
+      if (storyContext) {
+        requestBody.story = storyContext;
+      }
+      if (storyHistory.length > 0) {
+        requestBody.history = storyHistory;
       }
       if (activeProvider === "lmstudio") {
         requestBody.lmstudioUrl = lmstudioUrl;
@@ -239,6 +646,22 @@ export default function GamePage() {
       }));
 
       setChatMessages((messages) => [...messages, ...botMessages]);
+      const assistantHistoryEntries = botMessages.map((m) => ({
+        id: m.id,
+        from: "agent" as const,
+        text: m.text,
+      }));
+      const nextHistorySnapshot = [...storyHistory, userHistoryEntry, ...assistantHistoryEntries].slice(
+        -20,
+      );
+      setStoryHistory(nextHistorySnapshot);
+      setMomentSelectionMode("auto");
+      void refreshStorySummary({
+        sceneSummary: currentSceneSummary,
+        userText: trimmed,
+        assistantText: assistantHistoryEntries.map((m) => m.text).join("\n"),
+        history: nextHistorySnapshot,
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : typeof err === "string" ? err : "Unknown error";
@@ -472,6 +895,8 @@ export default function GamePage() {
 
     // Default title while we load data.
     setTitle(`Game ${id}`);
+    setStoryMetaLoaded(false);
+    setChatMessages([]);
 
     (async () => {
       try {
@@ -505,6 +930,13 @@ export default function GamePage() {
           if (!resolvedTitle) {
             resolvedTitle = storyMeta?.title ?? "";
           }
+          const resolvedDescription =
+            typeof storyMeta?.description === "string" && storyMeta.description.trim()
+              ? storyMeta.description
+              : typeof storyObj?.description === "string"
+                ? storyObj.description
+                : "";
+          setStoryDescription(resolvedDescription);
           const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
           const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
           const player = storyMeta?.playerId
@@ -535,7 +967,7 @@ export default function GamePage() {
         } catch {
           /* ignore */
         }
-
+        setStoryMetaLoaded(true);
         setTitle(resolvedTitle || `Game ${id}`);
       } catch (e) {
         console.error("Failed to load game data", e);
@@ -596,37 +1028,11 @@ export default function GamePage() {
                 <div className="flex h-full flex-col space-y-4 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm text-muted-foreground">{title}</div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!hasMoments) return;
-                          setCurrentMomentIndex((current) =>
-                            (current - 1 + storyMoments.length) % storyMoments.length,
-                          );
-                        }}
-                        disabled={!hasMoments}
-                        className="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Previous
-                      </button>
-                      <div className="min-w-12 text-center text-xs text-muted-foreground">
-                        {hasMoments ? `${currentMomentIndex + 1}/${storyMoments.length}` : "0/0"}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!hasMoments) return;
-                          setCurrentMomentIndex((current) => (current + 1) % storyMoments.length);
-                        }}
-                        disabled={!hasMoments}
-                        className="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Next
-                      </button>
+                    <div className="text-xs text-muted-foreground">
+                      {hasMoments ? `${currentMomentIndex + 1}/${storyMoments.length}` : "0/0"}
                     </div>
                   </div>
-                  <div className="flex flex-1 items-stretch justify-end">
+                  <div className="relative flex flex-1 items-stretch justify-end">
                     <GameCard
                       id={id ?? "unknown"}
                       title={currentMoment?.name || gameData?.title || title}
@@ -640,6 +1046,28 @@ export default function GamePage() {
                       fullHeight
                       className="w-full h-full"
                     />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-3">
+                      <button
+                        type="button"
+                        onClick={goToPreviousMoment}
+                        disabled={!hasMoments}
+                        aria-label="Previous moment"
+                        title="Previous moment"
+                        className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur transition hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={goToNextMoment}
+                        disabled={!hasMoments}
+                        aria-label="Next moment"
+                        title="Next moment"
+                        className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur transition hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </ResizablePanel>
@@ -776,6 +1204,20 @@ export default function GamePage() {
                 <h4 className="mb-2 text-sm font-medium text-slate-400">Request</h4>
                 <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs">
                   {JSON.stringify(debugData.request, null, 2)}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Story Memory</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {storySummary || "No story summary yet"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Recent History</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {storyHistory.length
+                    ? JSON.stringify(storyHistory, null, 2)
+                    : "No recent history yet"}
                 </pre>
               </div>
               <div className="flex-1 min-h-0">
