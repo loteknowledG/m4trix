@@ -8,6 +8,8 @@ export type GameCardProps = {
   title: string;
   subtitle?: string;
   previewSrc?: string;
+  previewFit?: 'cover' | 'contain';
+  showFooter?: boolean;
   selected?: boolean;
   onClick?: (id: string) => void;
   onSelect?: (id: string) => void;
@@ -22,6 +24,8 @@ export function GameCard({
   title,
   subtitle,
   previewSrc,
+  previewFit = 'cover',
+  showFooter = true,
   selected = false,
   onClick,
   onSelect,
@@ -57,7 +61,10 @@ export function GameCard({
           <img
             src={previewSrc}
             alt={title}
-            className={cn('w-full object-cover', fullHeight ? 'h-full' : 'h-full')}
+            className={cn(
+              'relative z-10 h-full w-full',
+              previewFit === 'contain' ? 'object-contain' : 'object-cover'
+            )}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm text-white/70">
@@ -69,11 +76,13 @@ export function GameCard({
             {selected ? 'Selected' : 'Select'}
           </div>
         )}
-      </div>
-      <div className="p-3 text-left">
-        <div className="text-sm font-semibold text-white line-clamp-1">{title}</div>
-        {subtitle ? (
-          <div className="mt-1 text-xs text-white/70 line-clamp-2">{subtitle}</div>
+        {showFooter ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-3 text-left">
+            <div className="text-sm font-semibold text-white line-clamp-1">{title}</div>
+            {subtitle ? (
+              <div className="mt-1 text-xs text-white/75 line-clamp-1">{subtitle}</div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </button>

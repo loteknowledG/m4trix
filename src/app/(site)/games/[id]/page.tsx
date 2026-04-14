@@ -114,6 +114,356 @@ const pickBestMomentIndex = (
   return bestIndex;
 };
 
+type StreamAgentReplyArgs = {
+  requestBody: Record<string, unknown>;
+  pendingId: string;
+  storyHistory: OrchestratedMessage[];
+  userHistoryEntry: OrchestratedMessage;
+  trimmed: string;
+  currentSceneSummary: string;
+  onChunk: (messageId: string, text: string) => void;
+  onFinalize: (pendingId: string, finalId: string, text: string) => void;
+  onDebugResponse: (message: CustomChatMessage) => void;
+  onHistoryUpdate: (nextHistory: OrchestratedMessage[]) => void;
+  onMomentReset: () => void;
+  refreshStorySummary: (args: {
+    sceneSummary: string;
+    userText: string;
+    assistantText: string;
+    history: OrchestratedMessage[];
+  }) => void | Promise<void>;
+};
+
+type GameCharacterContext = {
+  id: string;
+  name: string;
+  description: string;
+  avatarUrl?: string;
+} | null;
+
+async function streamAgentReply({
+  requestBody,
+  pendingId,
+  storyHistory,
+  userHistoryEntry,
+  trimmed,
+  currentSceneSummary,
+  onChunk,
+  onFinalize,
+  onDebugResponse,
+  onHistoryUpdate,
+  onMomentReset,
+  refreshStorySummary,
+}: StreamAgentReplyArgs) {
+  const res = await fetch("/api/agents", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(errorText || "Failed to get response from LLM");
+  }
+
+  const reader = res.body?.getReader();
+  const decoder = new TextDecoder();
+  let streamedText = "";
+
+  if (reader) {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const decoded = decoder.decode(value, { stream: true });
+      if (!decoded) continue;
+      streamedText += decoded;
+      onChunk(pendingId, streamedText);
+    }
+  }
+
+  const assistantText = streamedText.trim() || "No response returned.";
+  const finalMessageId = `agent-${Date.now()}`;
+  const finalMessage: CustomChatMessage = {
+    id: finalMessageId,
+    from: "agent",
+    text: assistantText,
+  };
+
+  onFinalize(pendingId, finalMessageId, assistantText);
+  onDebugResponse(finalMessage);
+
+  const assistantHistoryEntries = [
+    {
+      id: finalMessage.id,
+      from: "agent" as const,
+      text: finalMessage.text,
+    },
+  ];
+  const nextHistorySnapshot = [...storyHistory, userHistoryEntry, ...assistantHistoryEntries].slice(-20);
+  onHistoryUpdate(nextHistorySnapshot);
+  onMomentReset();
+  await refreshStorySummary({
+    sceneSummary: currentSceneSummary,
+    userText: trimmed,
+    assistantText,
+    history: nextHistorySnapshot,
+  });
+}
+
+function buildGameAgentRequest(params: {
+  trimmed: string;
+  connectionModel: string | null;
+  activeProvider: string;
+  zenKey?: string;
+  googleKey?: string;
+  hfKey?: string;
+  nvidiaKey?: string;
+  lmstudioUrl: string;
+  storyContext: string;
+  storyHistory: OrchestratedMessage[];
+  currentNpc: { id: string; name: string; description: string } | null;
+  currentPlayer: { id: string; name: string; description: string } | null;
+}) {
+  const {
+    trimmed,
+    connectionModel,
+    activeProvider,
+    zenKey,
+    googleKey,
+    hfKey,
+    nvidiaKey,
+    lmstudioUrl,
+    storyContext,
+    storyHistory,
+    currentNpc,
+    currentPlayer,
+  } = params;
+
+  const requestBody: Record<string, unknown> = {
+    prompt: trimmed,
+    model: connectionModel,
+    zenApiKey: zenKey,
+    googleApiKey: googleKey,
+    hfApiKey: hfKey,
+    nvidiaApiKey: nvidiaKey,
+    provider: activeProvider,
+    stream: true,
+  };
+
+  if (storyContext) requestBody.story = storyContext;
+  if (storyHistory.length > 0) requestBody.history = storyHistory;
+  if (activeProvider === "lmstudio") requestBody.lmstudioUrl = lmstudioUrl;
+  if (currentNpc) {
+    requestBody.character = {
+      id: currentNpc.id,
+      name: currentNpc.name,
+      description: currentNpc.description,
+    };
+  }
+  if (currentPlayer) {
+    requestBody.coordinatorAgent = {
+      id: currentPlayer.id,
+      name: currentPlayer.name,
+      description: currentPlayer.description,
+    };
+  }
+
+  return requestBody;
+}
+
+function queueDemoReply(params: {
+  trimmed: string;
+  storyHistory: OrchestratedMessage[];
+  userHistoryEntry: OrchestratedMessage;
+  assignedNpc: GameCharacterContext;
+  assignedPlayer: GameCharacterContext;
+  setChatMessages: (value: CustomChatMessage[] | ((messages: CustomChatMessage[]) => CustomChatMessage[])) => void;
+  setStoryHistory: (value: OrchestratedMessage[] | ((messages: OrchestratedMessage[]) => OrchestratedMessage[])) => void;
+  setMomentSelectionMode: (value: "auto" | "manual") => void;
+  refreshStorySummary: (args: {
+    sceneSummary: string;
+    userText: string;
+    assistantText: string;
+    history: OrchestratedMessage[];
+  }) => void | Promise<void>;
+  buildSceneSummary: (npc: any, player: any) => string;
+}) {
+  const {
+    trimmed,
+    storyHistory,
+    userHistoryEntry,
+    assignedNpc,
+    assignedPlayer,
+    setChatMessages,
+    setStoryHistory,
+    setMomentSelectionMode,
+    refreshStorySummary,
+    buildSceneSummary,
+  } = params;
+
+  setTimeout(() => {
+    const botMessage: CustomChatMessage = {
+      id: `bot-${Date.now()}`,
+      from: "agent",
+      text: `You said: "${trimmed}". This is a demo response.`,
+    };
+    setChatMessages((messages) => [...messages, botMessage]);
+    const assistantHistoryEntry: OrchestratedMessage = {
+      id: botMessage.id,
+      from: "agent",
+      text: botMessage.text,
+    };
+    const nextHistorySnapshot = [...storyHistory, userHistoryEntry, assistantHistoryEntry].slice(-20);
+    setStoryHistory(nextHistorySnapshot);
+    setMomentSelectionMode("auto");
+    void refreshStorySummary({
+      sceneSummary: buildSceneSummary(assignedNpc, assignedPlayer),
+      userText: trimmed,
+      assistantText: botMessage.text,
+      history: nextHistorySnapshot,
+    });
+  }, 450);
+}
+
+const updateStreamingMessage = (
+  messages: CustomChatMessage[],
+  messageId: string,
+  text: string,
+) => messages.map((message) => (message.id === messageId ? { ...message, text } : message));
+
+const finalizeStreamingMessage = (
+  messages: CustomChatMessage[],
+  messageId: string,
+  finalId: string,
+  text: string,
+) =>
+  messages.map((message) =>
+    message.id === messageId ? { ...message, id: finalId, text } : message,
+  );
+
+async function runConnectedChatTurn(params: {
+  pendingId: string;
+  trimmed: string;
+  connectionModel: string | null;
+  storySummary: string;
+  storyHistory: OrchestratedMessage[];
+  userHistoryEntry: OrchestratedMessage;
+  resolveGameAgentContext: () => Promise<{
+    currentNpc: GameCharacterContext;
+    currentPlayer: GameCharacterContext;
+    currentStoryDescription: string;
+    currentSceneSummary: string;
+  }>;
+  refreshStorySummary: (args: {
+    sceneSummary: string;
+    userText: string;
+    assistantText: string;
+    history: OrchestratedMessage[];
+  }) => void | Promise<void>;
+  setChatMessages: React.Dispatch<React.SetStateAction<CustomChatMessage[]>>;
+  setStoryHistory: React.Dispatch<React.SetStateAction<OrchestratedMessage[]>>;
+  setMomentSelectionMode: React.Dispatch<React.SetStateAction<"auto" | "manual">>;
+  setDebugData: React.Dispatch<
+    React.SetStateAction<
+      | {
+          request: any;
+          response: any;
+          prompt: string;
+        }
+      | null
+    >
+  >;
+}) {
+  const {
+    pendingId,
+    trimmed,
+    connectionModel,
+    storySummary,
+    storyHistory,
+    userHistoryEntry,
+    resolveGameAgentContext,
+    refreshStorySummary,
+    setChatMessages,
+    setStoryHistory,
+    setMomentSelectionMode,
+    setDebugData,
+  } = params;
+  setChatMessages((messages) => [
+    ...messages,
+    {
+      id: pendingId,
+      from: "agent",
+      text: `Working on that request${connectionModel ? ` with ${connectionModel}` : ""}...`,
+    },
+  ]);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const { currentNpc, currentPlayer, currentStoryDescription, currentSceneSummary } =
+    await resolveGameAgentContext();
+
+  const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
+  const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
+  const hfKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ?? undefined;
+  const nvidiaKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ?? undefined;
+
+  const activeProvider =
+    getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
+    getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
+    "zen";
+  const lmstudioUrl = normalizeLmstudioUrl(
+    getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
+  );
+  const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  const requestBody = buildGameAgentRequest({
+    trimmed,
+    connectionModel,
+    activeProvider,
+    zenKey,
+    googleKey,
+    hfKey,
+    nvidiaKey,
+    lmstudioUrl,
+    storyContext,
+    storyHistory,
+    currentNpc,
+    currentPlayer,
+  });
+
+  setDebugData({ request: requestBody, response: null, prompt: trimmed });
+  await streamAgentReply({
+    requestBody,
+    pendingId,
+    storyHistory,
+    userHistoryEntry,
+    trimmed,
+    currentSceneSummary,
+    onChunk: (messageId, text) =>
+      setChatMessages((messages) => updateStreamingMessage(messages, messageId, text)),
+    onFinalize: (messageId, finalId, text) =>
+      setChatMessages((messages) => finalizeStreamingMessage(messages, messageId, finalId, text)),
+    onDebugResponse: (finalMessage) =>
+      setDebugData((prev) =>
+        prev
+          ? {
+              ...prev,
+              response: {
+                streamed: true,
+                messages: [finalMessage],
+              },
+            }
+          : null,
+      ),
+    onHistoryUpdate: (nextHistorySnapshot) => setStoryHistory(nextHistorySnapshot),
+    onMomentReset: () => setMomentSelectionMode("auto"),
+    refreshStorySummary,
+  });
+}
+
 export default function GamePage() {
   const params = useParams();
   const id = params?.id as string | undefined;
@@ -242,56 +592,6 @@ export default function GamePage() {
     momentSelectionMode,
     gameData?.titleMomentId,
   ]);
-
-  useEffect(() => {
-    let mounted = true;
-    if (!gameHistoryKey) {
-      setStoryHistory([]);
-      setChatMessages([]);
-      return () => {
-        mounted = false;
-      };
-    }
-
-    if (!storyMetaLoaded) {
-      return () => {
-        mounted = false;
-      };
-    }
-
-    (async () => {
-      try {
-        const stored = (await get<OrchestratedMessage[]>(gameHistoryKey)) || [];
-        if (!mounted) return;
-        const nextHistory = Array.isArray(stored) ? stored : [];
-        setStoryHistory(nextHistory);
-        const openingText =
-          storyDescription.trim() ||
-          (typeof gameData?.description === "string" ? gameData.description.trim() : "") ||
-          title.trim();
-        const opening = buildOpeningDetails(openingText, assignedNpc, assignedPlayer);
-        setChatMessages([
-          {
-            id: "story-opening",
-            from: "agent",
-            text: opening.text,
-            details: opening.details,
-          },
-          ...nextHistory.map((entry) => ({
-            id: entry.id,
-            from: entry.from,
-            text: entry.text,
-          })),
-        ]);
-      } catch {
-        if (mounted) setStoryHistory([]);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [gameHistoryKey, storyDescription, assignedNpc, assignedPlayer, storyMetaLoaded, gameData, title]);
 
   useEffect(() => {
     if (!gameHistoryKey) return;
@@ -465,9 +765,63 @@ export default function GamePage() {
     }
   };
 
+  const resolveGameAgentContext = async () => {
+    let currentNpc = assignedNpc;
+    let currentPlayer = assignedPlayer;
+    let currentStoryDescription = "";
+    let currentSceneSummary = "";
+
+    if (id) {
+      try {
+        const stories = (await get<any[]>("stories")) || [];
+        const storyMeta = stories.find((s) => s.id === id);
+        currentStoryDescription = storyTextForPrompt(
+          typeof storyMeta?.description === "string" ? storyMeta.description : "",
+        );
+        const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
+        const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
+        const player = storyMeta?.playerId
+          ? characters.find((c) => c.id === storyMeta.playerId)
+          : null;
+
+        currentNpc = npc
+          ? {
+              id: npc.id,
+              name: npc.name ?? "",
+              description: npc.description ?? "",
+              avatarUrl: npc.avatarUrl,
+            }
+          : null;
+        currentPlayer = player
+          ? {
+              id: player.id,
+              name: player.name ?? "",
+              description: player.description ?? "",
+              avatarUrl: player.avatarUrl,
+            }
+          : null;
+
+        currentSceneSummary = buildSceneSummary(currentNpc, currentPlayer);
+
+        setAssignedNpc(currentNpc);
+        setAssignedPlayer(currentPlayer);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return {
+      currentNpc,
+      currentPlayer,
+      currentStoryDescription,
+      currentSceneSummary,
+    };
+  };
+
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
     if (!trimmed) return;
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     const userMessage: CustomChatMessage = {
       id: `user-${Date.now()}`,
@@ -488,180 +842,35 @@ export default function GamePage() {
     setChatInput("");
 
     if (!connected) {
-      // Fallback local response when no LLM connection is configured
-      setTimeout(() => {
-        const botMessage: CustomChatMessage = {
-          id: `bot-${Date.now()}`,
-          from: "agent",
-          text: `You said: "${trimmed}". This is a demo response.`,
-        };
-        setChatMessages((messages) => [...messages, botMessage]);
-        const assistantHistoryEntry: OrchestratedMessage = {
-          id: botMessage.id,
-          from: "agent",
-          text: botMessage.text,
-        };
-        const nextHistorySnapshot = [...storyHistory, userHistoryEntry, assistantHistoryEntry].slice(
-          -20,
-        );
-        setStoryHistory(nextHistorySnapshot);
-        setMomentSelectionMode("auto");
-        void refreshStorySummary({
-          sceneSummary: currentSceneSummary,
-          userText: trimmed,
-          assistantText: botMessage.text,
-          history: nextHistorySnapshot,
-        });
-      }, 450);
+      queueDemoReply({
+        trimmed,
+        storyHistory,
+        userHistoryEntry,
+        assignedNpc,
+        assignedPlayer,
+        setChatMessages: (updater) => setChatMessages(updater),
+        setStoryHistory: (updater) => setStoryHistory(updater),
+        setMomentSelectionMode: (value) => setMomentSelectionMode(value),
+        refreshStorySummary,
+        buildSceneSummary,
+      });
       return;
     }
 
-    const pendingId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setChatMessages((messages) => [
-      ...messages,
-      {
-        id: pendingId,
-        from: "agent",
-        text: `Working on that request${connectionModel ? ` with ${connectionModel}` : ""}...`,
-      },
-    ]);
-
     try {
-      let currentNpc = assignedNpc;
-      let currentPlayer = assignedPlayer;
-      let currentStoryDescription = "";
-      let currentSceneSummary = "";
-      if (id) {
-        try {
-          const stories = (await get<any[]>("stories")) || [];
-          const storyMeta = stories.find((s) => s.id === id);
-          currentStoryDescription = storyTextForPrompt(
-            typeof storyMeta?.description === "string" ? storyMeta.description : "",
-          );
-          const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
-          const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
-          const player = storyMeta?.playerId
-            ? characters.find((c) => c.id === storyMeta.playerId)
-            : null;
-
-          currentNpc = npc
-            ? {
-                id: npc.id,
-                name: npc.name ?? "",
-                description: npc.description ?? "",
-                avatarUrl: npc.avatarUrl,
-              }
-            : null;
-          currentPlayer = player
-            ? {
-                id: player.id,
-                name: player.name ?? "",
-                description: player.description ?? "",
-                avatarUrl: player.avatarUrl,
-              }
-            : null;
-
-          currentSceneSummary = buildSceneSummary(currentNpc, currentPlayer);
-
-          setAssignedNpc(currentNpc);
-          setAssignedPlayer(currentPlayer);
-        } catch {
-          /* ignore */
-        }
-      }
-
-      // ===> THE REQUEST TO /api/agents IS MADE RIGHT HERE <===
-      const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
-      const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
-      const hfKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ?? undefined;
-      const nvidiaKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ?? undefined;
-
-      // Patch: Always use the active provider and lmstudioUrl from session storage
-      const activeProvider =
-        getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
-        getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
-        "zen";
-      const lmstudioUrl = normalizeLmstudioUrl(
-        getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
-      );
-      const requestBody: any = {
-        prompt: trimmed,
-        model: connectionModel,
-        zenApiKey: zenKey,
-        googleApiKey: googleKey,
-        hfApiKey: hfKey,
-        nvidiaApiKey: nvidiaKey,
-        provider: activeProvider,
-      };
-      const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
-        .filter(Boolean)
-        .join("\n\n")
-        .trim();
-      if (storyContext) {
-        requestBody.story = storyContext;
-      }
-      if (storyHistory.length > 0) {
-        requestBody.history = storyHistory;
-      }
-      if (activeProvider === "lmstudio") {
-        requestBody.lmstudioUrl = lmstudioUrl;
-      }
-      if (currentNpc) {
-        requestBody.character = {
-          id: currentNpc.id,
-          name: currentNpc.name,
-          description: currentNpc.description,
-        };
-      }
-      if (currentPlayer) {
-        requestBody.coordinatorAgent = {
-          id: currentPlayer.id,
-          name: currentPlayer.name,
-          description: currentPlayer.description,
-        };
-      }
-
-      setDebugData({ request: requestBody, response: null, prompt: trimmed });
-
-      const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || !Array.isArray(data.messages)) {
-        throw new Error(data?.error || "Failed to get response from LLM");
-      }
-
-      setDebugData((prev) => (prev ? { ...prev, response: data } : null));
-
-      setChatMessages((messages) => messages.filter((m) => m.id !== pendingId));
-
-      const botMessages: CustomChatMessage[] = data.messages.map((m: any, idx: number) => ({
-        id: m.id || `agent-${Date.now()}-${idx}`,
-        from: "agent",
-        text: typeof m.text === "string" ? m.text : String(m.text ?? ""),
-      }));
-
-      setChatMessages((messages) => [...messages, ...botMessages]);
-      const assistantHistoryEntries = botMessages.map((m) => ({
-        id: m.id,
-        from: "agent" as const,
-        text: m.text,
-      }));
-      const nextHistorySnapshot = [...storyHistory, userHistoryEntry, ...assistantHistoryEntries].slice(
-        -20,
-      );
-      setStoryHistory(nextHistorySnapshot);
-      setMomentSelectionMode("auto");
-      void refreshStorySummary({
-        sceneSummary: currentSceneSummary,
-        userText: trimmed,
-        assistantText: assistantHistoryEntries.map((m) => m.text).join("\n"),
-        history: nextHistorySnapshot,
+      await runConnectedChatTurn({
+        pendingId,
+        trimmed,
+        connectionModel,
+        storySummary,
+        storyHistory,
+        userHistoryEntry,
+        resolveGameAgentContext,
+        refreshStorySummary,
+        setChatMessages,
+        setStoryHistory,
+        setMomentSelectionMode,
+        setDebugData,
       });
     } catch (err) {
       const message =
@@ -965,11 +1174,56 @@ export default function GamePage() {
                 }
               : null,
           );
+
+          setStoryMetaLoaded(true);
+          setTitle(resolvedTitle || `Game ${id}`);
+
+          const storedHistory = (await get<OrchestratedMessage[]>(`game-history:${id}`)) || [];
+          if (!mounted) return;
+
+          const nextHistory = Array.isArray(storedHistory) ? storedHistory : [];
+          setStoryHistory(nextHistory);
+
+          const openingText =
+            resolvedDescription.trim() ||
+            (typeof storyObj?.description === "string" ? storyObj.description.trim() : "") ||
+            resolvedTitle.trim() ||
+            `Game ${id}`;
+          const opening = buildOpeningDetails(
+            openingText,
+            npc
+              ? {
+                  id: npc.id,
+                  name: npc.name ?? "",
+                  description: npc.description ?? "",
+                  avatarUrl: npc.avatarUrl,
+                }
+              : null,
+            player
+              ? {
+                  id: player.id,
+                  name: player.name ?? "",
+                  description: player.description ?? "",
+                  avatarUrl: player.avatarUrl,
+                }
+              : null,
+          );
+          setChatMessages([
+            {
+              id: "story-opening",
+              from: "agent",
+              text: opening.text,
+              details: opening.details,
+            },
+            ...nextHistory.map((entry) => ({
+              id: entry.id,
+              from: entry.from,
+              text: entry.text,
+            })),
+          ]);
         } catch {
           /* ignore */
         }
-        setStoryMetaLoaded(true);
-        setTitle(resolvedTitle || `Game ${id}`);
       } catch (e) {
         console.error("Failed to load game data", e);
       } finally {
@@ -1022,18 +1276,11 @@ export default function GamePage() {
               className="absolute inset-0 h-full w-full"
             >
               <ResizablePanel
-                defaultSize="50%"
+                defaultSize="66%"
                 className="border-r border-slate-700/40"
                 data-testid="game-sidebar-panel"
               >
-                <div className="flex h-full flex-col space-y-4 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-muted-foreground">{title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {hasMoments ? `${currentMomentIndex + 1}/${storyMoments.length}` : "0/0"}
-                    </div>
-                  </div>
-                  <div className="relative flex flex-1 items-stretch justify-end">
+                <div className="relative h-full w-full overflow-hidden">
                     <GameCard
                       id={id ?? "unknown"}
                       title={currentMoment?.name || gameData?.title || title}
@@ -1044,6 +1291,8 @@ export default function GamePage() {
                         (id ? `Game ID: ${id}` : "No game selected")
                       }
                       previewSrc={previewSrc}
+                      previewFit="contain"
+                      showFooter={false}
                       fullHeight
                       className="w-full h-full"
                     />
@@ -1069,15 +1318,14 @@ export default function GamePage() {
                         <ChevronRight className="h-4 w-4" />
                       </CarouselNavButton>
                     </div>
-                  </div>
                 </div>
               </ResizablePanel>
 
               <ResizableHandle withHandle />
 
               <ResizablePanel
-                defaultSize="50%"
-                minSize={0.234}
+                defaultSize="34%"
+                minSize={0.2}
                 className="p-4 flex flex-col min-h-0 min-w-0 max-w-full"
                 data-testid="game-chat-panel"
                 style={{ flexShrink: 1 }}

@@ -55,6 +55,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const [voiceEnabled, setVoiceEnabled] = React.useState(true);
 
   const lastSpokenIdRef = useRef<string | null>(null);
+  const isPendingAgentMessage = (msg: CustomChatMessage) =>
+    msg.id.startsWith('pending-') || /^Working on that request\b/i.test(msg.text.trim());
+
   const textForSpeech = (value: string) => {
     const raw = typeof value === 'string' ? value : '';
     if (!raw.trim()) return '';
@@ -80,6 +83,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     const latest = messages[messages.length - 1];
     if (latest.from !== 'agent') return;
     if (latest.id === lastSpokenIdRef.current) return;
+    if (latest.id.startsWith('pending-') || latest.id.startsWith('streaming-')) return;
     if (/^Working on that request\b/i.test(latest.text.trim())) return;
 
     lastSpokenIdRef.current = latest.id;
@@ -154,6 +158,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   className={`px-4 py-3 text-sm whitespace-pre-line ${
                     msg.id === 'story-opening'
                       ? 'w-full rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-950/80 to-zinc-900/80 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_20px_45px_rgba(0,0,0,0.45)]'
+                      : isPendingAgentMessage(msg)
+                        ? 'mr-auto inline-flex max-w-[70%] items-center gap-2 rounded-2xl rounded-bl-none border border-zinc-700 bg-zinc-900/90 text-zinc-200 shadow'
                       : msg.from === 'user'
                         ? 'relative ml-auto inline-block max-w-[70%] text-right bg-violet-700 text-white border border-violet-500 rounded-2xl rounded-br-none shadow'
                         : 'w-full mr-auto max-w-[calc(100%+20px)] -ml-5 text-left text-muted-foreground'
@@ -183,6 +189,24 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                           </div>
                         </div>
                       ) : null}
+                    </div>
+                  ) : isPendingAgentMessage(msg) ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-zinc-300">{msg.text}</span>
+                      <span className="flex items-center gap-1.5 text-zinc-400" aria-label="Loading">
+                        <span
+                          className="h-2 w-2 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '0ms', animationDuration: '1s' }}
+                        />
+                        <span
+                          className="h-2 w-2 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '150ms', animationDuration: '1s' }}
+                        />
+                        <span
+                          className="h-2 w-2 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '300ms', animationDuration: '1s' }}
+                        />
+                      </span>
                     </div>
                   ) : (
                     msg.text

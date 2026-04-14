@@ -94,6 +94,11 @@ export type AgentsRequest = {
    * sees the current user prompt (stateless run).
    */
   stateless?: boolean;
+  /**
+   * When true, the server may stream the assistant response instead of
+   * waiting for the full JSON payload.
+   */
+  stream?: boolean;
 };
 
 export type AgentsResponse = {

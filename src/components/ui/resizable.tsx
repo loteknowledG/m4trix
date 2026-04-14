@@ -239,9 +239,9 @@ export type ResizablePanelProps = {
 };
 
 export function ResizablePanel({
-  defaultSize,
-  minSize,
-  maxSize,
+  defaultSize: _defaultSize,
+  minSize: _minSize,
+  maxSize: _maxSize,
   className,
   children,
   ...props

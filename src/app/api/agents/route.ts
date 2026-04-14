@@ -34,6 +34,107 @@ function normalizeProvider(provider?: string) {
   return provider;
 }
 
+const textEncoder = new TextEncoder();
+
+async function streamOpenAiCompatibleResponse(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  const body = response.body;
+
+  if (!body) {
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.close();
+      },
+    });
+  }
+
+  if (!contentType.includes("text/event-stream")) {
+    return new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          const text = await response.text();
+          if (text) controller.enqueue(textEncoder.encode(text));
+        } finally {
+          controller.close();
+        }
+      },
+    });
+  }
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const emit = (text: string) => {
+        if (!text) return;
+        controller.enqueue(textEncoder.encode(text));
+      };
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() ?? "";
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line || !line.startsWith("data:")) continue;
+
+            const data = line.slice(5).trim();
+            if (data === "[DONE]") {
+              controller.close();
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const delta =
+                parsed?.choices?.[0]?.delta?.content ??
+                parsed?.choices?.[0]?.message?.content ??
+                "";
+
+              if (typeof delta === "string") {
+                emit(delta);
+                continue;
+              }
+
+              if (Array.isArray(delta)) {
+                const text = delta
+                  .map((part: any) => {
+                    if (!part) return "";
+                    if (typeof part === "string") return part;
+                    if (typeof part.text === "string") return part.text;
+                    return "";
+                  })
+                  .filter(Boolean)
+                  .join("");
+                emit(text);
+                continue;
+              }
+            } catch {
+              emit(data);
+            }
+          }
+        }
+
+        const remaining = buffer.trim();
+        if (remaining) {
+          const payload = remaining.startsWith("data:") ? remaining.slice(5).trim() : remaining;
+          emit(payload);
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
 async function loadAgentDescriptionFromMarkdown(agentId: string): Promise<string | null> {
   try {
     const filePath = path.join(AGENT_MARKDOWN_DIR, `${agentId}.md`);
@@ -70,7 +171,6 @@ export async function POST(req: NextRequest) {
 
   const {
     prompt,
-    maxTurns,
     model: modelOverride,
     character,
     agents: agentsOverride,
@@ -81,6 +181,7 @@ export async function POST(req: NextRequest) {
     orchestration = "auto",
     interactionMode = "neutral",
     stateless = false,
+    stream = false,
     provider: providerOverride,
     lmstudioUrl,
   } = body;
@@ -153,6 +254,73 @@ export async function POST(req: NextRequest) {
 
   const agentsToRun = isLmstudio ? agents.slice(0, 1) : agents;
   const debugRuns: NonNullable<AgentsResponse["debug"]>["runs"] = [];
+
+  if (stream && agentsToRun.length === 1) {
+    try {
+      const requestDebug = buildProviderRequest(prompt, agentsToRun[0], {
+        model: providerConfig.model,
+        story,
+        coordinatorAgent,
+        coordinatorMode,
+        interactionMode,
+        history: stateless ? undefined : history,
+        temperature: 0.7,
+      });
+
+      debugRuns.push({
+        agentId: agentsToRun[0].id,
+        agentName: agentsToRun[0].name,
+        prompt,
+        systemPrompt: requestDebug.systemPrompt,
+        messages: requestDebug.apiMessages.map((message) => ({
+          role: message.role,
+          content:
+            typeof message.content === "string" ? message.content : JSON.stringify(message.content),
+        })),
+      });
+
+      const providerController = new AbortController();
+      const timeoutMs = isLmstudio ? 90000 : 60000;
+      const timeout = setTimeout(() => providerController.abort(), timeoutMs);
+
+      const providerResponse = await fetch(providerConfig.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(providerConfig.apiKey ? { Authorization: `Bearer ${providerConfig.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          ...requestDebug.providerPayload,
+          stream: true,
+        }),
+        signal: providerController.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      if (!providerResponse.ok) {
+        const text = await providerResponse.text().catch(() => "");
+        return Response.json(
+          { error: `${effectiveProvider} error ${providerResponse.status}: ${text || providerResponse.statusText}` },
+          { status: 502 },
+        );
+      }
+
+      return new Response(await streamOpenAiCompatibleResponse(providerResponse), {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to get response from LLM";
+      console.error("[api/agents][stream][error]", {
+        provider: effectiveProvider,
+        model: providerConfig.model,
+        message: errorMessage,
+      });
+      return Response.json({ error: errorMessage }, { status: 502 });
+    }
+  }
 
   // Run orchestration
   let messages;

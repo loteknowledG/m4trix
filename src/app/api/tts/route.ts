@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
+import { spawn } from 'child_process';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,10 +14,14 @@ export async function POST(request: NextRequest) {
     const runner = 'python';
     const scriptPath = 'tools/voice_profile.py';
 
-    await execFileAsync(runner, [scriptPath, 'speak', 'jenny-neural', text], {
+    const child = spawn(runner, [scriptPath, 'speak', 'jenny-neural', text], {
       cwd: process.cwd(),
-      timeout: 60_000,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
     });
+
+    child.unref();
 
     return NextResponse.json({ ok: true });
   } catch (error) {
