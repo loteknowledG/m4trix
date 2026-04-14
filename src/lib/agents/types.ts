@@ -62,6 +62,11 @@ export type AgentsRequest = {
    */
   story?: string;
   /**
+   * Optional steering note for the next response.
+   * When provided, it is included in the system prompt as a short instruction.
+   */
+  steer?: string;
+  /**
    * Optional agent persona for the coordinator (user acting as a role).
    */
   coordinatorAgent?: Agent;

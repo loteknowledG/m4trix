@@ -1,4 +1,7 @@
 import React, { useRef, useEffect } from 'react';
+import { FaCompass } from 'react-icons/fa';
+import { FaArrowRight } from 'react-icons/fa6';
+import { MdOutlineEditNote } from 'react-icons/md';
 import {
   Select,
   SelectTrigger,
@@ -6,6 +9,12 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ConnectionSheet } from '@/components/connection-sheet';
 
 export interface CustomChatMessage {
@@ -22,6 +31,10 @@ interface CustomChatWindowProps {
   input: string;
   onInputChange: (v: string) => void;
   onSend: () => void;
+  onEditMessage?: (messageId: string, nextText: string) => void;
+  onSteerMessage?: (messageId: string, nextText: string) => void;
+  onContinueMessage?: (messageId: string) => void;
+  steerInstruction?: string;
   disabled?: boolean;
   // Optional icon to use for the send button (renders an icon button when provided)
   sendIcon?: React.ReactNode;
@@ -39,6 +52,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   input,
   onInputChange,
   onSend,
+  onEditMessage,
+  onSteerMessage,
+  onContinueMessage,
+  steerInstruction,
   disabled,
   sendIcon,
   sendIconAriaLabel,
@@ -52,11 +69,24 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const footerRef = useRef<HTMLDivElement | null>(null);
   // textarea for user input
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const steerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const bubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [voiceEnabled, setVoiceEnabled] = React.useState(true);
+  const [storyDetailsOpen, setStoryDetailsOpen] = React.useState(false);
 
   const lastSpokenIdRef = useRef<string | null>(null);
+  const storyOpeningMessage = messages.find((msg) => msg.id === 'story-opening');
+  const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+  const [editingText, setEditingText] = React.useState('');
+  const [editingBubbleHeight, setEditingBubbleHeight] = React.useState<number | null>(null);
+  const [steeringMessageId, setSteeringMessageId] = React.useState<string | null>(null);
+  const [steeringText, setSteeringText] = React.useState('');
   const isPendingAgentMessage = (msg: CustomChatMessage) =>
     msg.id.startsWith('pending-') || /^Working on that request\b/i.test(msg.text.trim());
+  const latestAgentMessage = [...messages]
+    .reverse()
+    .find((msg) => msg.from === 'agent' && msg.id !== 'story-opening' && !isPendingAgentMessage(msg));
 
   const textForSpeech = (value: string) => {
     const raw = typeof value === 'string' ? value : '';
@@ -115,6 +145,74 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     }, 0);
   };
 
+  const beginEdit = (message: CustomChatMessage) => {
+    const bubble = bubbleRefs.current[message.id];
+    setEditingBubbleHeight(bubble?.offsetHeight ?? null);
+    setEditingMessageId(message.id);
+    setEditingText(message.text);
+  };
+
+  const beginSteer = (message: CustomChatMessage) => {
+    const bubble = bubbleRefs.current[message.id];
+    setEditingBubbleHeight(bubble?.offsetHeight ?? null);
+    setSteeringMessageId(message.id);
+    setSteeringText('');
+  };
+
+  const cancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingText('');
+    setEditingBubbleHeight(null);
+  };
+
+  const cancelSteer = () => {
+    setSteeringMessageId(null);
+    setSteeringText('');
+    setEditingBubbleHeight(null);
+  };
+
+  const saveEdit = () => {
+    if (!editingMessageId || !onEditMessage) {
+      cancelEdit();
+      return;
+    }
+
+    onEditMessage(editingMessageId, editingText);
+    cancelEdit();
+  };
+
+  const saveSteer = () => {
+    if (!steeringMessageId || !onSteerMessage) {
+      cancelSteer();
+      return;
+    }
+
+    onSteerMessage(steeringMessageId, steeringText);
+    cancelSteer();
+  };
+
+  useEffect(() => {
+    if (!editingMessageId) return;
+    requestAnimationFrame(() => {
+      editTextareaRef.current?.focus();
+      editTextareaRef.current?.setSelectionRange(
+        editTextareaRef.current.value.length,
+        editTextareaRef.current.value.length,
+      );
+    });
+  }, [editingMessageId]);
+
+  useEffect(() => {
+    if (!steeringMessageId) return;
+    requestAnimationFrame(() => {
+      steerTextareaRef.current?.focus();
+      steerTextareaRef.current?.setSelectionRange(
+        steerTextareaRef.current.value.length,
+        steerTextareaRef.current.value.length,
+      );
+    });
+  }, [steeringMessageId]);
+
   // ensure the message list is height-constrained (parent height - footer height)
   useEffect(() => {
     const resize = () => {
@@ -155,6 +253,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                 } gap-3 w-full`}
               >
                 <div
+                  ref={(el) => {
+                    bubbleRefs.current[msg.id] = el;
+                  }}
                   className={`px-4 py-3 text-sm whitespace-pre-line ${
                     msg.id === 'story-opening'
                       ? 'w-full rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-950/80 to-zinc-900/80 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_20px_45px_rgba(0,0,0,0.45)]'
@@ -176,18 +277,13 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                         dangerouslySetInnerHTML={{ __html: msg.text }}
                       />
                       {msg.details?.length ? (
-                        <div className="space-y-2">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-amber-100/60">
-                            Story details
-                          </div>
-                          <div className="space-y-1 rounded-xl border border-amber-500/15 bg-black/20 p-3 text-xs text-amber-100/85">
-                            {msg.details.map(detail => (
-                              <div key={detail} className="leading-5">
-                                {detail}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setStoryDetailsOpen(true)}
+                          className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-100 transition-colors hover:bg-amber-400/20"
+                        >
+                          Story details
+                        </button>
                       ) : null}
                     </div>
                   ) : isPendingAgentMessage(msg) ? (
@@ -209,7 +305,110 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                       </span>
                     </div>
                   ) : (
-                    msg.text
+                    <div className="space-y-2">
+                      {editingMessageId === msg.id ? (
+                        <textarea
+                          ref={editTextareaRef}
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          style={
+                            editingBubbleHeight
+                              ? { minHeight: `${editingBubbleHeight - 24}px` }
+                              : undefined
+                          }
+                          className="w-full resize-none rounded-md border border-violet-500 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400"
+                        />
+                      ) : (
+                        <div>{msg.text}</div>
+                      )}
+                      {msg.from === 'agent' &&
+                      msg.id !== 'story-opening' &&
+                      msg.id === latestAgentMessage?.id ? (
+                        <div className="flex justify-end gap-2">
+                          {editingMessageId === msg.id ? (
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveEdit}
+                                className="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-600"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          ) : (
+                              <button
+                                type="button"
+                                onClick={() => beginEdit(msg)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                                aria-label="Edit response"
+                                title="Edit response"
+                              >
+                                <MdOutlineEditNote className="h-4 w-4" />
+                              </button>
+                            )}
+                          {steeringMessageId === msg.id ? (
+                            <div className="w-full space-y-2">
+                              <textarea
+                                ref={steerTextareaRef}
+                                value={steeringText}
+                                onChange={(e) => setSteeringText(e.target.value)}
+                                style={
+                                  editingBubbleHeight
+                                    ? { minHeight: `${Math.max(72, Math.floor((editingBubbleHeight - 24) / 2))}px` }
+                                    : undefined
+                                }
+                                className="w-full resize-none rounded-md border border-cyan-500 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400"
+                                placeholder="Suggest what should happen next..."
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={cancelSteer}
+                                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={saveSteer}
+                                  className="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500"
+                                >
+                                  Apply
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onContinueMessage?.(msg.id)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                                aria-label="Continue response"
+                                title="Continue response"
+                              >
+                                <FaArrowRight className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => beginSteer(msg)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                                aria-label="Steer next response"
+                                title="Steer next response"
+                              >
+                                <FaCompass className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
                   )}
                 </div>
               </div>
@@ -217,6 +416,24 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
           )}
         </div>
       </div>
+
+      <Dialog open={storyDetailsOpen} onOpenChange={setStoryDetailsOpen}>
+        <DialogContent className="max-w-xl border-amber-500/30 bg-zinc-950 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_30px_80px_rgba(0,0,0,0.7)]">
+          <DialogHeader className="text-left">
+            <DialogTitle className="flex items-center gap-2 text-amber-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
+              Story details
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 rounded-2xl border border-amber-500/15 bg-black/20 p-4 text-sm text-amber-100/90">
+            {storyOpeningMessage?.details?.map(detail => (
+              <div key={detail} className="leading-6">
+                {detail}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div ref={footerRef} className="flex-none bg-zinc-950/90 border-t border-zinc-800 p-4">
         <div className="space-y-2">
@@ -237,8 +454,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               placeholder="Type your message..."
             />
 
-            <div className="flex items-center justify-between gap-2 border-t border-zinc-800 p-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2 border-t border-zinc-800 p-2">
+                <div className="flex items-center gap-2">
                 <ConnectionSheet side="bottom" />
                 {connected && connectionModel ? (
                   <span className="text-xs font-medium text-muted-foreground">
@@ -265,37 +482,56 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     </Select>
                   </div>
                 )}
-              </div>
+                </div>
 
-              <button
-                className={
-                  'rounded-md border border-zinc-700 px-3 py-1 text-xs ' +
-                  (voiceEnabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-200')
-                }
-                onClick={() => setVoiceEnabled(prev => !prev)}
-                type="button"
-              >
-                Voice: {voiceEnabled ? 'On' : 'Off'}
-              </button>
-              {sendIcon ? (
-                <button
-                  className="rounded-md bg-white text-black p-2 hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333] disabled:opacity-50"
-                  onClick={handleSend}
-                  disabled={disabled || !input.trim()}
-                  aria-label={sendIconAriaLabel ?? 'Send message'}
-                >
-                  {sendIcon}
-                </button>
-              ) : (
-                <button
-                  className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
-                  onClick={handleSend}
-                  disabled={disabled || !input.trim()}
-                >
-                  Send
-                </button>
-              )}
-            </div>
+                <div className="flex items-center gap-2">
+                  {steerInstruction?.trim() ? (
+                    <div className="flex items-center gap-2 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-100">
+                      <span className="font-medium">Steer:</span>
+                      <span className="max-w-[14rem] truncate">{steerInstruction}</span>
+                      {onSteerMessage ? (
+                        <button
+                          type="button"
+                          onClick={() => onSteerMessage('__clear__', '')}
+                          className="rounded-full px-1 text-cyan-100/80 hover:bg-cyan-500/20 hover:text-cyan-50"
+                          aria-label="Clear steer note"
+                          title="Clear steer note"
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <button
+                    className={
+                      'rounded-md border border-zinc-700 px-3 py-1 text-xs ' +
+                      (voiceEnabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-200')
+                    }
+                    onClick={() => setVoiceEnabled(prev => !prev)}
+                    type="button"
+                  >
+                    Voice: {voiceEnabled ? 'On' : 'Off'}
+                  </button>
+                  {sendIcon ? (
+                    <button
+                      className="rounded-md bg-white text-black p-2 hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333] disabled:opacity-50"
+                      onClick={handleSend}
+                      disabled={disabled || !input.trim()}
+                      aria-label={sendIconAriaLabel ?? 'Send message'}
+                    >
+                      {sendIcon}
+                    </button>
+                  ) : (
+                    <button
+                      className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
+                      onClick={handleSend}
+                      disabled={disabled || !input.trim()}
+                    >
+                      Send
+                    </button>
+                  )}
+                </div>
+              </div>
           </div>
         </div>
       </div>

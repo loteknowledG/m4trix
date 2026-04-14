@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { get, set } from "idb-keyval";
 import { Trash2, Upload } from "lucide-react";
@@ -52,7 +52,15 @@ export default function StoryPage() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [assignedNpcId, setAssignedNpcId] = useState<string | null>(null);
   const [assignedPlayerId, setAssignedPlayerId] = useState<string | null>(null);
+  const [assignedNpcAppearance, setAssignedNpcAppearance] = useState("");
+  const [assignedPlayerAppearance, setAssignedPlayerAppearance] = useState("");
   const [storyDescription, setStoryDescription] = useState("");
+  const assignedNpcCharacter = assignedNpcId
+    ? characters.find((character) => character.id === assignedNpcId) || null
+    : null;
+  const assignedPlayerCharacter = assignedPlayerId
+    ? characters.find((character) => character.id === assignedPlayerId) || null
+    : null;
 
   const selectedIds = useSelection((s) => s.selections["stories"] || []);
   const toggleSelect = useSelection((s) => s.toggle);
@@ -101,13 +109,15 @@ export default function StoryPage() {
         let t = stored && stored.title ? stored.title : "";
         try {
           const saved =
-            (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string }[]>(
+            (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string; npcAppearance?: string; playerAppearance?: string }[]>(
               "stories",
             )) || [];
           const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
           setAssignedNpcId(meta?.npcId || null);
           setAssignedPlayerId(meta?.playerId || null);
+          setAssignedNpcAppearance(meta?.npcAppearance || "");
+          setAssignedPlayerAppearance(meta?.playerAppearance || "");
           setStoryDescription(meta?.description || "");
         } catch (e) {
           /* ignore */
@@ -131,12 +141,14 @@ export default function StoryPage() {
     const handler = async () => {
       try {
         const saved =
-          (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string }[]>(
+          (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string; npcAppearance?: string; playerAppearance?: string }[]>(
             "stories",
           )) || [];
         const meta = saved.find((m: any) => m.id === id);
         setAssignedNpcId(meta?.npcId || null);
         setAssignedPlayerId(meta?.playerId || null);
+        setAssignedNpcAppearance(meta?.npcAppearance || "");
+        setAssignedPlayerAppearance(meta?.playerAppearance || "");
         setStoryDescription(meta?.description || "");
       } catch (e) {
         /* ignore */
@@ -565,13 +577,13 @@ export default function StoryPage() {
     [id],
   );
 
-  const saveStoryDescription = useCallback(async () => {
+  const saveStoryMetadata = useCallback(async (patch: Record<string, unknown>) => {
     if (!id) return;
     try {
       const saved = (await get<any[]>("stories")) || [];
       const idx = saved.findIndex((s: any) => s.id === id);
       if (idx > -1) {
-        saved[idx] = { ...saved[idx], description: storyDescription };
+        saved[idx] = { ...saved[idx], ...patch };
         await set("stories", saved);
         try {
           window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
@@ -580,9 +592,39 @@ export default function StoryPage() {
         }
       }
     } catch (e) {
-      logger.error("Failed to save story description", e);
+      logger.error("Failed to save story metadata", e);
     }
-  }, [id, storyDescription]);
+  }, [id]);
+
+  const saveStoryDescription = useCallback(async () => {
+    await saveStoryMetadata({ description: storyDescription });
+  }, [saveStoryMetadata, storyDescription]);
+
+  const saveNpcAppearance = useCallback(async () => {
+    await saveStoryMetadata({ npcAppearance: assignedNpcAppearance });
+  }, [assignedNpcAppearance, saveStoryMetadata]);
+
+  const savePlayerAppearance = useCallback(async () => {
+    await saveStoryMetadata({ playerAppearance: assignedPlayerAppearance });
+  }, [assignedPlayerAppearance, saveStoryMetadata]);
+
+  const saveStoryTitle = useCallback(async () => {
+    if (!id) return;
+    try {
+      const storyKey = `story:${id}`;
+      const stored = (await get<any>(storyKey)) || {};
+      if (Array.isArray(stored)) {
+        // keep array form
+        await set(storyKey, stored);
+      } else {
+        stored.title = title;
+        await set(storyKey, stored);
+      }
+      await saveStoryMetadata({ title });
+    } catch (e) {
+      logger.error("Failed to save story title", e);
+    }
+  }, [id, saveStoryMetadata, title]);
 
   async function handleDeleteStory() {
     if (!id) return;
@@ -626,32 +668,6 @@ export default function StoryPage() {
       }
     } catch (err) {
       logger.error("Failed to delete story", err);
-    }
-  }
-
-  async function handleTitleBlur() {
-    if (!id) return;
-    try {
-      const storyKey = `story:${id}`;
-      const stored = (await get<any>(storyKey)) || {};
-      if (Array.isArray(stored)) {
-        // keep array form
-        await set(storyKey, stored);
-      } else {
-        stored.title = title;
-        await set(storyKey, stored);
-      }
-
-      // update stories metadata
-      const saved = (await get<any>("stories")) || [];
-      const idx = saved.findIndex((s: any) => s.id === id);
-      if (idx > -1) {
-        saved[idx].title = title;
-        await set("stories", saved);
-      }
-      window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-    } catch (e) {
-      logger.error("Failed to save story title", e);
     }
   }
 
@@ -846,13 +862,13 @@ export default function StoryPage() {
             <div className="py-4">
               <div className="mb-6">
                 {editingTitle ? (
-                  <input
-                    autoFocus
-                    aria-label="Edit story title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    onBlur={async () => {
-                      await handleTitleBlur();
+                    <input
+                      autoFocus
+                      aria-label="Edit story title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      onBlur={async () => {
+                      await saveStoryTitle();
                       setEditingTitle(false);
                     }}
                     onKeyDown={(e) => {
@@ -885,7 +901,7 @@ export default function StoryPage() {
                 )}
               </div>
               {loading ? (
-                <div className="text-sm text-muted-foreground">Loading…</div>
+                <div className="text-sm text-muted-foreground">Loadingâ€¦</div>
               ) : moments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <div className="flex items-center justify-center gap-2 mb-2">
@@ -960,203 +976,193 @@ export default function StoryPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex max-h-[85vh] min-h-[520px] flex-col p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium">Story info</h3>
-            <div className="flex items-center gap-1">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        loadCharacters();
-                        setAssignNpcOpen(true);
-                        setStoryInfoOpen(false);
-                      }}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
-                      aria-label="Assign NPC"
-                    >
-                      <GrUserFemale size={16} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={8}>
-                    <p>Assign NPC</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        loadCharacters();
-                        setAssignPlayerOpen(true);
-                        setStoryInfoOpen(false);
-                      }}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
-                      aria-label="Assign Player"
-                    >
-                      <GrUserFemale size={16} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={8}>
-                    <p>Assign Player</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <button
-                type="button"
-                onClick={() => setStoryInfoOpen(false)}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
-                aria-label="Close story info"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto space-y-4 text-sm">
-            <div>
-              <div className="text-xs uppercase text-muted-foreground mb-1">Title</div>
-              <div className="font-medium break-words">
-                {title && title.trim().length > 0 ? title : "Untitled story"}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <div className="text-muted-foreground mb-0.5">Moments</div>
-                <div className="text-base font-semibold">{moments.length}</div>
-              </div>
-              {id ? (
-                <div>
-                  <div className="text-muted-foreground mb-0.5">Story ID</div>
-                  <div className="text-[11px] break-all text-foreground/80">{id}</div>
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <h3 className="text-sm font-medium">Story info</h3>
+              <div className="flex items-start gap-2">
+                <div className="w-[240px] space-y-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setAssignNpcOpen(true);
+                            setStoryInfoOpen(false);
+                          }}
+                          className="flex items-center gap-2 w-full p-2 rounded border border-dashed text-sm text-muted-foreground hover:bg-accent/20"
+                          aria-label="Assign NPC"
+                        >
+                          {assignedNpcId && characters.find((c) => c.id === assignedNpcId) ? (
+                            <>
+                              {characters.find((c) => c.id === assignedNpcId)?.avatarUrl ? (
+                                <img
+                                  src={characters.find((c) => c.id === assignedNpcId)?.avatarUrl}
+                                  alt="Character"
+                                  className="w-5 h-5 rounded-full object-cover"
+                                />
+                              ) : (
+                                <GrUserFemale size={16} />
+                              )}
+                              <span>
+                                {characters.find((c) => c.id === assignedNpcId)?.name || "Untitled"}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <GrUserFemale size={16} />
+                              <span>Assign character</span>
+                            </>
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" sideOffset={8}>
+                        <p>{assignedNpcId ? "Reassign character" : "Assign character"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {assignedNpcId ? (
+                    <div className="space-y-1">
+                    <div className="text-xs text-muted-foreground">
+                      {(assignedNpcCharacter?.name || "NPC")} appearance
+                    </div>
+                      <textarea
+                        value={assignedNpcAppearance}
+                        onChange={(e) => setAssignedNpcAppearance(e.target.value)}
+                        onBlur={() => {
+                          void saveNpcAppearance();
+                        }}
+                        placeholder="Describe how this character looks"
+                        className="min-h-[92px] w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      setAssignNpcOpen(true);
-                      setStoryInfoOpen(false);
-                    }}
-                    className="flex items-center gap-2 w-full p-2 rounded border border-dashed text-sm text-muted-foreground hover:bg-accent/20"
-                    aria-label="Assign NPC"
-                  >
-                    {assignedNpcId && characters.find((c) => c.id === assignedNpcId) ? (
-                      <>
-                        {characters.find((c) => c.id === assignedNpcId)?.avatarUrl ? (
-                          <img
-                            src={characters.find((c) => c.id === assignedNpcId)?.avatarUrl}
-                            alt="Character"
-                            className="w-5 h-5 rounded-full object-cover"
-                          />
-                        ) : (
-                          <GrUserFemale size={16} />
-                        )}
-                        <span>
-                          {characters.find((c) => c.id === assignedNpcId)?.name || "Untitled"}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <GrUserFemale size={16} />
-                        <span>Assign character</span>
-                      </>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={8}>
-                  <p>{assignedNpcId ? "Reassign character" : "Assign character"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                <div className="w-[240px] space-y-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setAssignPlayerOpen(true);
+                            setStoryInfoOpen(false);
+                          }}
+                          className="flex items-center gap-2 w-full p-2 rounded border border-dashed text-sm text-muted-foreground hover:bg-accent/20"
+                          aria-label="Assign player"
+                        >
+                          {assignedPlayerId && characters.find((c) => c.id === assignedPlayerId) ? (
+                            <>
+                              {characters.find((c) => c.id === assignedPlayerId)?.avatarUrl ? (
+                                <img
+                                  src={characters.find((c) => c.id === assignedPlayerId)?.avatarUrl}
+                                  alt="Player"
+                                  className="w-5 h-5 rounded-full object-cover"
+                                />
+                              ) : (
+                                <GrUserFemale size={16} />
+                              )}
+                              <span>
+                                {characters.find((c) => c.id === assignedPlayerId)?.name || "Untitled"}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <GrUserFemale size={16} />
+                              <span>Assign player</span>
+                            </>
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" sideOffset={8}>
+                        <p>{assignedPlayerId ? "Reassign player" : "Assign player"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {assignedPlayerId ? (
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">
+                        {(assignedPlayerCharacter?.name || "Player")} appearance
+                      </div>
+                      <textarea
+                        value={assignedPlayerAppearance}
+                        onChange={(e) => setAssignedPlayerAppearance(e.target.value)}
+                        onBlur={() => {
+                          void savePlayerAppearance();
+                        }}
+                        placeholder="Describe how this character looks"
+                        className="min-h-[92px] w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+                      />
+                    </div>
+                  ) : null}
+                </div>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      setAssignPlayerOpen(true);
-                      setStoryInfoOpen(false);
-                    }}
-                    className="flex items-center gap-2 w-full p-2 rounded border border-dashed text-sm text-muted-foreground hover:bg-accent/20"
-                    aria-label="Assign player"
-                  >
-                    {assignedPlayerId && characters.find((c) => c.id === assignedPlayerId) ? (
-                      <>
-                        {characters.find((c) => c.id === assignedPlayerId)?.avatarUrl ? (
-                          <img
-                            src={characters.find((c) => c.id === assignedPlayerId)?.avatarUrl}
-                            alt="Player"
-                            className="w-5 h-5 rounded-full object-cover"
-                          />
-                        ) : (
-                          <GrUserFemale size={16} />
-                        )}
-                        <span>
-                          {characters.find((c) => c.id === assignedPlayerId)?.name || "Untitled"}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <GrUserFemale size={16} />
-                        <span>Assign player</span>
-                      </>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={8}>
-                  <p>{assignedPlayerId ? "Reassign player" : "Assign player"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <div className="space-y-1">
-              <div className="text-xs uppercase text-muted-foreground">Description</div>
-              <QuillEditor
-                className="character-description-editor"
-                value={storyDescription}
-                onChange={setStoryDescription}
-                onBlur={() => {
-                  void saveStoryDescription();
-                }}
-                placeholder="No description"
-              />
-            </div>
-
-            <div className="pt-2 border-t border-border/40 space-y-2">
-              <div className="text-xs text-muted-foreground">
-                Story metadata is stored locally in your browser (IndexedDB). Deleting the story
-                will remove its moments from this view, but not from Heap or Trash.
+                <button
+                  type="button"
+                  onClick={() => setStoryInfoOpen(false)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-accent/20 text-foreground"
+                  aria-label="Close story info"
+                >
+                  ×
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  await handleDeleteStory();
-                  setStoryInfoOpen(false);
-                }}
-                className="inline-flex items-center justify-center px-3 py-1.5 rounded border text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
-              >
-                Delete story
-              </button>
             </div>
-          </div>
+
+            <div className="flex-1 overflow-auto space-y-4 text-sm">
+              <div>
+                <div className="text-xs uppercase text-muted-foreground mb-1">Title</div>
+                <div className="font-medium break-words">
+                  {title && title.trim().length > 0 ? title : "Untitled story"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-muted-foreground mb-0.5">Moments</div>
+                  <div className="text-base font-semibold">{moments.length}</div>
+                </div>
+                {id ? (
+                  <div>
+                    <div className="text-muted-foreground mb-0.5">Story ID</div>
+                    <div className="text-[11px] break-all text-foreground/80">{id}</div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-xs uppercase text-muted-foreground">Description</div>
+                <QuillEditor
+                  className="character-description-editor"
+                  value={storyDescription}
+                  onChange={setStoryDescription}
+                  onBlur={() => {
+                    void saveStoryDescription();
+                  }}
+                  placeholder="No description"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-border/40 space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  Story metadata is stored locally in your browser (IndexedDB). Deleting the story
+                  will remove its moments from this view, but not from Heap or Trash.
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleDeleteStory();
+                    setStoryInfoOpen(false);
+                  }}
+                  className="inline-flex items-center justify-center px-3 py-1.5 rounded border text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
+                >
+                  Delete story
+                </button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1281,3 +1287,4 @@ export default function StoryPage() {
     </>
   );
 }
+

@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
     character,
     agents: agentsOverride,
     story,
+    steer,
     coordinatorAgent,
     history,
     coordinatorMode = "tell",
@@ -260,6 +261,7 @@ export async function POST(req: NextRequest) {
       const requestDebug = buildProviderRequest(prompt, agentsToRun[0], {
         model: providerConfig.model,
         story,
+        steer,
         coordinatorAgent,
         coordinatorMode,
         interactionMode,
@@ -336,6 +338,7 @@ export async function POST(req: NextRequest) {
       callProvider: async (promptForAgent, agent, options) => {
         const requestDebug = buildProviderRequest(promptForAgent, agent, {
           ...options,
+          steer,
           model: providerConfig.model,
         });
 

@@ -4,6 +4,7 @@ import { get, set } from "idb-keyval";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FaBug } from "react-icons/fa";
+import { FaTags } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -21,448 +22,30 @@ import {
   setConnectionItem,
 } from "@/lib/connection-storage";
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
-import type { Agent, OrchestratedMessage } from "@/lib/agents/types";
-
-const normalizeMomentText = (value: unknown) => {
-  if (typeof value !== "string") return "";
-  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-};
-
-const storyTextForPrompt = (value: string) => {
-  const raw = typeof value === "string" ? value : "";
-  if (!raw.trim()) return "";
-  if (typeof document === "undefined") {
-    return raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  const container = document.createElement("div");
-  container.innerHTML = raw;
-  return (container.textContent || "")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-};
-
-const getMomentSearchText = (moment: any) => {
-  const pieces = [
-    moment?.name,
-    moment?.title,
-    moment?.description,
-    moment?.text,
-    moment?.caption,
-    Array.isArray(moment?.tags) ? moment.tags.join(" ") : "",
-  ];
-  return normalizeMomentText(pieces.filter(Boolean).join(" "));
-};
-
-const scoreMomentForStory = (moment: any, contextText: string, titleMomentId?: string | null) => {
-  const normalizedContext = normalizeMomentText(contextText);
-  if (!normalizedContext) return 0;
-
-  let score = 0;
-  const tags = Array.isArray(moment?.tags) ? moment.tags : [];
-
-  for (const rawTag of tags) {
-    const tag = normalizeMomentText(rawTag);
-    if (!tag) continue;
-    if (normalizedContext.includes(tag)) {
-      score += 6;
-      continue;
-    }
-
-    const tagWords = tag.split(/\s+/).filter(Boolean);
-    if (tagWords.length && tagWords.every((word) => normalizedContext.includes(word))) {
-      score += 3;
-      continue;
-    }
-
-    if (tagWords.some((word) => normalizedContext.includes(word))) {
-      score += 1;
-    }
-  }
-
-  const searchText = getMomentSearchText(moment);
-  if (searchText && normalizedContext.includes(searchText)) {
-    score += 2;
-  }
-
-  if (titleMomentId && moment?.id === titleMomentId) {
-    score += 2;
-  }
-
-  return score;
-};
-
-const pickBestMomentIndex = (
-  moments: any[],
-  contextText: string,
-  titleMomentId?: string | null,
-) => {
-  if (!moments.length) return 0;
-
-  let bestIndex = 0;
-  let bestScore = Number.NEGATIVE_INFINITY;
-
-  moments.forEach((moment, index) => {
-    const score = scoreMomentForStory(moment, contextText, titleMomentId);
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  });
-
-  return bestIndex;
-};
-
-type StreamAgentReplyArgs = {
-  requestBody: Record<string, unknown>;
-  pendingId: string;
-  storyHistory: OrchestratedMessage[];
-  userHistoryEntry: OrchestratedMessage;
-  trimmed: string;
-  currentSceneSummary: string;
-  onChunk: (messageId: string, text: string) => void;
-  onFinalize: (pendingId: string, finalId: string, text: string) => void;
-  onDebugResponse: (message: CustomChatMessage) => void;
-  onHistoryUpdate: (nextHistory: OrchestratedMessage[]) => void;
-  onMomentReset: () => void;
-  refreshStorySummary: (args: {
-    sceneSummary: string;
-    userText: string;
-    assistantText: string;
-    history: OrchestratedMessage[];
-  }) => void | Promise<void>;
-};
-
-type GameCharacterContext = {
-  id: string;
-  name: string;
-  description: string;
-  avatarUrl?: string;
-} | null;
-
-async function streamAgentReply({
-  requestBody,
-  pendingId,
-  storyHistory,
-  userHistoryEntry,
-  trimmed,
-  currentSceneSummary,
-  onChunk,
-  onFinalize,
-  onDebugResponse,
-  onHistoryUpdate,
-  onMomentReset,
-  refreshStorySummary,
-}: StreamAgentReplyArgs) {
-  const res = await fetch("/api/agents", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "");
-    throw new Error(errorText || "Failed to get response from LLM");
-  }
-
-  const reader = res.body?.getReader();
-  const decoder = new TextDecoder();
-  let streamedText = "";
-
-  if (reader) {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const decoded = decoder.decode(value, { stream: true });
-      if (!decoded) continue;
-      streamedText += decoded;
-      onChunk(pendingId, streamedText);
-    }
-  }
-
-  const assistantText = streamedText.trim() || "No response returned.";
-  const finalMessageId = `agent-${Date.now()}`;
-  const finalMessage: CustomChatMessage = {
-    id: finalMessageId,
-    from: "agent",
-    text: assistantText,
-  };
-
-  onFinalize(pendingId, finalMessageId, assistantText);
-  onDebugResponse(finalMessage);
-
-  const assistantHistoryEntries = [
-    {
-      id: finalMessage.id,
-      from: "agent" as const,
-      text: finalMessage.text,
-    },
-  ];
-  const nextHistorySnapshot = [...storyHistory, userHistoryEntry, ...assistantHistoryEntries].slice(-20);
-  onHistoryUpdate(nextHistorySnapshot);
-  onMomentReset();
-  await refreshStorySummary({
-    sceneSummary: currentSceneSummary,
-    userText: trimmed,
-    assistantText,
-    history: nextHistorySnapshot,
-  });
-}
-
-function buildGameAgentRequest(params: {
-  trimmed: string;
-  connectionModel: string | null;
-  activeProvider: string;
-  zenKey?: string;
-  googleKey?: string;
-  hfKey?: string;
-  nvidiaKey?: string;
-  lmstudioUrl: string;
-  storyContext: string;
-  storyHistory: OrchestratedMessage[];
-  currentNpc: { id: string; name: string; description: string } | null;
-  currentPlayer: { id: string; name: string; description: string } | null;
-}) {
-  const {
-    trimmed,
-    connectionModel,
-    activeProvider,
-    zenKey,
-    googleKey,
-    hfKey,
-    nvidiaKey,
-    lmstudioUrl,
-    storyContext,
-    storyHistory,
-    currentNpc,
-    currentPlayer,
-  } = params;
-
-  const requestBody: Record<string, unknown> = {
-    prompt: trimmed,
-    model: connectionModel,
-    zenApiKey: zenKey,
-    googleApiKey: googleKey,
-    hfApiKey: hfKey,
-    nvidiaApiKey: nvidiaKey,
-    provider: activeProvider,
-    stream: true,
-  };
-
-  if (storyContext) requestBody.story = storyContext;
-  if (storyHistory.length > 0) requestBody.history = storyHistory;
-  if (activeProvider === "lmstudio") requestBody.lmstudioUrl = lmstudioUrl;
-  if (currentNpc) {
-    requestBody.character = {
-      id: currentNpc.id,
-      name: currentNpc.name,
-      description: currentNpc.description,
-    };
-  }
-  if (currentPlayer) {
-    requestBody.coordinatorAgent = {
-      id: currentPlayer.id,
-      name: currentPlayer.name,
-      description: currentPlayer.description,
-    };
-  }
-
-  return requestBody;
-}
-
-function queueDemoReply(params: {
-  trimmed: string;
-  storyHistory: OrchestratedMessage[];
-  userHistoryEntry: OrchestratedMessage;
-  assignedNpc: GameCharacterContext;
-  assignedPlayer: GameCharacterContext;
-  setChatMessages: (value: CustomChatMessage[] | ((messages: CustomChatMessage[]) => CustomChatMessage[])) => void;
-  setStoryHistory: (value: OrchestratedMessage[] | ((messages: OrchestratedMessage[]) => OrchestratedMessage[])) => void;
-  setMomentSelectionMode: (value: "auto" | "manual") => void;
-  refreshStorySummary: (args: {
-    sceneSummary: string;
-    userText: string;
-    assistantText: string;
-    history: OrchestratedMessage[];
-  }) => void | Promise<void>;
-  buildSceneSummary: (npc: any, player: any) => string;
-}) {
-  const {
-    trimmed,
-    storyHistory,
-    userHistoryEntry,
-    assignedNpc,
-    assignedPlayer,
-    setChatMessages,
-    setStoryHistory,
-    setMomentSelectionMode,
-    refreshStorySummary,
-    buildSceneSummary,
-  } = params;
-
-  setTimeout(() => {
-    const botMessage: CustomChatMessage = {
-      id: `bot-${Date.now()}`,
-      from: "agent",
-      text: `You said: "${trimmed}". This is a demo response.`,
-    };
-    setChatMessages((messages) => [...messages, botMessage]);
-    const assistantHistoryEntry: OrchestratedMessage = {
-      id: botMessage.id,
-      from: "agent",
-      text: botMessage.text,
-    };
-    const nextHistorySnapshot = [...storyHistory, userHistoryEntry, assistantHistoryEntry].slice(-20);
-    setStoryHistory(nextHistorySnapshot);
-    setMomentSelectionMode("auto");
-    void refreshStorySummary({
-      sceneSummary: buildSceneSummary(assignedNpc, assignedPlayer),
-      userText: trimmed,
-      assistantText: botMessage.text,
-      history: nextHistorySnapshot,
-    });
-  }, 450);
-}
-
-const updateStreamingMessage = (
-  messages: CustomChatMessage[],
-  messageId: string,
-  text: string,
-) => messages.map((message) => (message.id === messageId ? { ...message, text } : message));
-
-const finalizeStreamingMessage = (
-  messages: CustomChatMessage[],
-  messageId: string,
-  finalId: string,
-  text: string,
-) =>
-  messages.map((message) =>
-    message.id === messageId ? { ...message, id: finalId, text } : message,
-  );
-
-async function runConnectedChatTurn(params: {
-  pendingId: string;
-  trimmed: string;
-  connectionModel: string | null;
-  storySummary: string;
-  storyHistory: OrchestratedMessage[];
-  userHistoryEntry: OrchestratedMessage;
-  resolveGameAgentContext: () => Promise<{
-    currentNpc: GameCharacterContext;
-    currentPlayer: GameCharacterContext;
-    currentStoryDescription: string;
-    currentSceneSummary: string;
-  }>;
-  refreshStorySummary: (args: {
-    sceneSummary: string;
-    userText: string;
-    assistantText: string;
-    history: OrchestratedMessage[];
-  }) => void | Promise<void>;
-  setChatMessages: React.Dispatch<React.SetStateAction<CustomChatMessage[]>>;
-  setStoryHistory: React.Dispatch<React.SetStateAction<OrchestratedMessage[]>>;
-  setMomentSelectionMode: React.Dispatch<React.SetStateAction<"auto" | "manual">>;
-  setDebugData: React.Dispatch<
-    React.SetStateAction<
-      | {
-          request: any;
-          response: any;
-          prompt: string;
-        }
-      | null
-    >
-  >;
-}) {
-  const {
-    pendingId,
-    trimmed,
-    connectionModel,
-    storySummary,
-    storyHistory,
-    userHistoryEntry,
-    resolveGameAgentContext,
-    refreshStorySummary,
-    setChatMessages,
-    setStoryHistory,
-    setMomentSelectionMode,
-    setDebugData,
-  } = params;
-  setChatMessages((messages) => [
-    ...messages,
-    {
-      id: pendingId,
-      from: "agent",
-      text: `Working on that request${connectionModel ? ` with ${connectionModel}` : ""}...`,
-    },
-  ]);
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-  const { currentNpc, currentPlayer, currentStoryDescription, currentSceneSummary } =
-    await resolveGameAgentContext();
-
-  const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
-  const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
-  const hfKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ?? undefined;
-  const nvidiaKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ?? undefined;
-
-  const activeProvider =
-    getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
-    getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
-    "zen";
-  const lmstudioUrl = normalizeLmstudioUrl(
-    getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
-  );
-  const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
-    .filter(Boolean)
-    .join("\n\n")
-    .trim();
-  const requestBody = buildGameAgentRequest({
-    trimmed,
-    connectionModel,
-    activeProvider,
-    zenKey,
-    googleKey,
-    hfKey,
-    nvidiaKey,
-    lmstudioUrl,
-    storyContext,
-    storyHistory,
-    currentNpc,
-    currentPlayer,
-  });
-
-  setDebugData({ request: requestBody, response: null, prompt: trimmed });
-  await streamAgentReply({
-    requestBody,
-    pendingId,
-    storyHistory,
-    userHistoryEntry,
-    trimmed,
-    currentSceneSummary,
-    onChunk: (messageId, text) =>
-      setChatMessages((messages) => updateStreamingMessage(messages, messageId, text)),
-    onFinalize: (messageId, finalId, text) =>
-      setChatMessages((messages) => finalizeStreamingMessage(messages, messageId, finalId, text)),
-    onDebugResponse: (finalMessage) =>
-      setDebugData((prev) =>
-        prev
-          ? {
-              ...prev,
-              response: {
-                streamed: true,
-                messages: [finalMessage],
-              },
-            }
-          : null,
-      ),
-    onHistoryUpdate: (nextHistorySnapshot) => setStoryHistory(nextHistorySnapshot),
-    onMomentReset: () => setMomentSelectionMode("auto"),
-    refreshStorySummary,
-  });
-}
+import type { OrchestratedMessage } from "@/lib/agents/types";
+import {
+  buildSceneSummary,
+  resolveGameAgentContext,
+  type GameCharacterContext,
+} from "@/lib/game/game-context";
+import {
+  buildGameAgentRequest,
+  queueDemoReply,
+  runConnectedChatTurn,
+} from "@/lib/game/game-agent";
+import {
+  getGameHistoryKey,
+  getGameSummaryKey,
+  loadGameHistory,
+  loadGameSummary,
+  saveGameHistory,
+  saveGameSummary,
+} from "@/lib/game/game-storage";
+import { refreshStorySummary as refreshGameStorySummary } from "@/lib/game/story-memory";
+import {
+  pickBestMomentIndex,
+  storyTextForPrompt,
+} from "@/lib/game/story-moments";
 
 export default function GamePage() {
   const params = useParams();
@@ -481,6 +64,7 @@ export default function GamePage() {
   const [storySummary, setStorySummary] = useState("");
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
+  const [steerInstruction, setSteerInstruction] = useState("");
   const buildOpeningDetails = (
     description: string,
     npc: typeof assignedNpc,
@@ -488,7 +72,9 @@ export default function GamePage() {
   ) => {
     const details = [
       npc ? `NPC: ${npc.name}` : "",
+      npc?.appearance ? `NPC appearance: ${npc.appearance}` : "",
       player ? `Player: ${player.name}` : "",
+      player?.appearance ? `Player appearance: ${player.appearance}` : "",
     ].filter(Boolean);
     return {
       text: description.trim(),
@@ -514,16 +100,19 @@ export default function GamePage() {
     id: string;
     name: string;
     description: string;
+    appearance?: string;
     avatarUrl?: string;
   } | null>(null);
   const [assignedPlayer, setAssignedPlayer] = useState<{
     id: string;
     name: string;
     description: string;
+    appearance?: string;
     avatarUrl?: string;
   } | null>(null);
 
   const [debugOpen, setDebugOpen] = useState(false);
+  const [momentTagsOpen, setMomentTagsOpen] = useState(false);
   const [debugData, setDebugData] = useState<{
     request: any;
     response: any;
@@ -543,8 +132,8 @@ export default function GamePage() {
   });
   const currentMoment = storyMoments[currentMomentIndex] ?? null;
   const hasMoments = storyMoments.length > 0;
-  const gameHistoryKey = id ? `game-history:${id}` : null;
-  const gameSummaryKey = id ? `game-summary:${id}` : null;
+  const gameHistoryKey = getGameHistoryKey(id);
+  const gameSummaryKey = getGameSummaryKey(id);
   const summarizeInFlightRef = useRef(false);
 
   const goToPreviousMoment = () => {
@@ -559,6 +148,7 @@ export default function GamePage() {
     setCurrentMomentIndex((current) => (current + 1) % storyMoments.length);
   };
 
+  // Moment selection and saved story state
   useEffect(() => {
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
     setPreviewSrc(typeof src === "string" ? src : undefined);
@@ -595,7 +185,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!gameHistoryKey) return;
-    void set(gameHistoryKey, storyHistory);
+    void saveGameHistory(gameHistoryKey, storyHistory);
   }, [gameHistoryKey, storyHistory]);
 
   useEffect(() => {
@@ -609,9 +199,9 @@ export default function GamePage() {
 
     (async () => {
       try {
-        const stored = await get<string>(gameSummaryKey);
+        const stored = await loadGameSummary(gameSummaryKey);
         if (!mounted) return;
-        setStorySummary(typeof stored === "string" ? stored : "");
+        setStorySummary(stored);
       } catch {
         if (mounted) setStorySummary("");
       }
@@ -624,72 +214,110 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!gameSummaryKey) return;
-    void set(gameSummaryKey, storySummary);
+    void saveGameSummary(gameSummaryKey, storySummary);
   }, [gameSummaryKey, storySummary]);
-
-  const buildSceneSummary = (npc: typeof assignedNpc, player: typeof assignedPlayer) => {
-    if (!id) return "";
-    const sceneParts = [
-      title ? `Story title: ${title}` : "",
-      currentMoment?.name ? `Current moment: ${currentMoment.name}` : "",
-      npc ? `NPC: ${npc.name}${npc.description ? ` - ${npc.description}` : ""}` : "",
-      player ? `Player avatar: ${player.name}${player.description ? ` - ${player.description}` : ""}` : "",
-    ].filter(Boolean);
-    return sceneParts.join("\n");
-  };
 
   const refreshStorySummary = async (options: {
     sceneSummary: string;
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
-  }) => {
-    if (!gameSummaryKey || summarizeInFlightRef.current) return;
-    summarizeInFlightRef.current = true;
+  }) =>
+    refreshGameStorySummary({
+      gameSummaryKey,
+      storySummary,
+      connected,
+      connectionModel,
+      options,
+      summarizeInFlightRef,
+      setStorySummary,
+      setMomentSelectionMode,
+    });
+
+  // User send flow
+  const sendGamePrompt = async (
+    trimmed: string,
+    options?: {
+      showUserMessage?: boolean;
+      appendToMessageId?: string;
+      appendBaseText?: string;
+    },
+  ) => {
+    const showUserMessage = options?.showUserMessage ?? true;
+    const appendToMessageId = options?.appendToMessageId;
+    const appendBaseText = options?.appendBaseText;
+    const currentSteerInstruction = steerInstruction.trim();
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const userMessage = showUserMessage
+      ? {
+          id: `user-${Date.now()}`,
+          from: "user" as const,
+          text: trimmed,
+        }
+      : null;
+
+    if (userMessage) {
+      setChatMessages((messages) => [...messages, userMessage]);
+    }
+    const userHistoryEntry: OrchestratedMessage | undefined = userMessage
+      ? {
+          id: userMessage.id,
+          from: "user",
+          text: trimmed,
+        }
+      : undefined;
+    if (userHistoryEntry) {
+      setStoryHistory((messages) => [
+        ...messages,
+        userHistoryEntry,
+      ].slice(-20));
+    }
+    setChatInput("");
+    if (currentSteerInstruction) {
+      setSteerInstruction("");
+    }
+
+    if (!connected) {
+      queueDemoReply({
+        trimmed,
+        storyHistory,
+        userHistoryEntry,
+        assignedNpc,
+        assignedPlayer,
+        appendBaseText,
+        appendToMessageId,
+        setChatMessages,
+        setStoryHistory,
+        setMomentSelectionMode,
+        refreshStorySummary,
+        buildSceneSummary: (npc, player) =>
+          buildSceneSummary({
+            title,
+            currentMomentName: currentMoment?.name ?? "",
+            npc,
+            player,
+          }),
+      });
+      return;
+    }
 
     try {
-      const summaryPrompt = [
-        "Update the running story memory for this game.",
-        "Keep it concise but durable.",
-        "Preserve: current scene, story facts, character relationships, goals, unresolved threads, and immediate next beat.",
-        "Do not include filler, apologies, or meta commentary.",
-        "Write plain text only. Aim for 6-10 short bullet points or short paragraphs.",
-        "",
-        `Previous memory:\n${storySummary || "(none)"}`,
-        "",
-        `Scene context:\n${options.sceneSummary || "(none)"}`,
-        "",
-        `Recent history:\n${options.history
-          .slice(-12)
-          .map((msg) => `${msg.from === "user" ? "User" : "Agent"}: ${msg.text}`)
-          .join("\n")}`,
-        "",
-        `Latest user turn:\n${options.userText}`,
-        "",
-        `Latest assistant turn:\n${options.assistantText}`,
-      ].join("\n");
-
-      if (!connected) {
-        const compact = [
-          storySummary,
-          options.sceneSummary,
-          `Latest user turn: ${options.userText}`,
-          `Latest assistant turn: ${options.assistantText}`,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
-          .trim();
-        setMomentSelectionMode("auto");
-        setStorySummary(compact.slice(0, 2000));
-        return;
-      }
-
-      const summarizerAgent: Agent = {
-        id: "summarizer",
-        name: "Story Memory",
-        description:
-          "Compress the game state into a durable summary that preserves scene facts, character relationships, goals, and unresolved threads.",
-      };
+      const { currentNpc, currentPlayer, currentStoryDescription, currentSceneSummary } =
+        await resolveGameAgentContext({
+          storyId: id,
+          assignedNpc,
+          assignedPlayer,
+          setAssignedNpc,
+          setAssignedPlayer,
+          buildSceneSummaryFn: (npc, player) =>
+            buildSceneSummary({
+              title,
+              currentMomentName: currentMoment?.name ?? "",
+              npc,
+              player,
+            }),
+        });
 
       const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
       const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
@@ -702,175 +330,44 @@ export default function GamePage() {
       const lmstudioUrl = normalizeLmstudioUrl(
         getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
       );
-
-      const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: summaryPrompt,
-          model: connectionModel,
-          zenApiKey: zenKey,
-          googleApiKey: googleKey,
-          hfApiKey: hfKey,
-          nvidiaApiKey: nvidiaKey,
-          provider: activeProvider,
-          lmstudioUrl: activeProvider === "lmstudio" ? lmstudioUrl : undefined,
-          agents: [summarizerAgent],
-          stateless: true,
-          orchestration: "parallel",
-          interactionMode: "neutral",
-          story: options.sceneSummary || storySummary,
-          history: options.history.slice(-12),
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      const summaryText =
-        res.ok && data && Array.isArray(data.messages) && typeof data.messages[0]?.text === "string"
-          ? data.messages[0].text.trim()
-          : "";
-
-      if (summaryText) {
-        setMomentSelectionMode("auto");
-        setStorySummary(summaryText.slice(0, 2000));
-      } else {
-        const fallback = [
-          storySummary,
-          options.sceneSummary,
-          `Latest user turn: ${options.userText}`,
-          `Latest assistant turn: ${options.assistantText}`,
-        ]
-          .filter(Boolean)
-          .join("\n\n")
-          .trim();
-        setMomentSelectionMode("auto");
-        setStorySummary(fallback.slice(0, 2000));
-      }
-    } catch {
-      const fallback = [
-        storySummary,
-        options.sceneSummary,
-        `Latest user turn: ${options.userText}`,
-        `Latest assistant turn: ${options.assistantText}`,
-      ]
+      const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
         .filter(Boolean)
         .join("\n\n")
         .trim();
-      setMomentSelectionMode("auto");
-      setStorySummary(fallback.slice(0, 2000));
-    } finally {
-      summarizeInFlightRef.current = false;
-    }
-  };
-
-  const resolveGameAgentContext = async () => {
-    let currentNpc = assignedNpc;
-    let currentPlayer = assignedPlayer;
-    let currentStoryDescription = "";
-    let currentSceneSummary = "";
-
-    if (id) {
-      try {
-        const stories = (await get<any[]>("stories")) || [];
-        const storyMeta = stories.find((s) => s.id === id);
-        currentStoryDescription = storyTextForPrompt(
-          typeof storyMeta?.description === "string" ? storyMeta.description : "",
-        );
-        const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
-        const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
-        const player = storyMeta?.playerId
-          ? characters.find((c) => c.id === storyMeta.playerId)
-          : null;
-
-        currentNpc = npc
-          ? {
-              id: npc.id,
-              name: npc.name ?? "",
-              description: npc.description ?? "",
-              avatarUrl: npc.avatarUrl,
-            }
-          : null;
-        currentPlayer = player
-          ? {
-              id: player.id,
-              name: player.name ?? "",
-              description: player.description ?? "",
-              avatarUrl: player.avatarUrl,
-            }
-          : null;
-
-        currentSceneSummary = buildSceneSummary(currentNpc, currentPlayer);
-
-        setAssignedNpc(currentNpc);
-        setAssignedPlayer(currentPlayer);
-      } catch {
-        /* ignore */
-      }
-    }
-
-    return {
-      currentNpc,
-      currentPlayer,
-      currentStoryDescription,
-      currentSceneSummary,
-    };
-  };
-
-  const sendChatMessage = async () => {
-    const trimmed = chatInput.trim();
-    if (!trimmed) return;
-    const pendingId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-    const userMessage: CustomChatMessage = {
-      id: `user-${Date.now()}`,
-      from: "user",
-      text: trimmed,
-    };
-
-    setChatMessages((messages) => [...messages, userMessage]);
-    const userHistoryEntry: OrchestratedMessage = {
-      id: userMessage.id,
-      from: "user",
-      text: trimmed,
-    };
-    setStoryHistory((messages) => [
-      ...messages,
-      userHistoryEntry,
-    ].slice(-20));
-    setChatInput("");
-
-    if (!connected) {
-      queueDemoReply({
-        trimmed,
-        storyHistory,
-        userHistoryEntry,
-        assignedNpc,
-        assignedPlayer,
-        setChatMessages: (updater) => setChatMessages(updater),
-        setStoryHistory: (updater) => setStoryHistory(updater),
-        setMomentSelectionMode: (value) => setMomentSelectionMode(value),
-        refreshStorySummary,
-        buildSceneSummary,
-      });
-      return;
-    }
-
-    try {
-      await runConnectedChatTurn({
-        pendingId,
+      const requestBody = buildGameAgentRequest({
         trimmed,
         connectionModel,
-        storySummary,
+        activeProvider,
+        steer: currentSteerInstruction,
+        zenKey,
+        googleKey,
+        hfKey,
+        nvidiaKey,
+        lmstudioUrl,
+        storyContext,
+        storyHistory,
+        currentNpc,
+        currentPlayer,
+      });
+
+      if (steerInstruction.trim()) {
+        setSteerInstruction("");
+      }
+
+      await runConnectedChatTurn({
+        pendingId,
+        requestBody,
         storyHistory,
         userHistoryEntry,
-        resolveGameAgentContext,
-        refreshStorySummary,
+        trimmed,
+        currentSceneSummary,
+        appendBaseText,
+        appendToMessageId,
         setChatMessages,
         setStoryHistory,
         setMomentSelectionMode,
         setDebugData,
+        refreshStorySummary,
       });
     } catch (err) {
       const message =
@@ -886,9 +383,68 @@ export default function GamePage() {
                 from: "agent",
                 text: `Error: ${message}`,
               },
-            ],
+          ],
       );
     }
+  };
+
+  const sendChatMessage = async () => {
+    const trimmed = chatInput.trim();
+    if (!trimmed) return;
+    await sendGamePrompt(trimmed);
+  };
+
+  const handleEditChatMessage = (messageId: string, nextText: string) => {
+    setChatMessages((messages) =>
+      messages.map((message) =>
+        message.id === messageId ? { ...message, text: nextText } : message,
+      ),
+    );
+
+    setStoryHistory((history) => {
+      const nextHistory = history.map((message) =>
+        message.id === messageId ? { ...message, text: nextText } : message,
+      );
+      const lastUserEntry = [...nextHistory]
+        .reverse()
+        .find((message) => message.from === "user");
+      void refreshStorySummary({
+        sceneSummary: buildSceneSummary({
+          title,
+          currentMomentName: currentMoment?.name ?? "",
+          npc: assignedNpc,
+          player: assignedPlayer,
+        }),
+        userText: lastUserEntry?.text ?? "",
+        assistantText: nextText,
+        history: nextHistory,
+      });
+      return nextHistory;
+    });
+  };
+
+  const handleSteerChatMessage = (messageId: string, nextText: string) => {
+    if (messageId === "__clear__") {
+      setSteerInstruction("");
+      return;
+    }
+    setSteerInstruction(nextText);
+  };
+
+  const handleContinueChatMessage = async () => {
+    const lastAssistantMessage = [...chatMessages]
+      .reverse()
+      .find((message) => message.from === "agent" && message.id !== "story-opening");
+    if (!lastAssistantMessage) return;
+
+    await sendGamePrompt(
+      "Continue from where you left off. Do not repeat yourself; continue the previous response exactly where it stopped.",
+      {
+        showUserMessage: false,
+        appendToMessageId: lastAssistantMessage.id,
+        appendBaseText: lastAssistantMessage.text,
+      },
+    );
   };
 
   useEffect(() => {
@@ -1159,6 +715,7 @@ export default function GamePage() {
                   id: npc.id,
                   name: npc.name ?? "",
                   description: npc.description ?? "",
+                  appearance: typeof storyMeta?.npcAppearance === "string" ? storyMeta.npcAppearance : "",
                   avatarUrl: npc.avatarUrl,
                 }
               : null,
@@ -1170,6 +727,8 @@ export default function GamePage() {
                   id: player.id,
                   name: player.name ?? "",
                   description: player.description ?? "",
+                  appearance:
+                    typeof storyMeta?.playerAppearance === "string" ? storyMeta.playerAppearance : "",
                   avatarUrl: player.avatarUrl,
                 }
               : null,
@@ -1178,10 +737,10 @@ export default function GamePage() {
           setStoryMetaLoaded(true);
           setTitle(resolvedTitle || `Game ${id}`);
 
-          const storedHistory = (await get<OrchestratedMessage[]>(`game-history:${id}`)) || [];
+          const storedHistory = await loadGameHistory(gameHistoryKey);
           if (!mounted) return;
 
-          const nextHistory = Array.isArray(storedHistory) ? storedHistory : [];
+          const nextHistory = storedHistory;
           setStoryHistory(nextHistory);
 
           const openingText =
@@ -1276,7 +835,7 @@ export default function GamePage() {
               className="absolute inset-0 h-full w-full"
             >
               <ResizablePanel
-                defaultSize="66%"
+                defaultSize="55%"
                 className="border-r border-slate-700/40"
                 data-testid="game-sidebar-panel"
               >
@@ -1324,7 +883,7 @@ export default function GamePage() {
               <ResizableHandle withHandle />
 
               <ResizablePanel
-                defaultSize="34%"
+                defaultSize="45%"
                 minSize={0.2}
                 className="p-4 flex flex-col min-h-0 min-w-0 max-w-full"
                 data-testid="game-chat-panel"
@@ -1348,6 +907,10 @@ export default function GamePage() {
                     input={chatInput}
                     onInputChange={setChatInput}
                     onSend={sendChatMessage}
+                    onEditMessage={handleEditChatMessage}
+                    onSteerMessage={handleSteerChatMessage}
+                    onContinueMessage={handleContinueChatMessage}
+                    steerInstruction={steerInstruction}
                     disabled={false}
                     connected={connected}
                     connectionModel={connectionModel}
@@ -1454,6 +1017,54 @@ export default function GamePage() {
                 <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs">
                   {JSON.stringify(debugData.request, null, 2)}
                 </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Steer Note</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {debugData.request?.steer
+                    ? String(debugData.request.steer)
+                    : steerInstruction.trim()
+                      ? steerInstruction.trim()
+                      : "No steer note set"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <div className="mb-2 flex items-center gap-2">
+                  <h4 className="text-sm font-medium text-slate-400">Current Moment</h4>
+                  <button
+                    type="button"
+                    onClick={() => setMomentTagsOpen((open) => !open)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-slate-400 hover:bg-white/5 hover:text-white"
+                    aria-label="Moment tags"
+                    title="Moment tags"
+                  >
+                    <FaTags className="h-4 w-4" />
+                  </button>
+                </div>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {currentMoment
+                    ? `ID: ${currentMoment.id}\n${currentMoment.name ? `Name: ${currentMoment.name}` : ""}`
+                    : "No moment selected"}
+                </pre>
+                {momentTagsOpen ? (
+                  <div className="mt-3 rounded border border-slate-700 bg-slate-950 p-3 text-xs">
+                    <div className="mb-2 text-slate-400">Tags</div>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.isArray(currentMoment?.tags) && currentMoment.tags.length > 0 ? (
+                        currentMoment.tags.map((tag: string) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"
+                          >
+                            {tag}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-500">No tags on this moment</span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <div className="flex-shrink-0">
                 <h4 className="mb-2 text-sm font-medium text-slate-400">Story Memory</h4>
