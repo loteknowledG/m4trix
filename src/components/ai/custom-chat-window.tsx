@@ -3,6 +3,7 @@ import { FaCompass } from 'react-icons/fa';
 import { FaArrowRight } from 'react-icons/fa6';
 import { FiVolume2, FiVolumeX } from 'react-icons/fi';
 import { MdOutlineEditNote } from 'react-icons/md';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectTrigger,
@@ -506,12 +507,13 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                       ) : null}
                     </div>
                   ) : null}
-                  <button
+                  <Button
+                    variant={voiceEnabled ? 'default' : 'secondary'}
+                    size="icon"
                     className={
-                      'inline-flex h-8 w-8 items-center justify-center rounded-md border text-xs transition-colors ' +
-                      (voiceEnabled
-                        ? 'border-emerald-500/60 bg-emerald-600 text-white hover:bg-emerald-500'
-                        : 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700')
+                      voiceEnabled
+                        ? 'h-8 w-8 bg-emerald-600 text-white hover:bg-emerald-500'
+                        : 'h-8 w-8 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
                     }
                     onClick={() => setVoiceEnabled(prev => !prev)}
                     type="button"
@@ -519,24 +521,28 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     title={voiceEnabled ? 'Voice on' : 'Voice off'}
                   >
                     {voiceEnabled ? <FiVolume2 className="h-4 w-4" /> : <FiVolumeX className="h-4 w-4" />}
-                  </button>
+                  </Button>
                   {sendIcon ? (
-                    <button
-                      className="rounded-md bg-white text-black p-2 hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333] disabled:opacity-50"
+                    <Button
+                      variant="raised"
+                      size="icon"
+                      className="h-8 w-8 bg-white text-black hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333]"
                       onClick={handleSend}
                       disabled={disabled || !input.trim()}
                       aria-label={sendIconAriaLabel ?? 'Send message'}
                     >
                       {sendIcon}
-                    </button>
+                    </Button>
                   ) : (
-                    <button
-                      className="rounded-md bg-primary text-primary-foreground px-4 py-2 disabled:opacity-50"
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="px-4 py-2"
                       onClick={handleSend}
                       disabled={disabled || !input.trim()}
                     >
                       Send
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

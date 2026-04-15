@@ -383,6 +383,18 @@ export default function CollectionOverlay() {
   // overlay active after navigation (e.g., sidebar link clicks)
   const pathname = usePathname();
   const prevPathRef = useRef<string | null>(pathname);
+  const overlayFontFamily =
+    font === 'serif'
+      ? 'serif'
+      : font === 'mono'
+        ? 'monospace'
+        : font === 'cursive'
+          ? 'cursive'
+          : font === 'mrs'
+            ? '"Mrs Saint Delafield", cursive'
+            : font === 'satisfy'
+              ? '"Satisfy", cursive'
+              : 'system-ui, sans-serif';
   useEffect(() => {
     if (!ctx || !isOpen) {
       prevPathRef.current = pathname;
@@ -566,10 +578,25 @@ export default function CollectionOverlay() {
           <div
             onMouseDown={e => onStartDrag(e)}
             onTouchStart={e => onStartDrag(e)}
-            className="absolute z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab pointer-events-auto"
+            onDragStart={e => e.preventDefault()}
+            className="absolute z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab pointer-events-auto select-none touch-none"
             role="presentation"
           >
-            <span className="block text-white drop-shadow-lg px-4 text-center break-words">
+            <span
+              className="block px-4 text-center break-words whitespace-pre-wrap leading-tight select-none"
+              style={{
+                fontFamily: overlayFontFamily,
+                fontSize: `${fontSize}px`,
+                color: fontColor,
+                width: pixelWidth ? `${pixelWidth}px` : `${textWidth}%`,
+                maxWidth: `${textWidth}%`,
+                WebkitTextStroke: strokeWidth > 0 ? `${strokeWidth}px ${strokeColor}` : undefined,
+                textShadow:
+                  strokeWidth > 0
+                    ? `0 0 1px ${strokeColor}, 0 0 2px ${strokeColor}`
+                    : '0 2px 8px rgba(0,0,0,0.85)',
+              }}
+            >
               {text}
             </span>
           </div>

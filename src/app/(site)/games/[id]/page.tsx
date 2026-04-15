@@ -35,9 +35,12 @@ import {
 } from "@/lib/game/game-agent";
 import {
   getGameHistoryKey,
+  getGameMomentKey,
   getGameSummaryKey,
+  loadGameMoment,
   loadGameHistory,
   loadGameSummary,
+  saveGameMoment,
   saveGameHistory,
   saveGameSummary,
 } from "@/lib/game/game-storage";
@@ -66,6 +69,7 @@ export default function GamePage() {
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
+  const momentStateReadyRef = useRef(false);
   const buildOpeningDetails = (
     description: string,
     npc: typeof assignedNpc,
@@ -135,6 +139,7 @@ export default function GamePage() {
   const hasMoments = storyMoments.length > 0;
   const gameHistoryKey = getGameHistoryKey(id);
   const gameSummaryKey = getGameSummaryKey(id);
+  const gameMomentKey = getGameMomentKey(id);
   const summarizeInFlightRef = useRef(false);
 
   const goToPreviousMoment = () => {
@@ -154,6 +159,16 @@ export default function GamePage() {
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
     setPreviewSrc(typeof src === "string" ? src : undefined);
   }, [currentMoment]);
+
+  useEffect(() => {
+    if (!gameMomentKey) return;
+    if (!momentStateReadyRef.current) return;
+    void saveGameMoment(gameMomentKey, {
+      index: currentMomentIndex,
+      mode: momentSelectionMode,
+      momentId: currentMoment?.id ?? null,
+    });
+  }, [gameMomentKey, currentMomentIndex, momentSelectionMode, currentMoment?.id]);
 
   useEffect(() => {
     if (!storyMetaLoaded) return;
@@ -688,6 +703,7 @@ export default function GamePage() {
     // Default title while we load data.
     setTitle(`Game ${id}`);
     setStoryMetaLoaded(false);
+    momentStateReadyRef.current = false;
     setChatMessages([]);
 
     (async () => {
@@ -703,15 +719,6 @@ export default function GamePage() {
             : [];
         setStoryMoments(momentsArr);
         setGameData(storyObj);
-        const initialMomentIndex = (() => {
-          if (!momentsArr.length) return 0;
-          if (storyObj && storyObj.titleMomentId) {
-            const titleMomentIndex = momentsArr.findIndex((m: any) => m.id === storyObj.titleMomentId);
-            return titleMomentIndex >= 0 ? titleMomentIndex : 0;
-          }
-          return 0;
-        })();
-        setCurrentMomentIndex(initialMomentIndex);
 
         // The story object in IndexedDB often doesn’t include a title,
         // so fall back to the stories metadata list (used by the carousel).
@@ -760,7 +767,34 @@ export default function GamePage() {
               : null,
           );
 
+          const storedMomentState = await loadGameMoment(gameMomentKey);
+          if (!mounted) return;
+          const initialMomentIndex = (() => {
+            if (!momentsArr.length) return 0;
+            if (storedMomentState?.momentId) {
+              const savedMomentIndex = momentsArr.findIndex(
+                (m: any) => m.id === storedMomentState.momentId,
+              );
+              if (savedMomentIndex >= 0) return savedMomentIndex;
+            }
+            if (
+              typeof storedMomentState?.index === "number" &&
+              storedMomentState.index >= 0 &&
+              storedMomentState.index < momentsArr.length
+            ) {
+              return storedMomentState.index;
+            }
+            if (storyObj && storyObj.titleMomentId) {
+              const titleMomentIndex = momentsArr.findIndex((m: any) => m.id === storyObj.titleMomentId);
+              return titleMomentIndex >= 0 ? titleMomentIndex : 0;
+            }
+            return 0;
+          })();
+          setCurrentMomentIndex(initialMomentIndex);
+          setMomentSelectionMode(storedMomentState?.mode === "manual" ? "manual" : "auto");
+
           setStoryMetaLoaded(true);
+          momentStateReadyRef.current = true;
           setTitle(resolvedTitle || `Game ${id}`);
 
           const storedHistory = await loadGameHistory(gameHistoryKey);
@@ -915,8 +949,9 @@ export default function GamePage() {
                 data-testid="game-chat-panel"
                 style={{ flexShrink: 1 }}
               >
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-3 flex items-center justify-center">
                   <div className="inline-flex max-w-full items-center rounded-full border border-zinc-700/80 bg-zinc-900/70 px-3 py-1 text-sm font-medium text-zinc-100 shadow-sm">
+                    <span className="mr-2 h-2 w-2 shrink-0 rounded-full bg-fuchsia-500 shadow-[0_0_12px_rgba(217,70,239,0.85)] animate-pulse" />
                     <span className="truncate">{title}</span>
                   </div>
                 </div>
