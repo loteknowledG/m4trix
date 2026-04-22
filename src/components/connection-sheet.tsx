@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Plug } from 'lucide-react';
+import { Loader2, Plug } from '@/components/icons';
 import { VscDebugDisconnect } from 'react-icons/vsc';
 import { PiPlugsConnectedLight } from 'react-icons/pi';
 import { Button } from '@/components/ui/button';

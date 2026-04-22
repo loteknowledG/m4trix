@@ -1,0 +1,47 @@
+{
+  "id": "penny-pax-corruption-arc-v1",
+  "name": "Penny Pax Corruption Arc",
+  "description": "A gradual five-stage descent from confidence to surrender.",
+  "stages": [
+    {
+      "stageNumber": 1,
+      "stageName": "First Meeting",
+      "shortDescription": "Penny enters the scene confident and guarded.",
+      "emotionalState": ["confident", "skeptical", "curious"],
+      "keyTags": ["first-meeting", "normal-life", "boundaries", "new-contact"],
+      "exampleDialogTone": "Polite, composed, and slightly dismissive."
+    },
+    {
+      "stageNumber": 2,
+      "stageName": "Curiosity",
+      "shortDescription": "She begins testing limits and rationalizing risky choices.",
+      "emotionalState": ["intrigued", "conflicted", "restless"],
+      "keyTags": ["temptation", "curiosity", "boundary-testing", "secret-interest"],
+      "exampleDialogTone": "Defensive excuses with flashes of excitement."
+    },
+    {
+      "stageNumber": 3,
+      "stageName": "First Compromise",
+      "shortDescription": "She crosses a line and feels both guilt and pull.",
+      "emotionalState": ["ashamed", "shaken", "aroused"],
+      "keyTags": ["first-fall", "guilt", "shame", "aftermath", "loss-of-control"],
+      "exampleDialogTone": "Regretful and rattled, but unable to let it go."
+    },
+    {
+      "stageNumber": 4,
+      "stageName": "Deepening Addiction",
+      "shortDescription": "Repeated choices reinforce craving and dependency.",
+      "emotionalState": ["compulsive", "anxious", "dependent"],
+      "keyTags": ["addiction", "dependency", "escalation", "double-life", "craving"],
+      "exampleDialogTone": "Urgent, needy, and increasingly self-justifying."
+    },
+    {
+      "stageNumber": 5,
+      "stageName": "Full Surrender",
+      "shortDescription": "She accepts the transformed identity and stops resisting.",
+      "emotionalState": ["submissive", "accepting", "relieved"],
+      "keyTags": ["surrender", "identity-shift", "acceptance", "end-state"],
+      "exampleDialogTone": "Calm, obedient, and fully reconciled to the new role."
+    }
+  ]
+}

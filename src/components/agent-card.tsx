@@ -2,16 +2,22 @@ import React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileUp, ImagePlus, User } from 'lucide-react';
+import { FileUp, ImagePlus, User } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { copyImageToClipboardFromSrc, getImageFileFromPasteEvent } from '@/lib/clipboard-image';
 
 export interface AgentCardProps {
   name: string;
   description: string;
   avatarUrl?: string;
   avatarCrop?: { x: number; y: number; zoom: number };
+  /** Stable id for drag highlight (prefer character id over display name). */
+  avatarDropId?: string;
   dragOverId?: string | null;
+  /** Sidebar-level hint: user is dragging a file — show drop frames at full strength. */
+  fileDropHint?: boolean;
+  onAvatarDragHover?: (id: string | null) => void;
   onAvatarUpload?: (file: File) => void;
   onImport?: (file: File) => void;
   onExport?: () => void;
@@ -48,7 +54,10 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   description,
   avatarUrl,
   avatarCrop,
+  avatarDropId,
   dragOverId,
+  fileDropHint,
+  onAvatarDragHover,
   onAvatarUpload,
   onImport,
   onExport,
@@ -58,11 +67,78 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   onDescriptionChange,
   isUser = false,
 }) => {
+  const dropId = avatarDropId ?? (isUser ? 'user' : name);
+
+  const handleCopyPortrait = async () => {
+    if (!avatarUrl?.trim()) {
+      toast.error('No portrait to copy yet.');
+      return;
+    }
+    try {
+      await copyImageToClipboardFromSrc(avatarUrl);
+      toast.success('Portrait copied — paste into Grok or another app.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not copy image.';
+      toast.error(msg);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2 w-full">
       <div className="flex gap-2 items-center">
-        <label className="relative group cursor-pointer">
-          <Avatar className="h-8 w-8 shrink-0 border transition-all hover:border-primary/50 relative">
+        <label
+          className={cn(
+            'relative group cursor-pointer rounded-lg p-0.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60',
+            'border-2 border-dashed border-zinc-500/70 bg-zinc-950/30',
+            fileDropHint && dragOverId !== dropId && 'border-cyan-500/50 bg-cyan-950/25',
+            dragOverId === dropId &&
+              'border-cyan-400 border-solid bg-cyan-500/20 shadow-[0_0_0_2px_rgba(34,211,238,0.45)] ring-2 ring-cyan-300/50'
+          )}
+          tabIndex={0}
+          title="Drop image, paste from clipboard (click here first), or pick a file"
+          onPaste={e => {
+            const file = getImageFileFromPasteEvent(e);
+            if (!file || !onAvatarUpload) return;
+            e.preventDefault();
+            onAvatarUpload(file);
+            toast.success('Image pasted from clipboard.');
+          }}
+          onDragEnter={e => {
+            if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
+            e.preventDefault();
+            onAvatarDragHover?.(dropId);
+          }}
+          onDragLeave={e => {
+            if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
+            const next = e.relatedTarget as Node | null;
+            if (next && e.currentTarget.contains(next)) return;
+            onAvatarDragHover?.(null);
+          }}
+          onDragOver={e => {
+            if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            onAvatarDragHover?.(dropId);
+          }}
+          onDrop={e => {
+            e.preventDefault();
+            onAvatarDragHover?.(null);
+            const file = e.dataTransfer.files?.[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+              toast.error('Drop an image file.');
+              return;
+            }
+            onAvatarUpload?.(file);
+            toast.success('Image dropped — opening crop…');
+          }}
+        >
+          <Avatar
+            className={cn(
+              'relative h-8 w-8 shrink-0 border transition-all hover:border-primary/50',
+              (fileDropHint || dragOverId === dropId) && 'border-cyan-400/80'
+            )}
+          >
             <AvatarImage
               src={avatarUrl}
               style={
@@ -99,16 +175,28 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             </AvatarFallback>
             <div
               className={cn(
-                'absolute inset-0 flex flex-col items-center justify-center bg-black/40 transition-all',
-                dragOverId === (isUser ? 'user' : name)
-                  ? 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background scale-105'
-                  : 'opacity-0 group-hover:opacity-100'
+                'absolute inset-0 flex flex-col items-center justify-center transition-all',
+                dragOverId === dropId
+                  ? 'bg-cyan-950/75 opacity-100 ring-2 ring-cyan-300 ring-offset-1 ring-offset-zinc-950'
+                  : fileDropHint
+                  ? 'bg-black/35 opacity-100'
+                  : 'bg-black/40 opacity-0 group-hover:opacity-100'
               )}
             >
-              <ImagePlus className="h-4 w-4 text-white mb-1" />
-              {dragOverId === (isUser ? 'user' : name) && (
-                <span className="text-[8px] text-white font-bold uppercase tracking-tighter">
-                  Drop
+              <ImagePlus
+                className={cn(
+                  'mb-0.5 h-4 w-4 text-white drop-shadow',
+                  (fileDropHint || dragOverId === dropId) && 'text-cyan-100'
+                )}
+              />
+              {(dragOverId === dropId || fileDropHint) && (
+                <span
+                  className={cn(
+                    'text-[7px] font-bold uppercase tracking-tighter text-white',
+                    dragOverId === dropId ? 'text-cyan-50' : 'text-zinc-300'
+                  )}
+                >
+                  {dragOverId === dropId ? 'Drop here' : 'Drop'}
                 </span>
               )}
             </div>
@@ -125,6 +213,30 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             }}
           />
         </label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+          title="Copy portrait to clipboard"
+          aria-label="Copy portrait to clipboard"
+          disabled={!avatarUrl}
+          onClick={() => void handleCopyPortrait()}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
+            aria-hidden
+          >
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </Button>
         <Button
           variant="ghost"
           size="icon"

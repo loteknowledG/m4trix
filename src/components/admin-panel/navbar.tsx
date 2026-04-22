@@ -3,7 +3,7 @@
 import useSelection from '@/hooks/use-selection';
 import { SheetMenu } from '@/components/admin-panel/sheet-menu';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from 'lucide-react';
+import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from '@/components/icons';
 import { GrUserAdd } from 'react-icons/gr';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Marquee } from '@/components/ui/marquee';

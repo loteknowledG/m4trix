@@ -1,5 +1,4 @@
 @import url('https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&display=swap');
-@import "quill/dist/quill.snow.css";
 /* Import Mrs Saint Delafield from Google Fonts */
 /* If Google Fonts import is blocked, you can self-host a WOFF2 at /public/fonts/MrsSaintDelafield.woff2 */
 html,
@@ -210,37 +209,4 @@ body,
     box-shadow: 8px 8px 22px rgba(0, 0, 0, 0.9);
   }
 
-  .character-description-editor {
-    @apply overflow-hidden rounded border border-zinc-700 bg-transparent text-sm;
-  }
-
-  .character-description-editor .ql-toolbar.ql-snow {
-    @apply border-0 border-b border-zinc-800 bg-zinc-950/70;
-  }
-
-  .character-description-editor .ql-container.ql-snow {
-    @apply border-0 bg-transparent text-sm text-foreground;
-    min-height: 120px;
-  }
-
-  .character-description-editor .ql-editor {
-    min-height: 120px;
-  }
-
-  .character-description-editor .ql-editor.ql-blank::before {
-    color: rgb(113 113 122);
-    font-style: normal;
-  }
-
-  .character-description-editor .ql-snow .ql-stroke {
-    stroke: currentColor;
-  }
-
-  .character-description-editor .ql-snow .ql-fill {
-    fill: currentColor;
-  }
-
-  .character-description-editor .ql-snow .ql-picker {
-    color: inherit;
-  }
 }

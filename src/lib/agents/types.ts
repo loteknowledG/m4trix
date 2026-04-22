@@ -36,12 +36,13 @@ export type AgentsRequest = {
    * When provided and Zen is configured, overrides ZEN_MODEL.
    */
   model?: string;
-  provider?: "zen" | "google" | "hf" | "huggingface" | "nvidia" | "lmstudio";
+  provider?: "zen" | "google" | "hf" | "huggingface" | "nvidia" | "lmstudio" | "xai";
   lmstudioUrl?: string;
   zenApiKey?: string;
   googleApiKey?: string;
   hfApiKey?: string;
   nvidiaApiKey?: string;
+  xaiApiKey?: string;
   /**
    * Optional character (the assigned NPC) to use instead of default agents.
    */

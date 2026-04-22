@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { cn } from "@/lib/utils"
-import { FileTextIcon, GlobeIcon, ImageIcon, Music2Icon, PaperclipIcon, VideoIcon, XIcon } from "lucide-react"
+import { FileTextIcon, GlobeIcon, ImageIcon, Music2Icon, PaperclipIcon, VideoIcon, XIcon } from "@/components/icons"
 import type { ComponentProps, HTMLAttributes, ReactNode } from "react"
 import { createContext, useContext, useMemo } from "react"
 

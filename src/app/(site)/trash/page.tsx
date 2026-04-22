@@ -8,7 +8,7 @@ import { ContentLayout } from '@/components/admin-panel/content-layout';
 import ErrorBoundary from '@/components/error-boundary';
 import { MomentsProvider } from '@/context/moments-collection';
 import MomentsGrid from '@/components/moments-grid';
-import { Trash2, RotateCcw } from 'lucide-react';
+import { Trash2, RotateCcw } from '@/components/icons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Moment = { id: string; src: string; name?: string };

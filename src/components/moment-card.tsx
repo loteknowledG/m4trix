@@ -1,6 +1,6 @@
 'use client';
 
-import { Circle, Check, CheckCircle } from 'lucide-react';
+import { Circle, Check, CheckCircle } from '@/components/icons';
 import { useEffect, useState } from 'react';
 import { normalizeMomentSrc } from '@/lib/moments';
 import type { MouseEvent as ReactMouseEvent } from 'react';

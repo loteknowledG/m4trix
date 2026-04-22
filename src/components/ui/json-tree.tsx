@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/icons";
 
 type JsonTreeProps = {
   data: any;

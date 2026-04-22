@@ -6,9 +6,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
-import { QuillEditor } from '@/components/quill-editor';
+import { DescriptionEditor } from '@/components/description-editor';
 import { cn } from '@/lib/utils';
-import { Trash2 } from 'lucide-react';
+import { Trash2 } from '@/components/icons';
 
 type Agent = {
   id: string;
@@ -23,6 +23,16 @@ type Agent = {
 };
 
 const AGENTS_KEY = 'PLAYGROUND_AGENTS';
+
+function normalizeDescription(value: string) {
+  if (!value) return '';
+
+  return value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ');
+}
 
 export default function AgentDetailPage() {
   const params = useParams();
@@ -47,7 +57,7 @@ export default function AgentDetailPage() {
       if (found) {
         setAgent(found);
         setNameValue(found.name);
-        setDescriptionValue(found.description);
+        setDescriptionValue(normalizeDescription(found.description));
         setIsEditingName(found.name.trim() === '');
       } else {
         const newAgent = {
@@ -249,7 +259,7 @@ export default function AgentDetailPage() {
               {nameValue.trim() ? nameValue : 'Untitled'}
             </h1>
           )}
-          <QuillEditor
+          <DescriptionEditor
             className="character-description-editor"
             value={descriptionValue}
             onChange={setDescriptionValue}

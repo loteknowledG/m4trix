@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Circle, CheckCircle } from "lucide-react";
+import { Circle, CheckCircle } from "@/components/icons";
 import {
   Tooltip,
   TooltipContent,

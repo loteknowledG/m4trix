@@ -9,7 +9,16 @@ export const GOOGLE_CHAT_URL =
 
 export const HUGGINGFACE_CHAT_URL = 'https://router.huggingface.co/v1/chat/completions';
 
-export type ProviderName = 'zen' | 'google' | 'hf' | 'huggingface' | 'nvidia' | 'lmstudio';
+export const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions';
+
+export type ProviderName =
+  | 'zen'
+  | 'google'
+  | 'hf'
+  | 'huggingface'
+  | 'nvidia'
+  | 'lmstudio'
+  | 'xai';
 
 export type ProviderConfig = {
   url: string;
@@ -27,6 +36,7 @@ export function getProviderConfig(
     googleApiKey?: string;
     hfApiKey?: string;
     nvidiaApiKey?: string;
+    xaiApiKey?: string;
   }
 ): ProviderConfig {
   switch (provider) {
@@ -64,6 +74,15 @@ export function getProviderConfig(
       const model = options.model || 'nvidia/llama-3.1-nemotron-70b-instruct';
       return {
         url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+        apiKey,
+        model,
+      };
+    }
+    case 'xai': {
+      const apiKey = options.apiKey || options.xaiApiKey || process.env.XAI_API_KEY;
+      const model = options.model || 'grok-3';
+      return {
+        url: XAI_CHAT_URL,
         apiKey,
         model,
       };

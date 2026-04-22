@@ -2,16 +2,24 @@
 
 import { get, set } from "idb-keyval";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaBug } from "react-icons/fa";
 import { FaTags } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { type CustomChatMessage, CustomChatWindow } from "@/components/ai/custom-chat-window";
+import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FullscreenDialog } from "@/components/ui/full-screen-dialog";
 import { Pressable } from "@/components/ui/pressable";
 import { CarouselNavButton } from "@/components/ui/carousel";
@@ -28,6 +36,7 @@ import {
   resolveGameAgentContext,
   type GameCharacterContext,
 } from "@/lib/game/game-context";
+import { mapGameChatForGrokImage } from "@/lib/grok-image-game";
 import {
   buildGameAgentRequest,
   queueDemoReply,
@@ -59,11 +68,19 @@ export default function GamePage() {
   const [previewSrc, setPreviewSrc] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(true);
+  /** Radix may call onOpenChange(false) during focus/portal churn; shell only closes via Quit. */
+  const handleGameShellOpenChange = useCallback((next: boolean) => {
+    if (!next) return;
+    setDialogOpen(true);
+  }, []);
+  const historyPushedForOpenRef = useRef(false);
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [title, setTitle] = useState("Game");
   const [storyMoments, setStoryMoments] = useState<any[]>([]);
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
   const [storyDescription, setStoryDescription] = useState("");
+  const [storyArc, setStoryArc] = useState<any>(null);
+  const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
   const [storyHistory, setStoryHistory] = useState<OrchestratedMessage[]>([]);
   const [storySummary, setStorySummary] = useState("");
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
@@ -117,7 +134,10 @@ export default function GamePage() {
   } | null>(null);
 
   const [debugOpen, setDebugOpen] = useState(false);
-  const [momentTagsOpen, setMomentTagsOpen] = useState(false);
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
+  const [momentTags, setMomentTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [allTags, setAllTags] = useState<string[]>([]);
   const [debugData, setDebugData] = useState<{
     request: any;
     response: any;
@@ -137,6 +157,47 @@ export default function GamePage() {
   });
   const currentMoment = storyMoments[currentMomentIndex] ?? null;
   const hasMoments = storyMoments.length > 0;
+  const storyArcStages = Array.isArray(storyArc?.stages) ? storyArc.stages : [];
+  const resolvedArcStageNumber =
+    typeof storyArcCurrentStage === "number" && Number.isFinite(storyArcCurrentStage)
+      ? storyArcCurrentStage
+      : storyArcStages.length > 0
+        ? Number(storyArcStages[0]?.stageNumber ?? 1)
+        : null;
+  const resolvedArcStage =
+    resolvedArcStageNumber == null
+      ? null
+      : storyArcStages.find((stage: any) => Number(stage?.stageNumber) === resolvedArcStageNumber) ||
+        null;
+  const tagSuggestions = useMemo(() => {
+    const q = tagInput.trim().toLowerCase();
+    if (!q) return [];
+    return allTags
+      .filter((tag) => tag.toLowerCase().includes(q))
+      .filter((tag) => !momentTags.includes(tag))
+      .slice(0, 8);
+  }, [allTags, momentTags, tagInput]);
+
+  const grokStoryText = useMemo(
+    () => [storyTextForPrompt(storyDescription), storySummary.trim()].filter(Boolean).join("\n\n"),
+    [storyDescription, storySummary],
+  );
+
+  const grokSceneContext = useMemo(
+    () =>
+      buildSceneSummary({
+        title,
+        currentMomentName: currentMoment?.name ?? "",
+        npc: assignedNpc,
+        player: assignedPlayer,
+      }),
+    [title, currentMoment?.name, assignedNpc, assignedPlayer],
+  );
+
+  const grokChatMapping = useMemo(
+    () => mapGameChatForGrokImage(chatMessages, assignedNpc, assignedPlayer),
+    [chatMessages, assignedNpc, assignedPlayer],
+  );
   const gameHistoryKey = getGameHistoryKey(id);
   const gameSummaryKey = getGameSummaryKey(id);
   const gameMomentKey = getGameMomentKey(id);
@@ -488,10 +549,59 @@ export default function GamePage() {
     );
   };
 
+  const loadCurrentMomentTags = useCallback(async () => {
+    if (!currentMoment?.id) {
+      setMomentTags([]);
+      return;
+    }
+    try {
+      const stored = await get<any>(`overlay:text:${currentMoment.id}`);
+      const loaded = Array.isArray(stored?.tags) ? stored.tags : [];
+      setMomentTags(loaded.filter((tag: unknown) => typeof tag === "string" && tag.trim()));
+    } catch {
+      setMomentTags([]);
+    }
+  }, [currentMoment?.id]);
+
+  const loadAllTags = useCallback(async () => {
+    try {
+      const stored = await get<any>("overlay:tags");
+      setAllTags(Array.isArray(stored) ? stored.filter((tag) => typeof tag === "string") : []);
+    } catch {
+      setAllTags([]);
+    }
+  }, []);
+
+  const saveCurrentMomentTags = useCallback(
+    async (nextTags: string[]) => {
+      if (!currentMoment?.id) return;
+      const cleaned = Array.from(new Set(nextTags.map((tag) => tag.trim()).filter(Boolean)));
+      try {
+        const key = `overlay:text:${currentMoment.id}`;
+        const stored = await get<any>(key);
+        const base = stored && typeof stored === "object" ? stored : {};
+        await set(key, { ...base, tags: cleaned });
+        const merged = Array.from(new Set([...allTags, ...cleaned]));
+        await set("overlay:tags", merged);
+        setAllTags(merged);
+        setMomentTags(cleaned);
+      } catch (err) {
+        console.warn("[game][tags] failed to save tags", err);
+      }
+    },
+    [allTags, currentMoment?.id],
+  );
+
   useEffect(() => {
     // Re-open the fullscreen dialog whenever the game id changes.
     setDialogOpen(true);
   }, [id]);
+
+  useEffect(() => {
+    if (!tagDialogOpen) return;
+    void loadCurrentMomentTags();
+    void loadAllTags();
+  }, [tagDialogOpen, loadCurrentMomentTags, loadAllTags]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -639,9 +749,16 @@ export default function GamePage() {
 
   useEffect(() => {
     // Prevent accidental back navigation while the game modal is open.
-    if (!dialogOpen) return;
+    if (!dialogOpen) {
+      historyPushedForOpenRef.current = false;
+      return;
+    }
 
-    window.history.pushState(null, "", window.location.href);
+    // One push per open session avoids history/router churn that can fight Radix focus.
+    if (!historyPushedForOpenRef.current) {
+      window.history.pushState(null, "", window.location.href);
+      historyPushedForOpenRef.current = true;
+    }
 
     const handlePop = () => {
       window.history.pushState(null, "", window.location.href);
@@ -736,6 +853,31 @@ export default function GamePage() {
                 ? storyObj.description
                 : "";
           setStoryDescription(resolvedDescription);
+          const resolvedArc = storyMeta?.storyArc ?? storyObj?.storyArc ?? null;
+          setStoryArc(resolvedArc);
+
+          const resolveCurrentArcStage = () => {
+            const fromMeta = storyMeta?.storyArcCurrentStage;
+            if (typeof fromMeta === "number" && Number.isFinite(fromMeta)) return fromMeta;
+            const fromObj = storyObj?.storyArcCurrentStage;
+            if (typeof fromObj === "number" && Number.isFinite(fromObj)) return fromObj;
+            const arcState = storyMeta?.storyArcState ?? storyObj?.storyArcState;
+            if (arcState && typeof arcState === "object") {
+              const mainArcId =
+                typeof (arcState as any).mainArcId === "string" ? (arcState as any).mainArcId : null;
+              const map =
+                (arcState as any).currentStageByArcId &&
+                typeof (arcState as any).currentStageByArcId === "object"
+                  ? (arcState as any).currentStageByArcId
+                  : null;
+              if (mainArcId && map && typeof map[mainArcId] === "number") {
+                return Number(map[mainArcId]);
+              }
+            }
+            return null;
+          };
+
+          setStoryArcCurrentStage(resolveCurrentArcStage());
           const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
           const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
           const player = storyMeta?.playerId
@@ -859,7 +1001,7 @@ export default function GamePage() {
     <ContentLayout title={title} titleMarquee={false} navLeft={null}>
       <FullscreenDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={handleGameShellOpenChange}
         preventClose
         trigger={null}
         title=""
@@ -887,6 +1029,16 @@ export default function GamePage() {
             aria-label="Debug"
           >
             <FaBug className="h-4 w-4" />
+          </Pressable>
+
+          <Pressable
+            type="button"
+            onClick={() => setTagDialogOpen(true)}
+            className="fixed bottom-4 left-28 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Tag current moment"
+            disabled={!currentMoment}
+          >
+            <FaTags className="h-4 w-4" />
           </Pressable>
 
           <div className="relative h-full w-full">
@@ -949,10 +1101,21 @@ export default function GamePage() {
                 data-testid="game-chat-panel"
                 style={{ flexShrink: 1 }}
               >
-                <div className="mb-3 flex items-center justify-center">
-                  <div className="inline-flex max-w-full items-center rounded-full border border-zinc-700/80 bg-zinc-900/70 px-3 py-1 text-sm font-medium text-zinc-100 shadow-sm">
+                <div className="mb-3 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-center">
+                  <div className="inline-flex max-w-full min-w-0 items-center justify-center rounded-full border border-zinc-700/80 bg-zinc-900/70 px-3 py-1 text-sm font-medium text-zinc-100 shadow-sm">
                     <span className="mr-2 h-2 w-2 shrink-0 rounded-full bg-fuchsia-500 shadow-[0_0_12px_rgba(217,70,239,0.85)] animate-pulse" />
                     <span className="truncate">{title}</span>
+                  </div>
+                  <div className="flex justify-center sm:justify-end sm:pl-2">
+                    <GrokImagePromptButton
+                      agents={grokChatMapping.agents}
+                      className="h-8 border-zinc-600 bg-zinc-900/80 text-xs text-zinc-100 hover:bg-zinc-800"
+                      focusAgentId={grokChatMapping.focusAgentId}
+                      messages={grokChatMapping.messages}
+                      prompterAgent={grokChatMapping.prompterAgent}
+                      sceneContext={grokSceneContext}
+                      story={grokStoryText}
+                    />
                   </div>
                 </div>
                 <div className="flex-1 min-h-0">
@@ -1084,47 +1247,35 @@ export default function GamePage() {
                 </pre>
               </div>
               <div className="flex-shrink-0">
-                <div className="mb-2 flex items-center gap-2">
-                  <h4 className="text-sm font-medium text-slate-400">Current Moment</h4>
-                  <button
-                    type="button"
-                    onClick={() => setMomentTagsOpen((open) => !open)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-slate-400 hover:bg-white/5 hover:text-white"
-                    aria-label="Moment tags"
-                    title="Moment tags"
-                  >
-                    <FaTags className="h-4 w-4" />
-                  </button>
-                </div>
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Current Moment</h4>
                 <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
                   {currentMoment
                     ? `ID: ${currentMoment.id}\n${currentMoment.name ? `Name: ${currentMoment.name}` : ""}`
                     : "No moment selected"}
                 </pre>
-                {momentTagsOpen ? (
-                  <div className="mt-3 rounded border border-slate-700 bg-slate-950 p-3 text-xs">
-                    <div className="mb-2 text-slate-400">Tags</div>
-                    <div className="flex flex-wrap gap-2">
-                      {Array.isArray(currentMoment?.tags) && currentMoment.tags.length > 0 ? (
-                        currentMoment.tags.map((tag: string) => (
-                          <span
-                            key={tag}
-                            className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"
-                          >
-                            {tag}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-500">No tags on this moment</span>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
               </div>
               <div className="flex-shrink-0">
                 <h4 className="mb-2 text-sm font-medium text-slate-400">Story Memory</h4>
                 <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
                   {storySummary || "No story summary yet"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Story Arc Stage</h4>
+                <pre className="max-h-40 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {storyArc
+                    ? resolvedArcStage
+                      ? `Stage ${resolvedArcStage.stageNumber}: ${resolvedArcStage.stageName}\n${resolvedArcStage.shortDescription || ""}`
+                      : resolvedArcStageNumber != null
+                        ? `Stage ${resolvedArcStageNumber} (no matching stage found in storyArc.stages)`
+                        : "No current story arc stage set"
+                    : "No story arc found"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Story Arc Values</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs">
+                  {storyArc ? JSON.stringify(storyArc, null, 2) : "No story arc found"}
                 </pre>
               </div>
               <div className="flex-shrink-0">
@@ -1145,6 +1296,108 @@ export default function GamePage() {
           </div>
         </div>
       )}
+      <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+        <DialogContent
+          className="z-[210] w-[min(92vw,520px)] max-h-[85vh] overflow-hidden border-slate-700 bg-slate-900 text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Tag Current Moment</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              {currentMoment
+                ? currentMoment.name || currentMoment.id
+                : "Select a moment first, then add tags."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 overflow-auto">
+            <div className="flex items-center gap-2">
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const nextTag = tagInput.trim();
+                  if (!nextTag || !currentMoment) return;
+                  if (!momentTags.includes(nextTag)) {
+                    void saveCurrentMomentTags([...momentTags, nextTag]);
+                  }
+                  setTagInput("");
+                }}
+                className="flex-1 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-fuchsia-500"
+                placeholder="Add tag (e.g. chapter.1)"
+                disabled={!currentMoment}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const nextTag = tagInput.trim();
+                  if (!nextTag || !currentMoment) return;
+                  if (!momentTags.includes(nextTag)) {
+                    void saveCurrentMomentTags([...momentTags, nextTag]);
+                  }
+                  setTagInput("");
+                }}
+                className="rounded bg-fuchsia-600 px-3 py-2 text-sm text-white hover:bg-fuchsia-500 disabled:opacity-50"
+                disabled={!currentMoment}
+              >
+                Add
+              </button>
+            </div>
+
+            {tagSuggestions.length > 0 ? (
+              <div className="rounded border border-slate-700 bg-slate-950 p-2">
+                <div className="mb-1 text-xs text-slate-400">Suggestions</div>
+                <div className="flex flex-wrap gap-2">
+                  {tagSuggestions.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        if (!currentMoment || momentTags.includes(tag)) return;
+                        void saveCurrentMomentTags([...momentTags, tag]);
+                        setTagInput("");
+                      }}
+                      className="rounded-full border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded border border-slate-700 bg-slate-950 p-3">
+              <div className="mb-2 text-xs text-slate-400">Current tags</div>
+              <div className="flex flex-wrap gap-2">
+                {momentTags.length ? (
+                  momentTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                    >
+                      <span>{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!currentMoment) return;
+                          void saveCurrentMomentTags(momentTags.filter((value) => value !== tag));
+                        }}
+                        className="text-slate-400 hover:text-white"
+                        aria-label={`Remove ${tag}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-slate-500">No tags yet</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </ContentLayout>
   );
 }

@@ -44,6 +44,7 @@ export function FullscreenDialog({
           contentClassName ?? ''
         }`}
         onInteractOutside={preventClose ? e => e.preventDefault() : undefined}
+        onPointerDownOutside={preventClose ? e => e.preventDefault() : undefined}
         onEscapeKeyDown={preventClose ? e => e.preventDefault() : undefined}
       >
         {title || description ? (

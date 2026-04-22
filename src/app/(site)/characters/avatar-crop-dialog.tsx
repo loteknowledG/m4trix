@@ -25,6 +25,11 @@ type AvatarCropDialogProps = {
   setIsHoveringEdge: Dispatch<SetStateAction<boolean>>;
 };
 
+/** Original UI was 400px; edge zoom ring used 145–180px from center. */
+const UI_BASE = 400;
+const EDGE_INNER = 145 / UI_BASE;
+const EDGE_OUTER = 180 / UI_BASE;
+
 export function AvatarCropDialog({
   crop,
   croppingImage,
@@ -44,12 +49,18 @@ export function AvatarCropDialog({
         if (!nextOpen) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[420px] max-h-[95vh] p-0 overflow-hidden flex flex-col bg-zinc-950 border-zinc-800 shadow-2xl">
-        <DialogHeader className="p-4 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur-md shrink-0">
-          <DialogTitle className="text-sm font-medium text-zinc-100 font-mono tracking-tight uppercase flex items-center gap-2">
+      <DialogContent
+        className={cn(
+          'fixed left-0 top-0 z-50 flex h-[100dvh] w-screen max-h-none max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-0 bg-zinc-950 p-0 shadow-none',
+          'gap-0 overflow-hidden data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0',
+          'data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:left-0 sm:top-0 sm:max-w-none sm:translate-x-0 sm:translate-y-0 sm:rounded-none'
+        )}
+      >
+        <DialogHeader className="shrink-0 border-b border-zinc-900 bg-zinc-950/50 p-4 backdrop-blur-md">
+          <DialogTitle className="flex items-center gap-2 font-mono text-sm font-medium uppercase tracking-tight text-zinc-100">
             <DialogDescription className="sr-only">Crop the selected image for avatar</DialogDescription>
             {isGif && (
-              <span className="bg-amber-500/20 text-amber-500 text-[9px] px-1.5 py-0.5 rounded leading-none">
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] leading-none text-amber-500">
                 GIF
               </span>
             )}
@@ -57,20 +68,21 @@ export function AvatarCropDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto relative bg-zinc-950 flex justify-center py-8">
+        <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto bg-zinc-950 p-4">
           <div
             className={cn(
-              'relative aspect-square w-[400px] h-[400px] shrink-0 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden select-none touch-none',
+              'relative aspect-square w-[min(92vmin,720px)] max-w-full shrink-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 select-none touch-none',
               isHoveringEdge ? 'cursor-nwse-resize' : 'cursor-move'
             )}
             onPointerMove={e => {
               const rect = e.currentTarget.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2;
+              const w = rect.width;
+              const centerX = rect.left + w / 2;
               const centerY = rect.top + rect.height / 2;
-              const dist = Math.sqrt(
-                Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
-              );
-              setIsHoveringEdge(dist > 145 && dist < 180);
+              const dist = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+              const inner = w * EDGE_INNER;
+              const outer = w * EDGE_OUTER;
+              setIsHoveringEdge(dist > inner && dist < outer);
             }}
             onWheel={e => {
               e.preventDefault();
@@ -80,20 +92,18 @@ export function AvatarCropDialog({
             }}
             onPointerDown={e => {
               const rect = e.currentTarget.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2;
+              const w = rect.width;
+              const centerX = rect.left + w / 2;
               const centerY = rect.top + rect.height / 2;
-              const distCenter = Math.sqrt(
-                Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
-              );
+              const distCenter = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+              const inner = w * EDGE_INNER;
+              const outer = w * EDGE_OUTER;
 
-              if (distCenter > 145 && distCenter < 180) {
+              if (distCenter > inner && distCenter < outer) {
                 const startDist = distCenter;
                 const startZoom = crop.zoom;
                 const onPointerMove = (moveEvent: PointerEvent) => {
-                  const newDist = Math.sqrt(
-                    Math.pow(moveEvent.clientX - centerX, 2) +
-                      Math.pow(moveEvent.clientY - centerY, 2)
-                  );
+                  const newDist = Math.hypot(moveEvent.clientX - centerX, moveEvent.clientY - centerY);
                   const ratio = newDist / startDist;
                   const newZoom = Math.min(Math.max(startZoom / ratio, 1), 10);
                   setCrop(prev => ({ ...prev, zoom: newZoom }));
@@ -128,32 +138,32 @@ export function AvatarCropDialog({
                 src={croppingImage}
                 alt="Crop preview"
                 className={cn(
-                  'w-full h-full object-contain max-w-none pointer-events-none',
+                  'pointer-events-none h-full w-full max-w-none object-contain',
                   `[transform:translate(${crop.x}px,_${crop.y}px)_scale(${crop.zoom})]`
                 )}
               />
             )}
 
-            <div className="absolute top-4 right-4 z-30 pointer-events-none">
-              <div className="bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-mono text-white/80 shadow-xl">
+            <div className="pointer-events-none absolute right-4 top-4 z-30">
+              <div className="rounded border border-white/10 bg-black/60 px-2 py-1 font-mono text-[10px] text-white/80 shadow-xl backdrop-blur-md">
                 {Math.round(crop.zoom * 100)}%
               </div>
             </div>
 
-            <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+            <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-[320px] aspect-square rounded-full border border-white/40 shadow-[0_0_0_1000px_rgba(0,0,0,0.3)]" />
+                <div className="aspect-square w-[80%] rounded-full border border-white/40 shadow-[0_0_0_100vmax_rgba(0,0,0,0.35)]" />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-6 bg-zinc-950 border-t border-zinc-900 shrink-0">
-          <DialogFooter className="flex items-center gap-2 sm:gap-0 justify-between">
+        <div className="shrink-0 border-t border-zinc-900 bg-zinc-950 p-4 sm:p-6">
+          <DialogFooter className="flex items-center justify-between gap-2 sm:gap-0">
             <Button
               variant="ghost"
               size="sm"
-              className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="text-zinc-500 transition-colors hover:text-zinc-300"
               onClick={onClose}
             >
               Cancel
@@ -171,7 +181,7 @@ export function AvatarCropDialog({
               )}
               <Button
                 size="sm"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4"
+                className="bg-primary px-4 font-semibold text-primary-foreground hover:bg-primary/90"
                 onClick={onApplyCrop}
               >
                 {isGif ? 'Apply Animated Crop' : 'Apply Crop'}

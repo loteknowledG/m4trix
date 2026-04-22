@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { CustomChatWindow } from '@/components/ai/custom-chat-window';
+import { GrokImagePromptButton } from '@/components/grok-image-prompt-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -17,7 +18,7 @@ import {
   Plus,
   Send,
   Plug,
-} from 'lucide-react';
+} from '@/components/icons';
 import { VscDebugDisconnect } from 'react-icons/vsc';
 import { PiPlugsConnectedLight } from 'react-icons/pi';
 import {
@@ -90,8 +91,26 @@ export default function CharactersPage() {
   const [prompterMode, setPrompterMode] = useState<'tell' | 'do' | 'think'>('tell');
   const [useCustomModel] = useState(false);
   const [customModelId, setCustomModelId] = useState('');
-  const [dragOverId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [fileDragOverlay, setFileDragOverlay] = useState(false);
   const hasLoaded = useRef(false);
+
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
+      e.preventDefault();
+      setFileDragOverlay(true);
+    };
+    const hide = () => setFileDragOverlay(false);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', hide);
+    window.addEventListener('dragend', hide);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', hide);
+      window.removeEventListener('dragend', hide);
+    };
+  }, []);
 
   const {
     applyGifImmediately,
@@ -747,6 +766,16 @@ export default function CharactersPage() {
             </Button>
           </div>
           <section className="relative flex flex-1 min-h-0 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
+            <div className="flex flex-none items-center justify-end gap-2 border-b border-border/60 bg-background/60 px-3 py-2">
+              <GrokImagePromptButton
+                agents={agents}
+                disabled={isRunning}
+                focusAgentId={agents[0]?.id}
+                messages={messages}
+                prompterAgent={prompterAgent}
+                story={story}
+              />
+            </div>
             <div className="flex flex-col flex-1 min-h-0 h-full">
               <CustomChatWindow
                 messages={messages.map(m => {
@@ -780,6 +809,8 @@ export default function CharactersPage() {
           <CharactersSidebar
             agents={agents}
             dragOverId={dragOverId}
+            fileDropHint={fileDragOverlay}
+            onAvatarDragHover={setDragOverId}
             isRunning={isRunning}
             onAgentAvatarUpload={handleAvatarUpload}
             onAgentDelete={removeAgent}
@@ -865,6 +896,32 @@ export default function CharactersPage() {
         >
           <Plus className="h-5 w-5" />
         </Button>
+
+        {(fileDragOverlay || dragOverId) && (
+          <div
+            className="pointer-events-none fixed inset-0 z-[35] flex flex-col items-center justify-center gap-4 bg-black/70 px-6 text-center backdrop-blur-sm"
+            aria-hidden
+          >
+            <div className="flex min-h-[100px] w-[min(92vw,22rem)] max-w-md flex-col items-center justify-center gap-2 rounded-xl border-4 border-dashed border-cyan-400/80 bg-cyan-950/40 px-6 py-5 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300/90">
+                Image drop
+              </span>
+              <p className="text-sm font-medium leading-snug text-zinc-50">
+                {dragOverId
+                  ? 'Release on the highlighted portrait to set it.'
+                  : 'Move over the glowing sidebar — drop on any dashed portrait frame.'}
+              </p>
+            </div>
+            <p className="max-w-md text-xs text-zinc-300">
+              {dragOverId
+                ? 'Or click a portrait, then paste (Ctrl+V) from Grok.'
+                : 'Portraits show a dashed border while you drag. Click a portrait first to paste from clipboard.'}
+            </p>
+            <p className="max-w-sm text-[11px] text-zinc-500">
+              Use the copy icon beside a portrait to copy it to the clipboard.
+            </p>
+          </div>
+        )}
       </div>
     </ContentLayout>
   );

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MenuIcon, PanelsTopLeft } from "lucide-react";
+import { MenuIcon, PanelsTopLeft } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/admin-panel/menu";

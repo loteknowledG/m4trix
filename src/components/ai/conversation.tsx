@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowDownIcon } from "lucide-react"
+import { ArrowDownIcon } from "@/components/icons"
 import type { ComponentProps } from "react"
 import { useCallback } from "react"
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom"

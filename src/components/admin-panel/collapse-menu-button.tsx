@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ChevronDown, Dot, LucideIcon } from 'lucide-react';
+import { ChevronDown, Dot, LucideIcon } from '@/components/icons';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';

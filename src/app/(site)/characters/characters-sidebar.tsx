@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 import { AgentCard } from '@/components/agent-card';
 import { cn } from '@/lib/utils';
-import { Trash2, User } from 'lucide-react';
+import { Trash2, User } from '@/components/icons';
 import type { Agent, AgentId } from './types';
 
 type ImportedAgent = { label: string; description: string };
@@ -11,6 +11,9 @@ type ImportedAgent = { label: string; description: string };
 type CharactersSidebarProps = {
   agents: Agent[];
   dragOverId: string | null;
+  /** True while the user is dragging files over the page — highlights portrait drop targets. */
+  fileDropHint?: boolean;
+  onAvatarDragHover: (id: string | null) => void;
   isRunning: boolean;
   onAgentAvatarUpload: (file: File, id: AgentId) => void;
   onAgentDelete: (id: AgentId) => void;
@@ -40,6 +43,8 @@ type CharactersSidebarProps = {
 export function CharactersSidebar({
   agents,
   dragOverId,
+  fileDropHint,
+  onAvatarDragHover,
   isRunning,
   onAgentAvatarUpload,
   onAgentDelete,
@@ -69,7 +74,10 @@ export function CharactersSidebar({
     <aside
       className={cn(
         'flex flex-col gap-4 self-stretch h-full min-h-0 overflow-hidden rounded-xl border bg-background/40 p-4 transition-all duration-300 ease-in-out max-h-[calc(100vh_-_var(--app-header-height,_56px)_-_48px)]',
-        sidebarOpen ? 'w-[300px] opacity-100' : 'w-0 p-0 border-0 opacity-0 pointer-events-none'
+        sidebarOpen ? 'w-[300px] opacity-100' : 'w-0 p-0 border-0 opacity-0 pointer-events-none',
+        sidebarOpen &&
+          fileDropHint &&
+          'border-cyan-400/90 bg-cyan-500/[0.12] shadow-[0_0_0_2px_rgba(34,211,238,0.35),inset_0_0_24px_rgba(34,211,238,0.08)] ring-2 ring-cyan-400/40'
       )}
     >
       <div
@@ -77,10 +85,15 @@ export function CharactersSidebar({
         className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
       >
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Characters
             </p>
+            {fileDropHint && sidebarOpen ? (
+              <span className="shrink-0 rounded border border-cyan-500/60 bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-cyan-200">
+                Drop zone
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -98,7 +111,10 @@ export function CharactersSidebar({
               description={agent.description}
               avatarUrl={agent.avatarUrl}
               avatarCrop={agent.avatarCrop}
+              avatarDropId={agent.id}
               dragOverId={dragOverId}
+              fileDropHint={fileDropHint}
+              onAvatarDragHover={onAvatarDragHover}
               onAvatarUpload={file => onAgentAvatarUpload(file, agent.id)}
               onImport={async file => {
                 if (file.type.startsWith('image/')) {
@@ -162,7 +178,10 @@ export function CharactersSidebar({
                   description={prompterAgent?.description || ''}
                   avatarUrl={prompterAgent?.avatarUrl}
                   avatarCrop={prompterAgent?.avatarCrop}
+                  avatarDropId="user"
                   dragOverId={dragOverId}
+                  fileDropHint={fileDropHint}
+                  onAvatarDragHover={onAvatarDragHover}
                   onAvatarUpload={onPrompterAvatarUpload}
                   onImport={async file => {
                     if (file.type.startsWith('image/')) {

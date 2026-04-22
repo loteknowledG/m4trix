@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Ellipsis } from 'lucide-react';
+import { Ellipsis } from '@/components/icons';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 

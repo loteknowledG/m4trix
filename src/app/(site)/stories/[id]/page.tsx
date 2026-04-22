@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
-import { Trash2, Upload } from "lucide-react";
+import { Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GrUserFemale } from "react-icons/gr";
@@ -9,7 +9,7 @@ import { IoBanOutline } from "react-icons/io5";
 import { LuNotebookText } from "react-icons/lu";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import CollectionOverlay from "@/components/collection-overlay";
-import { QuillEditor } from "@/components/quill-editor";
+import { DescriptionEditor } from "@/components/description-editor";
 import {
   Dialog,
   DialogContent,
@@ -33,10 +33,32 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { MomentsProvider } from "@/context/moments-collection";
 import useSelection from "@/hooks/use-selection";
 import { useSidebar } from "@/hooks/use-sidebar";
+import { parseStoryArcJson } from "@/lib/game/story-arc";
 import { logger } from "@/lib/logger";
 
 type Moment = { id: string; src: string; name?: string; fingerprint?: string };
 type Character = { id: string; name?: string; avatarUrl?: string };
+type StoryMeta = {
+  id: string;
+  title?: string;
+  description?: string;
+  count?: number;
+  npcId?: string;
+  playerId?: string;
+  npcAppearance?: string;
+  playerAppearance?: string;
+  storyArc?: unknown;
+};
+
+function normalizeDescription(value: string) {
+  if (!value) return "";
+
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>\s*<p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ");
+}
 
 export default function StoryPage() {
   const params = useParams();
@@ -55,6 +77,8 @@ export default function StoryPage() {
   const [assignedNpcAppearance, setAssignedNpcAppearance] = useState("");
   const [assignedPlayerAppearance, setAssignedPlayerAppearance] = useState("");
   const [storyDescription, setStoryDescription] = useState("");
+  const [storyArcText, setStoryArcText] = useState("");
+  const [storyArcError, setStoryArcError] = useState<string | null>(null);
   const assignedNpcCharacter = assignedNpcId
     ? characters.find((character) => character.id === assignedNpcId) || null
     : null;
@@ -69,9 +93,27 @@ export default function StoryPage() {
   const scope = "stories";
 
   const dragIndexRef = useRef<number | null>(null);
+  const arcUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollDirectionRef = useRef<number | null>(null);
   const scrollAnimRef = useRef<number | null>(null);
+
+  const saveStoryItems = useCallback(
+    async (nextItems: any[]) => {
+      if (!id) return;
+      const storyKey = `story:${id}`;
+      const stored = (await get<any>(storyKey)) || [];
+      if (Array.isArray(stored)) {
+        await set(storyKey, nextItems);
+      } else if (stored && typeof stored === "object") {
+        await set(storyKey, { ...stored, items: nextItems });
+      } else {
+        await set(storyKey, nextItems);
+      }
+    },
+    [id],
+  );
+
 
   useEffect(() => {
     let mounted = true;
@@ -107,18 +149,20 @@ export default function StoryPage() {
 
         // try to get title from stored object or stories metadata
         let t = stored && stored.title ? stored.title : "";
+        const storedArc =
+          stored && typeof stored === "object" && !Array.isArray(stored) ? stored.storyArc : null;
         try {
-          const saved =
-            (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string; npcAppearance?: string; playerAppearance?: string }[]>(
-              "stories",
-            )) || [];
+          const saved = (await get<StoryMeta[]>("stories")) || [];
           const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
           setAssignedNpcId(meta?.npcId || null);
           setAssignedPlayerId(meta?.playerId || null);
           setAssignedNpcAppearance(meta?.npcAppearance || "");
           setAssignedPlayerAppearance(meta?.playerAppearance || "");
-          setStoryDescription(meta?.description || "");
+          setStoryDescription(normalizeDescription(meta?.description || ""));
+          const arcValue = meta?.storyArc ?? storedArc ?? null;
+          setStoryArcText(arcValue ? JSON.stringify(arcValue, null, 2) : "");
+          setStoryArcError(null);
         } catch (e) {
           /* ignore */
         }
@@ -140,16 +184,15 @@ export default function StoryPage() {
     if (!id) return;
     const handler = async () => {
       try {
-        const saved =
-          (await get<{ id: string; title?: string; description?: string; count?: number; npcId?: string; playerId?: string; npcAppearance?: string; playerAppearance?: string }[]>(
-            "stories",
-          )) || [];
+        const saved = (await get<StoryMeta[]>("stories")) || [];
         const meta = saved.find((m: any) => m.id === id);
         setAssignedNpcId(meta?.npcId || null);
         setAssignedPlayerId(meta?.playerId || null);
         setAssignedNpcAppearance(meta?.npcAppearance || "");
         setAssignedPlayerAppearance(meta?.playerAppearance || "");
-        setStoryDescription(meta?.description || "");
+        setStoryDescription(normalizeDescription(meta?.description || ""));
+        setStoryArcText(meta?.storyArc ? JSON.stringify(meta.storyArc, null, 2) : "");
+        setStoryArcError(null);
       } catch (e) {
         /* ignore */
       }
@@ -185,10 +228,8 @@ export default function StoryPage() {
             }
           } else if (stored && Array.isArray(stored.items)) {
             remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-            stored.items = remaining;
-            await set(storyKey, stored);
           }
-          await set(storyKey, remaining);
+          await saveStoryItems(remaining);
           // update local state
           setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
           // update stories metadata count
@@ -235,9 +276,8 @@ export default function StoryPage() {
             remaining = stored.filter((s: any) => !ids.includes(s.id || s));
           } else if (stored && Array.isArray(stored.items)) {
             remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-            stored.items = remaining;
-            await set(storyKey, stored);
           }
+          await saveStoryItems(remaining);
           try {
             clearSelection(scope);
           } catch (e) {
@@ -273,7 +313,7 @@ export default function StoryPage() {
     };
     window.addEventListener("story-action", handler as EventListener);
     return () => window.removeEventListener("story-action", handler as EventListener);
-  }, [selectedIds, moments, id, clearSelection, scope]);
+  }, [selectedIds, moments, id, clearSelection, scope, saveStoryItems]);
 
   const onDragStart = useCallback((e: React.DragEvent, idx: number) => {
     dragIndexRef.current = idx;
@@ -357,9 +397,8 @@ export default function StoryPage() {
 
       setMoments(next);
       try {
-        const storyKey = `story:${id}`;
-        // Persist the reordered array (store raw items)
-        await set(storyKey, next);
+        // Persist while preserving local story metadata fields.
+        await saveStoryItems(next);
         try {
           window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
         } catch (e) {
@@ -369,7 +408,7 @@ export default function StoryPage() {
         logger.error("Failed to persist reordered story", err);
       }
     },
-    [moments, id],
+    [moments, id, saveStoryItems],
   );
 
   // allow dropping external images/URLs to append to story
@@ -390,7 +429,7 @@ export default function StoryPage() {
 
           const newMoment: Moment = { id: crypto.randomUUID(), src, fingerprint };
           const updated = [...ms, newMoment];
-          set(`story:${id}`, updated).catch(() => {});
+          saveStoryItems(updated).catch(() => {});
           setStoryCount(updated.length).catch(() => {});
           return updated;
         });
@@ -418,7 +457,7 @@ export default function StoryPage() {
         await addSrc(text, normalized);
       }
     },
-    [id],
+    [id, saveStoryItems],
   );
 
   function startAutoScroll() {
@@ -596,6 +635,44 @@ export default function StoryPage() {
     }
   }, [id]);
 
+  const saveStoryArc = useCallback(
+    async (rawText: string) => {
+      if (!id) return;
+      const trimmed = rawText.trim();
+      if (!trimmed) {
+        setStoryArcError(null);
+        await saveStoryMetadata({ storyArc: null });
+        const storyKey = `story:${id}`;
+        const stored = (await get<any>(storyKey)) || [];
+        if (!Array.isArray(stored) && stored && typeof stored === "object") {
+          const next = { ...stored };
+          delete next.storyArc;
+          await set(storyKey, next);
+        }
+        return;
+      }
+      try {
+        const parsed = parseStoryArcJson(trimmed);
+        setStoryArcError(null);
+        await saveStoryMetadata({ storyArc: parsed });
+        const storyKey = `story:${id}`;
+        const stored = (await get<any>(storyKey)) || [];
+        if (Array.isArray(stored)) {
+          await set(storyKey, { items: stored, storyArc: parsed });
+        } else if (stored && typeof stored === "object") {
+          await set(storyKey, { ...stored, storyArc: parsed });
+        } else {
+          await set(storyKey, { items: [], storyArc: parsed });
+        }
+      } catch (e) {
+        setStoryArcError(
+          e instanceof Error ? e.message : "Story arc must be valid StoryArc JSON.",
+        );
+      }
+    },
+    [id, saveStoryMetadata],
+  );
+
   const saveStoryDescription = useCallback(async () => {
     await saveStoryMetadata({ description: storyDescription });
   }, [saveStoryMetadata, storyDescription]);
@@ -692,10 +769,8 @@ export default function StoryPage() {
         remaining = stored.filter((s: any) => !ids.includes(s.id || s));
       } else if (stored && Array.isArray(stored.items)) {
         remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-        stored.items = remaining;
-        await set(storyKey, stored);
       }
-      await set(storyKey, remaining);
+      await saveStoryItems(remaining);
 
       // keep story count in sync
       setStoryCount(remaining.length).catch(() => {});
@@ -713,7 +788,7 @@ export default function StoryPage() {
     } catch (err) {
       logger.error("Failed to move selected to trash", err);
     }
-  }, [clearSelection, id, moments, scope, selectedIds]);
+  }, [clearSelection, id, moments, scope, selectedIds, saveStoryItems]);
 
   const moveToHeap = useCallback(async () => {
     try {
@@ -735,10 +810,8 @@ export default function StoryPage() {
         remaining = stored.filter((s: any) => !ids.includes(s.id || s));
       } else if (stored && Array.isArray(stored.items)) {
         remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-        stored.items = remaining;
-        await set(storyKey, stored);
       }
-      await set(storyKey, remaining);
+      await saveStoryItems(remaining);
 
       setStoryCount(remaining.length).catch(() => {});
       try {
@@ -754,7 +827,7 @@ export default function StoryPage() {
     } catch (err) {
       logger.error("Failed to move selected to heap", err);
     }
-  }, [clearSelection, id, moments, scope, selectedIds]);
+  }, [clearSelection, id, moments, scope, selectedIds, saveStoryItems]);
 
   return (
     <>
@@ -1135,7 +1208,7 @@ export default function StoryPage() {
 
               <div className="space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">Description</div>
-                <QuillEditor
+                <DescriptionEditor
                   className="character-description-editor"
                   value={storyDescription}
                   onChange={setStoryDescription}
@@ -1144,6 +1217,71 @@ export default function StoryPage() {
                   }}
                   placeholder="No description"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs uppercase text-muted-foreground">Story Arc (JSON)</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={arcUploadInputRef}
+                      type="file"
+                      accept="application/json,.json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                          const raw = String(reader.result || "");
+                          setStoryArcText(raw);
+                          await saveStoryArc(raw);
+                        };
+                        reader.onerror = () => {
+                          setStoryArcError("Failed to read uploaded JSON file.");
+                        };
+                        reader.readAsText(file);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => arcUploadInputRef.current?.click()}
+                      className="inline-flex items-center justify-center rounded border px-2 py-1 text-xs hover:bg-accent/30"
+                    >
+                      Upload JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setStoryArcText("");
+                        await saveStoryArc("");
+                      }}
+                      className="inline-flex items-center justify-center rounded border px-2 py-1 text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  value={storyArcText}
+                  onChange={(e) => {
+                    setStoryArcText(e.target.value);
+                    if (storyArcError) setStoryArcError(null);
+                  }}
+                  onBlur={() => {
+                    void saveStoryArc(storyArcText);
+                  }}
+                  placeholder='Paste story arc JSON (example: { "id": "corruption-arc-v1", ... })'
+                  className="min-h-[180px] w-full rounded border border-border bg-background px-3 py-2 text-xs font-mono outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+                />
+                {storyArcError ? (
+                  <div className="text-xs text-destructive">{storyArcError}</div>
+                ) : (
+                  <div className="text-[11px] text-muted-foreground">
+                    Stored locally per story in IndexedDB as <code>storyArc</code>.
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-border/40 space-y-2">

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { get } from "idb-keyval";
 import { logger } from "@/lib/logger";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "@/components/icons";
 import MomentCard from "@/components/moment-card";
 
 export default function MomentPage() {

@@ -364,9 +364,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                                 ref={steerTextareaRef}
                                 value={steeringText}
                                 onChange={(e) => setSteeringText(e.target.value)}
+                                rows={4}
                                 style={
                                   editingBubbleHeight
-                                    ? { minHeight: `${Math.max(72, Math.floor((editingBubbleHeight - 24) / 2))}px` }
+                                    ? { minHeight: `${Math.max(96, Math.floor((editingBubbleHeight - 24) / 2))}px` }
                                     : undefined
                                 }
                                 className="w-full resize-none rounded-md border border-cyan-500 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400"

@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
 import { MomentsProvider } from '@/context/moments-collection';
 import CollectionOverlay from '@/components/collection-overlay';
 import MomentsGrid from '@/components/moments-grid';
-import { Trash2, SquarePen, Upload } from 'lucide-react';
+import { Trash2, SquarePen, Upload } from '@/components/icons';
 import {
   Sheet,
   SheetContent,

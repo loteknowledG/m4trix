@@ -6,7 +6,7 @@ import {
   Trash2,
   Gamepad,
   LucideIcon,
-} from 'lucide-react';
+} from '@/components/icons';
 
 type Submenu = {
   href: string;

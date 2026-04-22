@@ -57,7 +57,7 @@ import {
   AttachmentRemove,
   Attachments,
 } from '@/components/ai/attachments';
-import { CheckIcon, GlobeIcon, MicIcon } from 'lucide-react';
+import { CheckIcon, GlobeIcon, MicIcon } from '@/components/icons';
 
 export interface ChatWindowMessage {
   key: string;

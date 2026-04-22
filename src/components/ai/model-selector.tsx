@@ -171,7 +171,7 @@ export const ModelSelectorName = ({ className, ...props }: ModelSelectorNameProp
   <span className={cn("flex-1 truncate text-left", className)} {...props} />
 )
 
-import { CheckIcon } from "lucide-react"
+import { CheckIcon } from "@/components/icons"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 

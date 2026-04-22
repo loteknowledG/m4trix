@@ -31,6 +31,7 @@ const AGENT_FALLBACK_DESCRIPTIONS: Record<string, string> = {
 
 function normalizeProvider(provider?: string) {
   if (provider === "huggingface") return "hf";
+  if (provider === "grok") return "xai";
   return provider;
 }
 

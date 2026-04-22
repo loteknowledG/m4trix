@@ -11,7 +11,7 @@ import {
   type ChatWindowModel,
 } from '@/components/ai/chat-window';
 import { type PromptInputMessage } from '@/components/ai/prompt-input';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle } from '@/components/icons';
 import { nanoid } from 'nanoid';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import DraggableDialog from '@/components/ui/draggable-dialog';

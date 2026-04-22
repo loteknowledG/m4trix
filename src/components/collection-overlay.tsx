@@ -5,7 +5,14 @@ import { del, get, keys, set } from 'idb-keyval';
 import { usePathname } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
 import { normalizeMomentSrc } from '@/lib/moments';
-import { X, ArrowLeft, ArrowRight } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight } from '@/components/icons';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { FaTags } from 'react-icons/fa';
 import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
 import MomentClassifier from '@/components/ai/moment-classifier';
@@ -723,26 +730,19 @@ export default function CollectionOverlay() {
         </div>
       </div>
 
-      <div
-        className={`fixed right-0 top-0 h-full w-80 max-w-full bg-black/85 text-white z-[1250] transform transition-transform duration-300 ease-in-out ${
-          tagging ? 'translate-x-0' : 'translate-x-full'
-        }`}
-        role="dialog"
-        aria-hidden={!tagging}
-      >
-        <div className="h-full flex flex-col p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium">Tags & Suggestions</h3>
-            <button
-              onClick={() => setTagging(false)}
-              className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
-              aria-label="Close tags panel"
-            >
-              <X size={18} />
-            </button>
-          </div>
+      <Dialog open={tagging} onOpenChange={setTagging}>
+        <DialogContent
+          className="z-[1300] w-[min(92vw,520px)] max-h-[85vh] overflow-hidden border-white/15 bg-black/90 text-white"
+          onClick={e => e.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-sm font-medium text-white">Tags & Suggestions</DialogTitle>
+            <DialogDescription className="text-xs text-white/70">
+              Add tags to this moment and choose from existing suggestions.
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="flex-1 overflow-auto space-y-3">
+          <div className="overflow-auto space-y-3 pr-1">
             <div className="flex items-center gap-2">
               <input
                 value={tagInput}
@@ -842,8 +842,8 @@ export default function CollectionOverlay() {
               />
             </div>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
