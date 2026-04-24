@@ -512,7 +512,7 @@ function HeapInner() {
                       e.preventDefault();
                       setStorySheetOpen(true);
                     }}
-                    className="pushable-effect inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                    className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
                   >
                     <SquarePen size={18} />
                   </button>
@@ -557,7 +557,7 @@ function HeapInner() {
                         logger.error('Failed to move to trash', err);
                       }
                     }}
-                    className="pushable-effect inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                    className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
                   >
                     <Trash2 size={18} />
                   </button>

@@ -209,4 +209,14 @@ body,
     box-shadow: 8px 8px 22px rgba(0, 0, 0, 0.9);
   }
 
+  /** 40×40 circular actions with slab / pushable treatment (align with Button size="icon"). */
+  .m4-circle-action {
+    @apply pushable-effect inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium;
+  }
+
+  /** Flat circular hit target (toolbars, ghost icon rows) — same footprint as .m4-circle-action. */
+  .m4-circle-ghost {
+    @apply inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
+  }
+
 }

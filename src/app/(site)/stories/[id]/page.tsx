@@ -860,7 +860,7 @@ export default function StoryPage() {
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-foreground hover:bg-accent/10 transition-colors"
+                      className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10"
                       aria-label="Story info"
                       onClick={(e) => {
                         e.stopPropagation();

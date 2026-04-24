@@ -102,7 +102,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     /* ignore */
                   }
                 }}
-                className="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
                 aria-label="Clear selection"
               >
                 <X size={16} />
@@ -141,7 +141,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                       <button
                         onClick={() => onAction('move-to-heap')}
                         title="Move to Heap"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                        className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
                       >
                         <LayoutGrid size={18} />
                       </button>
@@ -156,7 +156,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                       <button
                         onClick={() => onAction('move-to-chapter')}
                         title="Move to Chapter"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                        className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
                       >
                         <SquarePen size={18} />
                       </button>
@@ -171,7 +171,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                       <button
                         onClick={() => onAction('move-to-trash')}
                         title="Move to Trash"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                        className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
                       >
                         <Trash2 size={18} />
                       </button>

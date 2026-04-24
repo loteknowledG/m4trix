@@ -1,0 +1,53 @@
+export const GENERAL_CORRUPTION_ARC = {
+  id: "corruption-arc-v1",
+  name: "General Corruption Arc",
+  description: "Normal/confident woman gradually corrupted into submission and addiction",
+  stages: [
+    {
+      stage: 1,
+      name: "Stable Identity",
+      shortDesc: "She is still her normal self with strong boundaries",
+      emotionalState: ["confident", "skeptical", "in-control", "normal"],
+      powerDynamic: "She believes she is fully in control",
+      keyTags: ["stable", "confident", "normal-life", "boundaries", "pre-fall"],
+      exampleDialogTone: "Professional, dismissive, slightly amused or annoyed",
+    },
+    {
+      stage: 2,
+      name: "Curiosity & Rationalization",
+      shortDesc: "She becomes intrigued and starts making excuses",
+      emotionalState: ["curious", "restless", "conflicted", "secretly excited"],
+      powerDynamic: "Influence is growing, but she still thinks she can stop anytime",
+      keyTags: ["curious", "tempted", "rationalizing", "boundary-testing", "tension"],
+      exampleDialogTone: "Defensive justification mixed with hidden excitement",
+    },
+    {
+      stage: 3,
+      name: "First Compromise",
+      shortDesc: "She crosses a major line for the first time",
+      emotionalState: ["guilty", "shaken", "aroused", "ashamed"],
+      powerDynamic: "She has lost significant control after the first real act",
+      keyTags: ["first-fall", "guilt", "shame", "aftermath", "loss-of-control"],
+      exampleDialogTone: "Regret mixed with obsessive replay and lingering arousal",
+    },
+    {
+      stage: 4,
+      name: "Reinforcement & Dependency",
+      shortDesc: "She starts needing it and escalates",
+      emotionalState: ["compulsive", "anxious", "addicted", "emotionally split"],
+      powerDynamic: "She is now chasing the feeling and making repeated compromises",
+      keyTags: ["dependency", "compulsion", "escalation", "double-life", "craving"],
+      exampleDialogTone: "Justifications become weaker, urgency and need increase",
+    },
+    {
+      stage: 5,
+      name: "Full Surrender",
+      shortDesc: "She fully accepts her new identity",
+      emotionalState: ["accepting", "submissive", "relieved", "owned"],
+      powerDynamic: "She no longer fights it — this is who she is now",
+      keyTags: ["surrender", "identity-shift", "acceptance", "owned", "end-state"],
+      exampleDialogTone: "Calm acceptance, pride in her submission, or eager obedience",
+    },
+  ],
+} as const;
+
