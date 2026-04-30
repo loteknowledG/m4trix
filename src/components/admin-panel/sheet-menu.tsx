@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { MenuIcon, PanelsTopLeft } from "@/components/icons";
+import { MenuIcon } from "@/components/icons";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 
 import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/admin-panel/menu";
@@ -28,8 +29,18 @@ export function SheetMenu() {
             asChild
           >
             <Link href="/heap" className="flex items-center gap-2">
-              <PanelsTopLeft className="w-6 h-6 mr-1" />
-              <SheetTitle className="font-bold text-lg">Brand</SheetTitle>
+              <VisuallyHidden.Root>
+                <SheetTitle>m4trix</SheetTitle>
+              </VisuallyHidden.Root>
+              <pre className="font-mono text-[6px] font-bold leading-[0.9] tracking-[-0.06em] drop-shadow-[0_0_10px_rgba(236,72,153,0.28)] text-fuchsia-200">
+{`≈≈≈≈≈≈≈≈≈≈≈≈[ m4trix ]≈≈≈≈≈≈≈≈≈≈≈≈≈
+≈≈≈███╗≈≈███╗≈██╗≈████████╗██████╗≈██╗≈██╗≈≈██╗
+≈≈≈████╗≈████║≈███║≈╚══██╔══╝██╔══██╗██║≈╚██╗██╔╝
+≈≈≈██╔████╔██║≈██╔██║≈≈≈≈██║≈≈≈██████╔╝██║≈≈╚███╔╝
+≈≈≈██║╚██╔╝██║≈███████║≈≈≈██║≈≈≈██╔══██╗██║≈≈██╔██╗
+≈≈≈██║≈╚═╝≈██║≈╚════██║≈≈≈██║≈≈≈██║≈≈██║██║≈██╔╝╚██╗
+≈≈≈╚═╝≈≈≈≈≈╚═╝≈≈≈≈≈╚═╝≈≈≈╚═╝≈≈≈╚═╝≈≈╚═╝╚═╝≈╚═╝≈≈╚═╝`}
+              </pre>
               <SheetDescription className="sr-only">Site navigation</SheetDescription>
             </Link>
           </Button>

@@ -3,12 +3,9 @@
 import { ContentEditable as LexicalContentEditable } from "@lexical/react/LexicalContentEditable"
 import type { ComponentProps } from "react"
 
-type ContentEditableProps = ComponentProps<typeof LexicalContentEditable> & {
-  placeholder?: string
-}
+type ContentEditableProps = ComponentProps<typeof LexicalContentEditable>
 
 export function ContentEditable({
-  placeholder,
   className,
   ...props
 }: ContentEditableProps) {
@@ -22,7 +19,6 @@ export function ContentEditable({
       ]
         .filter(Boolean)
         .join(" ")}
-      placeholder={placeholder}
     />
   )
 }

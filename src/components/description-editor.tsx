@@ -1,6 +1,9 @@
 'use client';
 
+import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { getImageFileFromPasteEvent } from '@/lib/clipboard-image';
+import { toast } from 'sonner';
 
 type DescriptionEditorProps = {
   value: string;
@@ -17,11 +20,32 @@ export function DescriptionEditor({
   placeholder,
   className,
 }: DescriptionEditorProps) {
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const file = getImageFileFromPasteEvent(e);
+      if (!file) return;
+
+      e.preventDefault();
+
+      const reader = new FileReader();
+      reader.onload = event => {
+        const dataUrl = event.target?.result as string;
+        const imgTag = `\n<img src="${dataUrl}" alt="Pasted image" style="max-width:100%;border-radius:8px;" />\n`;
+        const newValue = value + imgTag;
+        onChange(newValue);
+        toast.success('Image pasted into description.');
+      };
+      reader.readAsDataURL(file);
+    },
+    [value, onChange]
+  );
+
   return (
     <textarea
       value={value}
       onChange={event => onChange(event.target.value)}
       onBlur={onBlur}
+      onPaste={handlePaste}
       placeholder={placeholder}
       aria-label="Description"
       rows={6}

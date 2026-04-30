@@ -797,6 +797,7 @@ export default function CharactersPage() {
                 sendIcon={<Send className="h-4 w-4" />}
                 prompterMode={prompterMode}
                 onPrompterModeChange={v => setPrompterMode(v)}
+                ttsProfile="muthur"
               />
             </div>
             {error && (

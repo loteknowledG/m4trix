@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const dynamic = "force-static";
 
 function isAllowedHost(urlStr: string): boolean {
   try {
@@ -19,6 +19,9 @@ function isAllowedHost(urlStr: string): boolean {
 
 export async function GET(req: NextRequest) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return new Response(null, { status: 204 });
+    }
     const url = new URL(req.url);
     const target = url.searchParams.get("u");
     if (!target || !isAllowedHost(target)) {

@@ -27,6 +27,13 @@ import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
 
+const DEFAULT_PROVIDER_KEYS = {
+  zen: (process.env.NEXT_PUBLIC_ZEN_API_KEY || '').trim(),
+  google: (process.env.NEXT_PUBLIC_GOOGLE_API_KEY || '').trim(),
+  huggingface: (process.env.NEXT_PUBLIC_HF_API_KEY || '').trim(),
+  nvidia: (process.env.NEXT_PUBLIC_NVIDIA_API_KEY || '').trim(),
+} as const;
+
 export interface ConnectionSheetProps {
   /** Side to open the sheet from */
   side?: 'top' | 'bottom' | 'left' | 'right';
@@ -164,10 +171,13 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const storedZen = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey);
-    const storedGoogle = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey);
-    const storedHf = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey);
-    const storedNvidia = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey);
+    const storedZen = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) || DEFAULT_PROVIDER_KEYS.zen;
+    const storedGoogle =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) || DEFAULT_PROVIDER_KEYS.google;
+    const storedHf =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) || DEFAULT_PROVIDER_KEYS.huggingface;
+    const storedNvidia =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || DEFAULT_PROVIDER_KEYS.nvidia;
     const storedProvider = getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) as Provider | null;
     const storedModelProvider = getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) as Provider | null;
     const storedLmstudio = getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioConnected);

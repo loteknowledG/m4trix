@@ -18,6 +18,21 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConnectionSheet } from '@/components/connection-sheet';
+import { cn } from '@/lib/utils';
+
+/** Identical square footprint for chat footer voice + send (border-box). */
+const CHAT_FOOTER_ICON_BOX: React.CSSProperties = {
+  boxSizing: 'border-box',
+  width: '2.5rem',
+  height: '2.5rem',
+  minWidth: '2.5rem',
+  maxWidth: '2.5rem',
+  minHeight: '2.5rem',
+  maxHeight: '2.5rem',
+};
+
+const chatFooterIconLayoutClass =
+  'inline-flex shrink-0 flex-none items-center justify-center gap-0 rounded-md p-0 [&_svg]:size-4 [&_svg]:shrink-0';
 
 export interface CustomChatMessage {
   id: string;
@@ -48,6 +63,7 @@ interface CustomChatWindowProps {
   // Optional compact prompter-mode selector (no visible label) rendered above the send control
   prompterMode?: 'tell' | 'do' | 'think';
   onPrompterModeChange?: (v: 'tell' | 'do' | 'think') => void;
+  ttsProfile?: string;
 }
 
 export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
@@ -67,6 +83,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   connectionModel,
   prompterMode,
   onPrompterModeChange,
+  ttsProfile,
 }) => {
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +97,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const [storyDetailsOpen, setStoryDetailsOpen] = React.useState(false);
 
   const lastSpokenIdRef = useRef<string | null>(null);
+  const wasInputDisabledRef = useRef(false);
   const storyOpeningMessage = messages.find((msg) => msg.id === 'story-opening');
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
   const [editingText, setEditingText] = React.useState('');
@@ -103,6 +121,39 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     return (container.textContent || '').replace(/\u00a0/g, ' ').trim();
   };
 
+  const speakInBrowser = (text: string, profile?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+    if (!text.trim()) return false;
+
+    try {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      const normalizedProfile = (profile || '').toLowerCase();
+      const wantsMuthur = normalizedProfile === 'muthur';
+      const voices = synth.getVoices();
+
+      const preferredVoice = voices.find(v => {
+        const name = v.name.toLowerCase();
+        if (wantsMuthur) return name.includes('aria');
+        return name.includes('jenny');
+      });
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+      // Align with server MUTHUR profile: slightly slower, slightly lower (not heavy robot).
+      utterance.rate = wantsMuthur ? 0.88 : 1;
+      utterance.pitch = wantsMuthur ? 0.88 : 1;
+      utterance.volume = 1;
+
+      synth.cancel();
+      synth.speak(utterance);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // keep list scrolled to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
@@ -123,23 +174,27 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     lastSpokenIdRef.current = latest.id;
     const speechText = textForSpeech(latest.text);
     if (!speechText) return;
+    if (speakInBrowser(speechText, ttsProfile)) return;
 
     fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: speechText }),
+      body: JSON.stringify({ text: speechText, profile: ttsProfile }),
     }).catch(err => {
       console.warn('[tts] failed to speak text', err);
     });
   }, [messages, voiceEnabled]);
 
-  // restore focus after submit cycles that temporarily disable the input
+  // Restore focus only after a submit/work cycle re-enables the input — not on mount,
+  // or focus steals from other fields and the caret feels "stuck" to the chat box.
   useEffect(() => {
-    if (!disabled) {
+    const isDisabled = Boolean(disabled);
+    if (!isDisabled && wasInputDisabledRef.current) {
       setTimeout(() => {
         textareaRef.current?.focus();
       }, 0);
     }
+    wasInputDisabledRef.current = isDisabled;
   }, [disabled]);
 
   const handleSend = () => {
@@ -462,7 +517,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
 
               <div className="flex items-center justify-between gap-2 border-t border-zinc-800 p-2">
                 <div className="flex items-center gap-2">
-                <ConnectionSheet side="bottom" />
+                <ConnectionSheet
+                  side="bottom"
+                  triggerClassName="aspect-square h-10 w-10 min-h-10 min-w-10 max-h-10 max-w-10 shrink-0 gap-0 rounded-md p-0"
+                />
                 {connected && connectionModel ? (
                   <span className="text-xs font-medium text-muted-foreground">
                     {connectionModel}
@@ -509,25 +567,38 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     </div>
                   ) : null}
                   <Button
-                    variant={voiceEnabled ? 'default' : 'secondary'}
+                    variant="outline"
                     size="icon"
-                    className={
+                    style={{
+                      ...CHAT_FOOTER_ICON_BOX,
+                      // ON: pressed in. OFF: popped out.
+                      transform: voiceEnabled ? 'translateY(4px)' : 'translate(-1px, -1px)',
+                      boxShadow: voiceEnabled
+                        ? '0 2px 0 hsl(var(--foreground))'
+                        : '0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 8px 0 hsl(var(--foreground))',
+                    }}
+                    className={cn(
+                      chatFooterIconLayoutClass,
                       voiceEnabled
-                        ? 'h-8 w-8 bg-emerald-600 text-white hover:bg-emerald-500'
-                        : 'h-8 w-8 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
-                    }
+                        ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500'
+                        : 'border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700',
+                    )}
                     onClick={() => setVoiceEnabled(prev => !prev)}
                     type="button"
                     aria-label={voiceEnabled ? 'Voice on' : 'Voice off'}
                     title={voiceEnabled ? 'Voice on' : 'Voice off'}
                   >
-                    {voiceEnabled ? <FiVolume2 className="h-4 w-4" /> : <FiVolumeX className="h-4 w-4" />}
+                    {voiceEnabled ? (
+                      <FiVolume2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <FiVolumeX className="h-4 w-4 shrink-0" />
+                    )}
                   </Button>
                   {sendIcon ? (
                     <Button
-                      variant="raised"
+                      variant="default"
                       size="icon"
-                      className="h-8 w-8 bg-white text-black hover:bg-black hover:text-white active:bg-[#ddd] active:text-[#333]"
+                      className="mb-px shrink-0 rounded-full"
                       onClick={handleSend}
                       disabled={disabled || !input.trim()}
                       aria-label={sendIconAriaLabel ?? 'Send message'}
@@ -537,12 +608,14 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   ) : (
                     <Button
                       variant="default"
-                      size="sm"
-                      className="px-4 py-2"
+                      size="icon"
+                      className="mb-px shrink-0 rounded-full"
                       onClick={handleSend}
                       disabled={disabled || !input.trim()}
+                      aria-label="Send message"
+                      title="Send"
                     >
-                      Send
+                      <FaArrowRight className="h-4 w-4 shrink-0" />
                     </Button>
                   )}
                 </div>

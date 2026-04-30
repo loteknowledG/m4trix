@@ -4,9 +4,9 @@ import path from "node:path";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 
-// Ensure this route runs on Node.js (not Edge) and is always dynamic
+// Ensure this route runs on Node.js (not Edge)
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const dynamic = "force-static";
 
 export async function POST(req: Request) {
   try {

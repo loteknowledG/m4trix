@@ -16,6 +16,13 @@ export type ModelOption = {
   provider: Provider;
 };
 
+const DEFAULT_PROVIDER_KEYS = {
+  zen: (process.env.NEXT_PUBLIC_ZEN_API_KEY || '').trim(),
+  google: (process.env.NEXT_PUBLIC_GOOGLE_API_KEY || '').trim(),
+  huggingface: (process.env.NEXT_PUBLIC_HF_API_KEY || '').trim(),
+  nvidia: (process.env.NEXT_PUBLIC_NVIDIA_API_KEY || '').trim(),
+} as const;
+
 type UseCharacterConnectionsArgs = {
   model: string;
   setModel: (value: string) => void;
@@ -111,10 +118,10 @@ export function useCharacterConnections({
     const storedModelProvider = getConnectionItem(SESSION_KEYS.activeModelProvider) as
       | Provider
       | null;
-    const storedZen = getConnectionItem(SESSION_KEYS.zenKey);
-    const storedGoogle = getConnectionItem(SESSION_KEYS.googleKey);
-    const storedHf = getConnectionItem(SESSION_KEYS.hfKey);
-    const storedNvidia = getConnectionItem(SESSION_KEYS.nvidiaKey);
+    const storedZen = getConnectionItem(SESSION_KEYS.zenKey) || DEFAULT_PROVIDER_KEYS.zen;
+    const storedGoogle = getConnectionItem(SESSION_KEYS.googleKey) || DEFAULT_PROVIDER_KEYS.google;
+    const storedHf = getConnectionItem(SESSION_KEYS.hfKey) || DEFAULT_PROVIDER_KEYS.huggingface;
+    const storedNvidia = getConnectionItem(SESSION_KEYS.nvidiaKey) || DEFAULT_PROVIDER_KEYS.nvidia;
     const storedLmstudioUrl = getConnectionItem(SESSION_KEYS.lmstudioUrl);
     const storedLmstudioConnected = getConnectionItem(SESSION_KEYS.lmstudioConnected);
 

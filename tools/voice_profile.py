@@ -11,6 +11,8 @@ import argparse
 import asyncio
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -41,15 +43,32 @@ PROFILES = {
         "bootup_tts_volume": "+0%",
         "description": "Cleaner voice-forward mode with lighter stylization.",
     },
+    "muthur": {
+        "profile": "muthur",
+        "label": "MUTHUR",
+        "bootup_ai_name": "MUTHUR 6000",
+        "bootup_voice": "en-US-AriaNeural",
+        # Base voice: calm Aria, slightly slowed + a touch lower (ship computer, not robot).
+        "bootup_tts_rate": "-12%",
+        "bootup_tts_pitch": "-5Hz",
+        "bootup_tts_volume": "+0%",
+        "description": "Calm, lower, system-like voice for MUTHUR.",
+    },
 }
 
 ALIASES = {
     "jenna": "jenna-jacket",
     "jeena": "jenna-jacket",
     "jeena-neural": "jenny-neural",
+    "jeeny": "jenny-neural",
+    "jeeny-neural": "jenny-neural",
     "jacket": "jenna-jacket",
     "jenny": "jenny-neural",
+    "mother": "muthur",
+    "mu-thur": "muthur",
+    "muthur-6000": "muthur",
     "neural": "jenny-neural",
+    "muthur": "muthur",
 }
 
 
@@ -59,6 +78,66 @@ def resolve_profile(name: str) -> dict:
     if key not in PROFILES:
         raise KeyError(f"Unknown voice profile: {name}")
     return PROFILES[key]
+
+
+# MUTHUR "tuner" chain (ffmpeg -af): EQ + light metal-room taps + subtle relay delay.
+# Override with VOICE_PROFILE_REVERB_AF; set VOICE_PROFILE_REVERB=0 to disable.
+_DEFAULT_MUTHUR_REVERB_AF = (
+    "highpass=f=120,"
+    "equalizer=f=4200:width_type=h:width=2000:g=2,"
+    "lowpass=f=10000,"
+    "aecho=0.92:0.88:34|58|82:0.1|0.07|0.05,"
+    "aecho=0.97:0.9:115:0.14,"
+    "extrastereo=m=0.35,"
+    "volume=0.95"
+)
+
+
+def _wet_mp3_with_reverb(src_path: str) -> str | None:
+    """Return path to a new temp mp3 with reverb, or None if ffmpeg is missing or fails."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    filt = os.environ.get("VOICE_PROFILE_REVERB_AF", _DEFAULT_MUTHUR_REVERB_AF).strip()
+    if not filt:
+        return None
+    fd, wet_path = tempfile.mkstemp(suffix=".mp3")
+    os.close(fd)
+    try:
+        r = subprocess.run(
+            [
+                ffmpeg,
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                src_path,
+                "-af",
+                filt,
+                "-acodec",
+                "libmp3lame",
+                "-q:a",
+                "3",
+                wet_path,
+            ],
+            capture_output=True,
+            timeout=int(VOICE_PROFILE_TIMEOUT_SEC),
+        )
+        if r.returncode != 0:
+            try:
+                os.remove(wet_path)
+            except OSError:
+                pass
+            return None
+        return wet_path
+    except (OSError, subprocess.SubprocessError, ValueError):
+        try:
+            os.remove(wet_path)
+        except OSError:
+            pass
+        return None
 
 
 def profile_env(
@@ -87,6 +166,7 @@ async def _speak(
     rate: str | None,
     pitch: str | None,
     volume: str | None,
+    profile_key: str | None = None,
 ) -> bool:
     try:
         import edge_tts
@@ -98,6 +178,7 @@ async def _speak(
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         out_path = tmp.name
 
+    wet_path: str | None = None
     try:
         communicate = edge_tts.Communicate(
             text,
@@ -108,8 +189,20 @@ async def _speak(
         )
         await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
 
+        play_path = out_path
+        reverb_on = os.environ.get("VOICE_PROFILE_REVERB", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+        if profile_key == "muthur" and reverb_on:
+            wet_path = _wet_mp3_with_reverb(out_path)
+            if wet_path:
+                play_path = wet_path
+
         pygame.mixer.init()
-        pygame.mixer.music.load(out_path)
+        pygame.mixer.music.load(play_path)
         pygame.mixer.music.play()
         started = time.monotonic()
         while pygame.mixer.music.get_busy():
@@ -127,6 +220,11 @@ async def _speak(
             os.remove(out_path)
         except Exception:
             pass
+        if wet_path:
+            try:
+                os.remove(wet_path)
+            except Exception:
+                pass
 
 
 def list_profiles() -> int:
@@ -191,6 +289,7 @@ def speak_profile(
             env.get("BOOTUP_TTS_RATE"),
             env.get("BOOTUP_TTS_PITCH"),
             env.get("BOOTUP_TTS_VOLUME"),
+            profile_key=profile["profile"],
         )
     )
     return 0 if ok else 1

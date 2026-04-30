@@ -1,8 +1,7 @@
-import type { NextRequest } from 'next/server';
 import { DEFAULT_LMSTUDIO_URL, getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-static';
 
 type HealthPayload = {
   ok: boolean;
@@ -13,11 +12,9 @@ type HealthPayload = {
   error?: string;
 };
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const lmstudioUrl = normalizeLmstudioUrl(
-    searchParams.get('lmstudio_url') || DEFAULT_LMSTUDIO_URL
-  );
+/** No `Request` — required for `output: "export"` prerender (avoids `request.url` dynamic). */
+export async function GET() {
+  const lmstudioUrl = normalizeLmstudioUrl(DEFAULT_LMSTUDIO_URL);
   const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
 
   const controller = new AbortController();
