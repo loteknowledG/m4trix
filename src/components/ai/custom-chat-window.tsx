@@ -68,6 +68,41 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   prompterMode,
   onPrompterModeChange,
 }) => {
+  const speakFallback = (text: string) => {
+    if (typeof window === 'undefined' || typeof window.speechSynthesis === 'undefined') {
+      return false;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+      return true;
+    } catch (error) {
+      console.warn('[tts] browser fallback failed', error);
+      return false;
+    }
+  };
+
+  const speakText = async (text: string) => {
+    const spokeInBrowser = speakFallback(text);
+    if (spokeInBrowser) {
+      return;
+    }
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(body || `TTS request failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.warn('[tts] server speech failed and browser speech unavailable', error);
+    }
+  };
+
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
@@ -124,14 +159,14 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     const speechText = textForSpeech(latest.text);
     if (!speechText) return;
 
-    fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: speechText }),
-    }).catch(err => {
-      console.warn('[tts] failed to speak text', err);
-    });
+    void speakText(speechText);
   }, [messages, voiceEnabled]);
+
+  useEffect(() => {
+    if (voiceEnabled || typeof window === 'undefined') return;
+    if (typeof window.speechSynthesis === 'undefined') return;
+    window.speechSynthesis.cancel();
+  }, [voiceEnabled]);
 
   // restore focus after submit cycles that temporarily disable the input
   useEffect(() => {
