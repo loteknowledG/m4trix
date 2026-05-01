@@ -11,10 +11,14 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
+import shutil
 from pathlib import Path
+
+import pyttsx3
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,19 +85,21 @@ def profile_env(
     return env
 
 
-async def _speak(
+async def _speak_cloud(
     text: str,
     voice: str,
     rate: str | None,
     pitch: str | None,
     volume: str | None,
 ) -> bool:
+    print("[VOICE] Loading TTS libraries...", flush=True)
     try:
         import edge_tts
         import pygame
     except Exception as exc:
         print(f"[VOICE] Missing audio dependency: {exc}", file=sys.stderr)
         return False
+    print("[VOICE] TTS libraries loaded.", flush=True)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         out_path = tmp.name
@@ -106,17 +112,73 @@ async def _speak(
             pitch=pitch or "",
             volume=volume or "",
         )
+        print("[VOICE] Synthesizing speech...", flush=True)
         await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
 
-        pygame.mixer.init()
-        pygame.mixer.music.load(out_path)
-        pygame.mixer.music.play()
-        started = time.monotonic()
-        while pygame.mixer.music.get_busy():
-            if time.monotonic() - started > VOICE_PROFILE_TIMEOUT_SEC:
-                pygame.mixer.music.stop()
-                raise TimeoutError("Playback timed out")
-            pygame.time.Clock().tick(10)
+        try:
+            if sys.platform.startswith("win"):
+                ffmpeg = shutil.which("ffmpeg")
+                if ffmpeg:
+                    print("[VOICE] Playing via Windows sound API...", flush=True)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as wav_tmp:
+                        wav_path = wav_tmp.name
+                    subprocess.run(
+                        [ffmpeg, "-y", "-loglevel", "quiet", "-i", out_path, wav_path],
+                        check=True,
+                    )
+                    import winsound
+
+                    winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+                    try:
+                        os.remove(wav_path)
+                    except Exception:
+                        pass
+                else:
+                    print("[VOICE] Playing via pygame...", flush=True)
+                    pygame.mixer.init()
+                    pygame.mixer.music.load(out_path)
+                    pygame.mixer.music.play()
+                    started = time.monotonic()
+                    while pygame.mixer.music.get_busy():
+                        if time.monotonic() - started > VOICE_PROFILE_TIMEOUT_SEC:
+                            pygame.mixer.music.stop()
+                            raise TimeoutError("Playback timed out")
+                        pygame.time.Clock().tick(10)
+            else:
+                ffplay = shutil.which("ffplay")
+                if ffplay:
+                    print("[VOICE] Playing via ffplay...", flush=True)
+                    subprocess.run(
+                        [
+                            ffplay,
+                            "-nodisp",
+                            "-autoexit",
+                            "-loglevel",
+                            "quiet",
+                            out_path,
+                        ],
+                        check=True,
+                    )
+                else:
+                    print("[VOICE] Playing via pygame...", flush=True)
+                    pygame.mixer.init()
+                    pygame.mixer.music.load(out_path)
+                    pygame.mixer.music.play()
+                    started = time.monotonic()
+                    while pygame.mixer.music.get_busy():
+                        if time.monotonic() - started > VOICE_PROFILE_TIMEOUT_SEC:
+                            pygame.mixer.music.stop()
+                            raise TimeoutError("Playback timed out")
+                        pygame.time.Clock().tick(10)
+        except Exception as exc:
+            print(f"[VOICE] playback failed: {exc}; falling back to OS player", file=sys.stderr)
+            if sys.platform.startswith("win"):
+                os.startfile(out_path)  # type: ignore[attr-defined]
+            elif sys.platform.startswith("darwin"):
+                subprocess.Popen(["open", out_path])
+            else:
+                subprocess.Popen(["xdg-open", out_path])
+            time.sleep(2)
         return True
     finally:
         try:
@@ -125,6 +187,51 @@ async def _speak(
             pass
         try:
             os.remove(out_path)
+        except Exception:
+            pass
+
+
+def _speak_native(
+    text: str,
+    voice_name: str | None = None,
+    rate: str | None = None,
+    pitch: str | None = None,
+    volume: str | None = None,
+) -> bool:
+    try:
+        engine = pyttsx3.init()
+    except Exception as exc:
+        print(f"[VOICE] Native speech init failed: {exc}", file=sys.stderr)
+        return False
+
+    try:
+        if rate not in (None, ""):
+            try:
+                engine.setProperty("rate", int(str(rate).replace("%", "")))
+            except Exception:
+                pass
+        if volume not in (None, ""):
+            try:
+                engine.setProperty("volume", max(0.0, min(1.0, float(str(volume).replace("%", "")))))
+            except Exception:
+                pass
+
+        if voice_name:
+            for voice in engine.getProperty("voices"):
+                voice_haystack = f"{voice.id} {getattr(voice, 'name', '')}".lower()
+                if voice_name.lower() in voice_haystack:
+                    engine.setProperty("voice", voice.id)
+                    break
+
+        engine.say(text)
+        engine.runAndWait()
+        return True
+    except Exception as exc:
+        print(f"[VOICE] Native speech failed: {exc}", file=sys.stderr)
+        return False
+    finally:
+        try:
+            engine.stop()
         except Exception:
             pass
 
@@ -184,8 +291,27 @@ def speak_profile(
         f"({profile['bootup_voice']}): {text}",
         flush=True,
     )
+    ok = _speak_native(
+        text,
+        voice_name="zira" if sys.platform.startswith("win") else None,
+        rate=env.get("BOOTUP_TTS_RATE"),
+        pitch=env.get("BOOTUP_TTS_PITCH"),
+        volume=env.get("BOOTUP_TTS_VOLUME"),
+    )
+    return 0 if ok else 1
+
+
+def cloud_worker_profile(
+    profile_name: str,
+    text: str,
+    rate: str | None = None,
+    pitch: str | None = None,
+    volume: str | None = None,
+) -> int:
+    profile = resolve_profile(profile_name)
+    env = profile_env(profile, rate=rate, pitch=pitch, volume=volume)
     ok = asyncio.run(
-        _speak(
+        _speak_cloud(
             text,
             env["BOOTUP_VOICE"],
             env.get("BOOTUP_TTS_RATE"),
@@ -243,6 +369,18 @@ def main() -> int:
 
     p = sub.add_parser("current", help="Show the currently active env values")
     p.set_defaults(func=lambda args: current_profile())
+
+    p = sub.add_parser("_cloud", help=argparse.SUPPRESS)
+    p.add_argument("profile", nargs="+", help=argparse.SUPPRESS)
+    p.add_argument("--rate", help=argparse.SUPPRESS)
+    p.add_argument("--pitch", help=argparse.SUPPRESS)
+    p.add_argument("--volume", help=argparse.SUPPRESS)
+    p.add_argument("text", nargs="+", help=argparse.SUPPRESS)
+    p.set_defaults(
+        func=lambda args: cloud_worker_profile(
+            " ".join(args.profile), " ".join(args.text), args.rate, args.pitch, args.volume
+        )
+    )
 
     args = parser.parse_args()
     try:

@@ -59,41 +59,11 @@ import {
   pickBestMoment,
   storyTextForPrompt,
 } from "@/lib/game/story-moments";
+import { speakWithJennyVoice } from "@/lib/tts";
 
 export default function GamePage() {
-  const speakFallback = (text: string) => {
-    if (typeof window === "undefined" || typeof window.speechSynthesis === "undefined") {
-      return false;
-    }
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-      return true;
-    } catch (error) {
-      console.warn("[tts] browser fallback failed", error);
-      return false;
-    }
-  };
-
   const speakText = async (text: string) => {
-    const spokeInBrowser = speakFallback(text);
-    if (spokeInBrowser) {
-      return;
-    }
-    try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(body || `TTS request failed with status ${response.status}`);
-      }
-    } catch (error) {
-      console.warn("[tts] server speech failed and browser speech unavailable", error);
-    }
+    await speakWithJennyVoice(text);
   };
 
   const params = useParams();

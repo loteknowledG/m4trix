@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConnectionSheet } from '@/components/connection-sheet';
+import { speakWithJennyVoice } from '@/lib/tts';
 
 export interface CustomChatMessage {
   id: string;
@@ -68,39 +69,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   prompterMode,
   onPrompterModeChange,
 }) => {
-  const speakFallback = (text: string) => {
-    if (typeof window === 'undefined' || typeof window.speechSynthesis === 'undefined') {
-      return false;
-    }
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-      return true;
-    } catch (error) {
-      console.warn('[tts] browser fallback failed', error);
-      return false;
-    }
-  };
-
   const speakText = async (text: string) => {
-    const spokeInBrowser = speakFallback(text);
-    if (spokeInBrowser) {
-      return;
-    }
-    try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        throw new Error(body || `TTS request failed with status ${response.status}`);
-      }
-    } catch (error) {
-      console.warn('[tts] server speech failed and browser speech unavailable', error);
-    }
+    await speakWithJennyVoice(text);
   };
 
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -115,6 +85,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const [storyDetailsOpen, setStoryDetailsOpen] = React.useState(false);
 
   const lastSpokenIdRef = useRef<string | null>(null);
+  const speakTimerRef = useRef<number | null>(null);
+  const speakSequenceRef = useRef(0);
   const storyOpeningMessage = messages.find((msg) => msg.id === 'story-opening');
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
   const [editingText, setEditingText] = React.useState('');
@@ -149,18 +121,40 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     if (!voiceEnabled) return;
     if (!messages || messages.length === 0) return;
 
-    const latest = messages[messages.length - 1];
-    if (latest.from !== 'agent') return;
+    if (speakTimerRef.current) {
+      window.clearTimeout(speakTimerRef.current);
+      speakTimerRef.current = null;
+    }
+
+    const latest = latestAgentMessage;
+    if (!latest) return;
     if (latest.id === lastSpokenIdRef.current) return;
     if (latest.id.startsWith('pending-') || latest.id.startsWith('streaming-')) return;
     if (/^Working on that request\b/i.test(latest.text.trim())) return;
 
-    lastSpokenIdRef.current = latest.id;
-    const speechText = textForSpeech(latest.text);
-    if (!speechText) return;
+    const sequence = ++speakSequenceRef.current;
+    speakTimerRef.current = window.setTimeout(() => {
+      if (sequence !== speakSequenceRef.current) return;
 
-    void speakText(speechText);
-  }, [messages, voiceEnabled]);
+      const currentLatest = [...messages]
+        .reverse()
+        .find((msg) => msg.from === 'agent' && msg.id !== 'story-opening' && !isPendingAgentMessage(msg));
+      if (!currentLatest || currentLatest.id !== latest.id) return;
+
+      const speechText = textForSpeech(currentLatest.text);
+      if (!speechText) return;
+
+      lastSpokenIdRef.current = currentLatest.id;
+      void speakText(speechText);
+    }, 350);
+
+    return () => {
+      if (speakTimerRef.current) {
+        window.clearTimeout(speakTimerRef.current);
+        speakTimerRef.current = null;
+      }
+    };
+  }, [latestAgentMessage?.id, latestAgentMessage?.text, messages, voiceEnabled]);
 
   useEffect(() => {
     if (voiceEnabled || typeof window === 'undefined') return;
