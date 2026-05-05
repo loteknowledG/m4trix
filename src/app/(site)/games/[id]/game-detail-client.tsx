@@ -30,6 +30,7 @@ import {
   setConnectionItem,
 } from "@/lib/connection-storage";
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
+import { speakWithJennyVoice } from "@/lib/tts";
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import {
   buildSceneSummary,
@@ -516,13 +517,7 @@ export default function GamePage() {
     const text = nextText.trim();
     if (!text) return;
 
-    fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    }).catch((err) => {
-      console.warn("[tts] failed to speak edited text", err);
-    });
+    void speakWithJennyVoice(text);
   };
 
   const handleSteerChatMessage = (messageId: string, nextText: string) => {

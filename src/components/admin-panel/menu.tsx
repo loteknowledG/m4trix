@@ -78,7 +78,9 @@ export function Menu({ isOpen }: MenuProps) {
     const loadTrash = async () => {
       try {
         const items = (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
-        if (mounted) setTrashCount(items.length || 0);
+        const stories = (await get<any[]>('trash-stories')) || [];
+        const characters = (await get<any[]>('trash-characters')) || [];
+        if (mounted) setTrashCount((items.length || 0) + (stories.length || 0) + (characters.length || 0));
       } catch (e) {
         if (mounted) setTrashCount(0);
       }

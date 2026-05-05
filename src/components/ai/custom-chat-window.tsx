@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConnectionSheet } from '@/components/connection-sheet';
+import { speakWithJennyVoice } from '@/lib/tts';
 import { cn } from '@/lib/utils';
 
 /** Identical square footprint for chat footer voice + send (border-box). */
@@ -121,29 +122,26 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     return (container.textContent || '').replace(/\u00a0/g, ' ').trim();
   };
 
-  const speakInBrowser = (text: string, profile?: string) => {
+  const speakMuthurInBrowser = (text: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
     if (!text.trim()) return false;
 
     try {
       const synth = window.speechSynthesis;
       const utterance = new SpeechSynthesisUtterance(text);
-      const normalizedProfile = (profile || '').toLowerCase();
-      const wantsMuthur = normalizedProfile === 'muthur';
       const voices = synth.getVoices();
 
       const preferredVoice = voices.find(v => {
         const name = v.name.toLowerCase();
-        if (wantsMuthur) return name.includes('aria');
-        return name.includes('jenny');
+        return name.includes('aria');
       });
 
       if (preferredVoice) {
         utterance.voice = preferredVoice;
       }
       // Align with server MUTHUR profile: slightly slower, slightly lower (not heavy robot).
-      utterance.rate = wantsMuthur ? 0.88 : 1;
-      utterance.pitch = wantsMuthur ? 0.88 : 1;
+      utterance.rate = 0.88;
+      utterance.pitch = 0.88;
       utterance.volume = 1;
 
       synth.cancel();
@@ -174,16 +172,23 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     lastSpokenIdRef.current = latest.id;
     const speechText = textForSpeech(latest.text);
     if (!speechText) return;
-    if (speakInBrowser(speechText, ttsProfile)) return;
+    const normalizedProfile = (ttsProfile || '').toLowerCase();
 
-    fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: speechText, profile: ttsProfile }),
-    }).catch(err => {
-      console.warn('[tts] failed to speak text', err);
-    });
-  }, [messages, voiceEnabled]);
+    if (normalizedProfile === 'muthur') {
+      if (speakMuthurInBrowser(speechText)) return;
+
+      fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: speechText, profile: ttsProfile }),
+      }).catch(err => {
+        console.warn('[tts] failed to speak text', err);
+      });
+      return;
+    }
+
+    void speakWithJennyVoice(speechText);
+  }, [messages, voiceEnabled, ttsProfile]);
 
   // Restore focus only after a submit/work cycle re-enables the input — not on mount,
   // or focus steals from other fields and the caret feels "stuck" to the chat box.

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { get } from 'idb-keyval';
 import {
   Carousel,
   CarouselContent,
@@ -11,6 +10,7 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel';
 import { pressableClass } from '@/components/ui/pressable';
+import { safeGet } from '@/lib/storage-compat';
 
 type StoryMeta = { id: string; title?: string; count?: number };
 
@@ -37,7 +37,7 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
     let mounted = true;
     (async () => {
       try {
-        const saved = (await get<any[]>('stories')) || [];
+        const saved = (await safeGet<any[]>('stories')) || [];
         if (!mounted) return;
         setStories(saved);
 
@@ -45,7 +45,7 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
         const previewEntries = await Promise.all(
           saved.map(async s => {
             try {
-              const items = (await get<any>(`story:${s.id}`)) || [];
+              const items = (await safeGet<any>(`story:${s.id}`)) || [];
               // Check for titleMomentId in story meta or object
               const titleMomentId = s.titleMomentId || (items && items.titleMomentId);
               let momentsArr = Array.isArray(items)

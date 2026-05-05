@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { del, get, keys, set } from 'idb-keyval';
 import { usePathname } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
 import { normalizeMomentSrc } from '@/lib/moments';
+import { safeDel, safeGet, safeKeys, safeSet } from '@/lib/storage-compat';
 import { X, ArrowLeft, ArrowRight } from '@/components/icons';
 import {
   Dialog,
@@ -40,11 +40,11 @@ export default function CollectionOverlay() {
     if (!storyId || !currentId) return;
     (async () => {
       const storyKey = `story:${storyId}`;
-      const stored = (await get<any>(storyKey)) || {};
+      const stored = (await safeGet<any>(storyKey)) || {};
       let titleMomentId = stored.titleMomentId;
       if (!titleMomentId && Array.isArray(stored)) {
         // fallback: check stories metadata
-        const storiesMeta = (await get<any[]>('stories')) || [];
+        const storiesMeta = (await safeGet<any[]>('stories')) || [];
         const meta = storiesMeta.find((s: any) => s.id === storyId);
         titleMomentId = meta?.titleMomentId;
       }
@@ -102,7 +102,7 @@ export default function CollectionOverlay() {
 
     (async () => {
       try {
-        const v = await get(`overlay:text:${currentId}`);
+        const v = await safeGet(`overlay:text:${currentId}`);
         if (!v) {
           setText('');
           setPos({ x: 0.5, y: 0.5 });
@@ -148,7 +148,7 @@ export default function CollectionOverlay() {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await get('overlay:tags');
+        const stored = await safeGet('overlay:tags');
         if (Array.isArray(stored)) {
           setAllTags(stored);
         }
@@ -180,7 +180,7 @@ export default function CollectionOverlay() {
   const refreshAllTagsFromStorage = useCallback(() => {
     (async () => {
       try {
-        const allKeys = await keys();
+        const allKeys = await safeKeys();
         const tagSet = new Set<string>();
         const overlayKeys = (allKeys as any[])
           .filter(k => typeof k === 'string' && k.startsWith('overlay:text:'))
@@ -189,7 +189,7 @@ export default function CollectionOverlay() {
         await Promise.all(
           overlayKeys.map(async key => {
             try {
-              const stored = await get(key);
+              const stored = await safeGet(key);
               if (stored && Array.isArray((stored as any).tags)) {
                 for (const t of (stored as any).tags) {
                   if (typeof t === 'string' && t.trim()) tagSet.add(t);
@@ -234,7 +234,7 @@ export default function CollectionOverlay() {
     // Store overlay text in IndexedDB for import/export consistency.
     (async () => {
       try {
-        await set(`overlay:text:${currentId}`, payload);
+        await safeSet(`overlay:text:${currentId}`, payload);
       } catch (e) {
         /* ignore */
       }
@@ -243,11 +243,11 @@ export default function CollectionOverlay() {
     // Persist global tag list in indexedDB so it can be exported/imported with the rest of the app state.
     (async () => {
       try {
-        const existing = (await get('overlay:tags')) || [];
+        const existing = (await safeGet('overlay:tags')) || [];
         const merged = Array.from(
           new Set([...(Array.isArray(existing) ? existing : []), ...(payload.tags || [])])
         );
-        await set('overlay:tags', merged);
+        await safeSet('overlay:tags', merged);
       } catch (e) {
         /* ignore */
       }
@@ -283,7 +283,7 @@ export default function CollectionOverlay() {
     } else {
       (async () => {
         try {
-          await del(`overlay:text:${currentId}`);
+          await safeDel(`overlay:text:${currentId}`);
         } catch {
           /* ignore */
         }
@@ -488,18 +488,18 @@ export default function CollectionOverlay() {
             if (!storyId || !currentId) return;
             // Update story object in IndexedDB
             const storyKey = `story:${storyId}`;
-            let stored = (await get<any>(storyKey)) || {};
+            let stored = (await safeGet<any>(storyKey)) || {};
             if (Array.isArray(stored)) {
               stored = { items: stored };
             }
             stored.titleMomentId = currentId;
-            await set(storyKey, stored);
+            await safeSet(storyKey, stored);
             // Also update stories metadata
-            const storiesMeta = (await get<any[]>('stories')) || [];
+            const storiesMeta = (await safeGet<any[]>('stories')) || [];
             const idx = storiesMeta.findIndex((s: any) => s.id === storyId);
             if (idx > -1) {
               storiesMeta[idx].titleMomentId = currentId;
-              await set('stories', storiesMeta);
+              await safeSet('stories', storiesMeta);
             }
             setIsTitleMoment(true);
             window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id: storyId } }));
