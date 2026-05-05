@@ -1,8 +1,8 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
-import { Trash2, Upload } from "@/components/icons";
-import { useParams, useRouter } from "next/navigation";
+import { ChevronLeft, Trash2, Upload } from "@/components/icons";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GrUserFemale } from "react-icons/gr";
 import { IoBanOutline } from "react-icons/io5";
@@ -62,7 +62,9 @@ function normalizeDescription(value: string) {
 
 export default function StoryPage() {
   const params = useParams();
-  const id = params?.id as string | undefined;
+  const searchParams = useSearchParams();
+  const routeId = params?.id as string | undefined;
+  const id = routeId === "new" ? searchParams?.get("story") || undefined : routeId;
 
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -835,22 +837,33 @@ export default function StoryPage() {
         title={title || "Stories"}
         titleMarquee
         navLeft={
-          <SelectionHeaderBar
-            selectedIds={selectedIds || []}
-            moments={moments}
-            showSelectAll={(selectedIds || []).length > 0}
-            onSelectAll={() => {
-              if ((selectedIds || []).length !== moments.length) {
-                setSelectionStore(
-                  scope,
-                  moments.map((m) => m.id),
-                );
-              } else {
-                clearSelection(scope);
-              }
-            }}
-            onClearSelection={() => clearSelection(scope)}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/stories")}
+              className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
+              aria-label="Back to stories"
+              title="Back to stories"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <SelectionHeaderBar
+              selectedIds={selectedIds || []}
+              moments={moments}
+              showSelectAll={(selectedIds || []).length > 0}
+              onSelectAll={() => {
+                if ((selectedIds || []).length !== moments.length) {
+                  setSelectionStore(
+                    scope,
+                    moments.map((m) => m.id),
+                  );
+                } else {
+                  clearSelection(scope);
+                }
+              }}
+              onClearSelection={() => clearSelection(scope)}
+            />
+          </div>
         }
         navRight={
           <div className="flex items-center gap-2">

@@ -628,7 +628,7 @@ function HeapInner() {
                         /* ignore */
                       }
                       setMoments(prev => prev.filter(g => !(selectedIds || []).includes(g.id)));
-                      router.push(`/stories/${id}`);
+                      router.push(`/stories/new?story=${encodeURIComponent(id)}`);
                     } catch (err) {
                       logger.error('Failed to create story', err);
                       router.push('/stories');
@@ -655,7 +655,7 @@ function HeapInner() {
                           const selected = moments.filter(g => (selectedIds || []).includes(g.id));
                           if (selected.length === 0) {
                             // nothing to move, just navigate
-                            router.push(`/stories/${s.id}`);
+                            router.push(`/stories/new?story=${encodeURIComponent(s.id)}`);
                             return;
                           }
 
@@ -699,10 +699,10 @@ function HeapInner() {
                           }
                           // remove moved moments from heap
                           setMoments(prev => prev.filter(g => !(selectedIds || []).includes(g.id)));
-                          router.push(`/stories/${s.id}`);
+                          router.push(`/stories/new?story=${encodeURIComponent(s.id)}`);
                         } catch (err) {
                           logger.error('Failed to add to story', err);
-                          router.push(`/stories/${s.id}`);
+                          router.push(`/stories/new?story=${encodeURIComponent(s.id)}`);
                         }
                       }}
                       className="flex items-center gap-3 w-full p-3 rounded hover:bg-accent"

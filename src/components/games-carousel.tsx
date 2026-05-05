@@ -123,7 +123,7 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
       <CarouselContent>
         {stories.map(story => (
           <CarouselItem key={story.id}>
-            <Link href={`/games/${story.id}`}>
+            <Link href={`/games/new?game=${encodeURIComponent(story.id)}`}>
               <div className="h-[100vh] w-full max-w-full bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
                 {previews[story.id] ? (
                   <img

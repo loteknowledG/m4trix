@@ -39,7 +39,7 @@ export default function StoriesList() {
           <ul className="space-y-2">
             {stories.map((s) => (
               <li key={s.id}>
-                <Link href={`/stories/${s.id}`} className="block p-3 rounded hover:bg-accent flex items-center justify-between">
+                <Link href={`/stories/new?story=${encodeURIComponent(s.id)}`} className="block p-3 rounded hover:bg-accent flex items-center justify-between">
                   <div className="font-medium truncate">{s.title && s.title.trim() ? s.title : "Untitled"}</div>
                   <div className="text-sm text-muted-foreground">{s.count ?? 0}</div>
                 </Link>

@@ -163,14 +163,11 @@ export default function StoriesPage() {
                 {stories.map(s => (
                   <Card
                     key={s.id}
-                    className={`group overflow-hidden transition-shadow duration-150 transition-transform duration-150 ease-out hover:shadow-2xl hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 ${
+                    className={`group relative overflow-hidden transition-shadow duration-150 transition-transform duration-150 ease-out hover:shadow-2xl hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 ${
                       selectedStories[s.id] ? 'ring-2 ring-primary' : ''
                     }`}
                   >
                     <div className="relative aspect-square">
-                      <Link href={`/stories/${s.id}`} className="absolute inset-0 z-0">
-                        <span className="sr-only">Open {s.title && s.title.trim() ? s.title : 'Untitled'}</span>
-                      </Link>
                       <label
                         className={`absolute left-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-white/70 bg-black/45 transition-opacity ${
                           selectedStories[s.id] ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -185,25 +182,30 @@ export default function StoriesPage() {
                           aria-label={`Select ${s.title && s.title.trim() ? s.title : 'Untitled'}`}
                         />
                       </label>
-                      {previews[s.id] ? (
-                        <img
-                          src={previews[s.id] || undefined}
-                          alt={s.title ?? 'story'}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-full w-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">
-                          No preview
+                      <Link href={`/stories/new?story=${encodeURIComponent(s.id)}`} className="block h-full w-full">
+                        <span className="sr-only">
+                          Open {s.title && s.title.trim() ? s.title : 'Untitled'}
+                        </span>
+                        {previews[s.id] ? (
+                          <img
+                            src={previews[s.id] || undefined}
+                            alt={s.title ?? 'story'}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">
+                            No preview
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-2">
+                          <div className="flex flex-col">
+                            <Marquee className="font-medium text-white truncate">
+                              {s.title && s.title.trim() ? s.title : 'Untitled'}
+                            </Marquee>
+                            <div className="text-xs text-white">{s.count ?? 0}</div>
+                          </div>
                         </div>
-                      )}
-                      <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-2">
-                        <div className="flex flex-col">
-                          <Marquee className="font-medium text-white truncate">
-                            {s.title && s.title.trim() ? s.title : 'Untitled'}
-                          </Marquee>
-                          <div className="text-xs text-white">{s.count ?? 0}</div>
-                        </div>
-                      </div>
+                      </Link>
                     </div>
                   </Card>
                 ))}

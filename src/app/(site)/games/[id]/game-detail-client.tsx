@@ -1,7 +1,7 @@
 "use client";
 
 import { get, set } from "idb-keyval";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaBug } from "react-icons/fa";
 import { FaTags } from "react-icons/fa";
@@ -63,7 +63,9 @@ import {
 
 export default function GamePage() {
   const params = useParams();
-  const id = params?.id as string | undefined;
+  const searchParams = useSearchParams();
+  const routeId = params?.id as string | undefined;
+  const id = routeId === "new" ? searchParams?.get("game") || undefined : routeId;
   const router = useRouter();
   const [gameData, setGameData] = useState<any>(null);
   const [previewSrc, setPreviewSrc] = useState<string | undefined>(undefined);
@@ -84,6 +86,7 @@ export default function GamePage() {
   const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
   const [storyHistory, setStoryHistory] = useState<OrchestratedMessage[]>([]);
   const [storySummary, setStorySummary] = useState("");
+  const [externalMemorySummary, setExternalMemorySummary] = useState("");
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
@@ -203,6 +206,7 @@ export default function GamePage() {
   const gameSummaryKey = getGameSummaryKey(id);
   const gameMomentKey = getGameMomentKey(id);
   const summarizeInFlightRef = useRef(false);
+  const hasSpokenOpeningRef = useRef<string | null>(null);
 
   const goToPreviousMoment = () => {
     if (!hasMoments) return;
@@ -299,6 +303,68 @@ export default function GamePage() {
     if (!gameSummaryKey) return;
     void saveGameSummary(gameSummaryKey, storySummary);
   }, [gameSummaryKey, storySummary]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadExternalMemory = async () => {
+      try {
+        const response = await fetch("/api/samus-memory?limit=12", {
+          method: "GET",
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const data = (await response.json().catch(() => null)) as
+          | { ok?: boolean; summary?: string }
+          | null;
+        if (!mounted || !data?.ok || !data.summary) return;
+        setExternalMemorySummary(data.summary.slice(0, 6000));
+      } catch {
+        // optional integration; keep game flow working even when memory source is unavailable
+      }
+    };
+    void loadExternalMemory();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!id) return;
+    if (loading) return;
+    if (hasSpokenOpeningRef.current === id) return;
+
+    const spokenText =
+      storyDescription.trim() ||
+      (typeof gameData?.description === "string" ? gameData.description.trim() : "") ||
+      title.trim();
+    if (!spokenText) return;
+
+    const trySpeak = async () => {
+      const ok = await speakWithJennyVoice(spokenText);
+      if (ok) {
+        hasSpokenOpeningRef.current = id;
+      }
+      return ok;
+    };
+
+    const onFirstInteraction = () => {
+      void trySpeak();
+      window.removeEventListener("pointerdown", onFirstInteraction);
+      window.removeEventListener("keydown", onFirstInteraction);
+    };
+
+    void trySpeak().then((ok) => {
+      if (!ok) {
+        window.addEventListener("pointerdown", onFirstInteraction, { once: true });
+        window.addEventListener("keydown", onFirstInteraction, { once: true });
+      }
+    });
+
+    return () => {
+      window.removeEventListener("pointerdown", onFirstInteraction);
+      window.removeEventListener("keydown", onFirstInteraction);
+    };
+  }, [id, loading, storyDescription, gameData?.description, title]);
 
   const refreshStorySummary = async (options: {
     sceneSummary: string;
@@ -413,7 +479,12 @@ export default function GamePage() {
       const lmstudioUrl = normalizeLmstudioUrl(
         getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
       );
-      const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
+      const storyContext = [
+        storySummary,
+        currentSceneSummary,
+        currentStoryDescription,
+        externalMemorySummary ? `External memory context:\n${externalMemorySummary}` : "",
+      ]
         .filter(Boolean)
         .join("\n\n")
         .trim();

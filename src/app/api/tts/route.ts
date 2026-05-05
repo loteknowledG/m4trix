@@ -9,7 +9,14 @@ const DEFAULT_VOICE = 'JennyNeural';
 const REQUEST_TIMEOUT_MS = 120_000;
 
 function getCoderoboApiUrl() {
-  return (process.env.CODEROBO_TTS_API_URL || DEFAULT_CODEROBO_API_URL).replace(/\/$/, '');
+  const raw = (process.env.CODEROBO_TTS_API_URL || DEFAULT_CODEROBO_API_URL).trim();
+  try {
+    const url = new URL(raw);
+    // Allow users to paste UI pages like /new-tts.html, but always call API endpoints from origin.
+    return url.origin.replace(/\/$/, '');
+  } catch {
+    return raw.replace(/\/$/, '');
+  }
 }
 
 function getCoderoboJwt() {
@@ -112,27 +119,45 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const text = (body?.text || '').toString().trim();
+    const profile = (body?.profile || '').toString().trim().toLowerCase();
 
     if (!text) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
     }
 
-    const profile = (body?.profile || '').toString().trim().toLowerCase();
-    if (profile === 'muthur') {
-      const voiceProfile = (body?.profile || 'muthur').toString().trim() || 'muthur';
-      const runner = 'python';
+    if (profile === 'muthur' || profile === 'jenny-neural' || profile === 'jenny') {
+      const voiceProfile = profile === 'jenny' ? 'jenny-neural' : profile;
+      const runner = process.platform === 'win32' ? 'py' : 'python3';
       const scriptPath = 'tools/voice_profile.py';
+      const args = [scriptPath, 'speak', voiceProfile, text];
 
-      const child = spawn(runner, [scriptPath, 'speak', voiceProfile, text], {
-        cwd: process.cwd(),
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
+      const result = await new Promise<{ ok: boolean; stderr: string; code: number | null }>((resolve) => {
+        const child = spawn(runner, args, {
+          cwd: process.cwd(),
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        let stderr = '';
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk.toString();
+        });
+        child.on('error', (err) => {
+          resolve({ ok: false, stderr: err.message, code: -1 });
+        });
+        child.on('close', (code) => {
+          resolve({ ok: code === 0, stderr, code });
+        });
       });
 
-      child.unref();
+      if (!result.ok) {
+        return NextResponse.json(
+          { ok: false, error: 'VOICE_PROFILE_FAILED', detail: result.stderr || `exit ${result.code}` },
+          { status: 200 }
+        );
+      }
 
-      return NextResponse.json({ ok: true, provider: 'local' });
+      return NextResponse.json({ ok: true, provider: 'voice-profile', profile: voiceProfile });
     }
 
     const apiUrl = getCoderoboApiUrl();
@@ -151,27 +176,44 @@ export async function POST(request: NextRequest) {
     formData.append('pitch', pitch);
     formData.append('user_ip', userIp);
 
-    const submitResponse = await fetch(`${apiUrl}/tts`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwtToken}`,
-      },
-      body: formData,
-      cache: 'no-store',
-    });
+    const candidateApiUrls = Array.from(new Set([apiUrl, 'https://tts-api.coderobo.org']));
+    let submitData: any = null;
+    let submitErrorMessage = '';
+    let selectedApiUrl = apiUrl;
 
-    if (!submitResponse.ok) {
+    for (const candidateApiUrl of candidateApiUrls) {
+      const submitResponse = await fetch(`${candidateApiUrl}/tts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${jwtToken}`,
+        },
+        body: formData,
+        cache: 'no-store',
+      });
+
+      if (submitResponse.ok) {
+        submitData = await readJson(submitResponse);
+        selectedApiUrl = candidateApiUrl;
+        break;
+      }
+
       const submitError = await readJson(submitResponse);
-      throw new Error(submitError.detail || `TTS request failed with status ${submitResponse.status}`);
+      submitErrorMessage =
+        submitError?.detail ||
+        submitError?.error ||
+        `TTS request failed with status ${submitResponse.status}`;
     }
 
-    const submitData = await readJson(submitResponse);
+    if (!submitData) {
+      throw new Error(submitErrorMessage || 'TTS request failed on all configured endpoints');
+    }
+
     const taskId = submitData.task_id;
     if (!taskId) {
       throw new Error('TTS API did not return a task_id');
     }
 
-    const audioUrl = await pollCoderoboAudioUrl(apiUrl, taskId, jwtToken);
+    const audioUrl = await pollCoderoboAudioUrl(selectedApiUrl, taskId, jwtToken);
     return NextResponse.json({
       ok: true,
       audioUrl,
