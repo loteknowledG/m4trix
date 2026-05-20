@@ -119,6 +119,7 @@ export function buildGameAgentRequest(params: {
   storyHistory: OrchestratedMessage[];
   currentNpc: GameCharacterContext;
   currentPlayer: GameCharacterContext;
+  playerMode?: 'tell' | 'do' | 'think';
 }) {
   const {
     trimmed,
@@ -134,7 +135,24 @@ export function buildGameAgentRequest(params: {
     storyHistory,
     currentNpc,
     currentPlayer,
+    playerMode,
   } = params;
+
+  const MAX_STORY_CONTEXT_CHARS = 6000;
+  const MAX_HISTORY_MESSAGES = 10;
+  const MAX_HISTORY_TEXT_CHARS = 3000;
+  const clampText = (value: string, maxChars: number) => {
+    const text = (value || "").trim();
+    if (text.length <= maxChars) return text;
+    return text.slice(text.length - maxChars);
+  };
+
+  const compactHistory = (storyHistory || [])
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((entry) => ({
+      ...entry,
+      text: clampText(String(entry.text || ""), MAX_HISTORY_TEXT_CHARS),
+    }));
 
   const requestBody: GameAgentRequestBody = {
     prompt: trimmed,
@@ -147,9 +165,9 @@ export function buildGameAgentRequest(params: {
     stream: true,
   };
 
-  if (storyContext) requestBody.story = storyContext;
+  if (storyContext) requestBody.story = clampText(storyContext, MAX_STORY_CONTEXT_CHARS);
   if (steer?.trim()) requestBody.steer = steer.trim();
-  if (storyHistory.length > 0) requestBody.history = storyHistory;
+  if (compactHistory.length > 0) requestBody.history = compactHistory;
   if (activeProvider === "lmstudio") requestBody.lmstudioUrl = lmstudioUrl;
   if (currentNpc) {
     requestBody.character = {
@@ -160,13 +178,14 @@ export function buildGameAgentRequest(params: {
     };
   }
   if (currentPlayer) {
-    requestBody.coordinatorAgent = {
+    requestBody.player = {
       id: currentPlayer.id,
       name: currentPlayer.name,
       description: currentPlayer.description,
       appearance: currentPlayer.appearance ?? "",
     };
   }
+  if (playerMode) requestBody.playerMode = playerMode;
 
   return requestBody;
 }
@@ -186,6 +205,40 @@ async function streamAgentReply({
   onMomentReset,
   refreshStorySummary,
 }: StreamAgentReplyArgs) {
+  const extractAssistantText = (raw: string) => {
+    const text = (raw || "").trim();
+    if (!text) return "";
+    try {
+      const parsed = JSON.parse(text) as any;
+      if (typeof parsed?.text === "string" && parsed.text.trim()) return parsed.text.trim();
+      if (Array.isArray(parsed?.messages) && typeof parsed.messages[0]?.text === "string") {
+        return parsed.messages[0].text.trim();
+      }
+      if (typeof parsed?.response?.text === "string" && parsed.response.text.trim()) {
+        return parsed.response.text.trim();
+      }
+      return text;
+    } catch {
+      return text;
+    }
+  };
+
+  const readNonStreamText = async () => {
+    const res = await fetch("/api/agents", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...requestBody, stream: false }),
+    });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      throw new Error(errorText || "Failed to get non-stream response from LLM");
+    }
+    const raw = await res.text().catch(() => "");
+    return extractAssistantText(raw);
+  };
+
   const readStreamedText = async () => {
     const res = await fetch("/api/agents", {
       method: "POST",
@@ -223,7 +276,10 @@ async function streamAgentReply({
     streamedText = await readStreamedText();
   }
 
-  const assistantText = streamedText.trim();
+  let assistantText = extractAssistantText(streamedText);
+  if (!appendBaseText && !assistantText) {
+    assistantText = await readNonStreamText();
+  }
   const finalMessageId = `agent-${Date.now()}`;
   const finalMessage: CustomChatMessage = {
     id: finalMessageId,

@@ -175,19 +175,27 @@ async def _speak(
         print(f"[VOICE] Missing audio dependency: {exc}", file=sys.stderr)
         return False
 
+    print(f"[voice_profile._speak] profile_key={profile_key} voice={voice}", file=sys.stderr)
+
+    import uuid
+    cache_buster = f"\u200b{uuid.uuid4().hex[:8]}\u200b"
+    text_to_speak = cache_buster + text
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         out_path = tmp.name
 
     wet_path: str | None = None
     try:
+        print(f"[voice_profile._speak] generating TTS with edge_tts voice={voice}", file=sys.stderr)
         communicate = edge_tts.Communicate(
-            text,
+            text_to_speak,
             voice,
             rate=rate or "",
             pitch=pitch or "",
             volume=volume or "",
         )
         await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
+        print(f"[voice_profile._speak] TTS saved to {out_path}", file=sys.stderr)
 
         play_path = out_path
         reverb_on = os.environ.get("VOICE_PROFILE_REVERB", "1").strip().lower() not in (
@@ -196,20 +204,26 @@ async def _speak(
             "no",
             "off",
         )
+        print(f"[voice_profile._speak] reverb_on={reverb_on} profile_key={profile_key}", file=sys.stderr)
         if profile_key == "muthur" and reverb_on:
             wet_path = _wet_mp3_with_reverb(out_path)
             if wet_path:
                 play_path = wet_path
 
+        print(f"[voice_profile._speak] playing audio file: {play_path}", file=sys.stderr)
         pygame.mixer.init()
+        print(f"[voice_profile._speak] mixer init done, loading: {play_path}", file=sys.stderr)
         pygame.mixer.music.load(play_path)
+        print(f"[voice_profile._speak] music loaded, calling play()", file=sys.stderr)
         pygame.mixer.music.play()
+        print(f"[voice_profile._speak] play() called, waiting for busy=False", file=sys.stderr)
         started = time.monotonic()
         while pygame.mixer.music.get_busy():
             if time.monotonic() - started > VOICE_PROFILE_TIMEOUT_SEC:
                 pygame.mixer.music.stop()
                 raise TimeoutError("Playback timed out")
             pygame.time.Clock().tick(10)
+        print(f"[voice_profile._speak] music finished playing", file=sys.stderr)
         return True
     finally:
         try:
@@ -275,8 +289,10 @@ def speak_profile(
     pitch: str | None = None,
     volume: str | None = None,
 ) -> int:
+    print(f"[voice_profile.speak_profile] called with profile_name={profile_name}", file=sys.stderr)
     profile = resolve_profile(profile_name)
     env = profile_env(profile, rate=rate, pitch=pitch, volume=volume)
+    print(f"[voice_profile.speak_profile] resolved voice={env['BOOTUP_VOICE']}", file=sys.stderr)
     print(
         f"[VOICE] Speaking with profile '{profile['profile']}' "
         f"({profile['bootup_voice']}): {text}",
@@ -333,10 +349,14 @@ def main() -> int:
     p.add_argument("--rate", help="Optional TTS rate override")
     p.add_argument("--pitch", help="Optional TTS pitch override")
     p.add_argument("--volume", help="Optional TTS volume override")
-    p.add_argument("text", nargs="+", help="Text to speak")
+    p.add_argument("--text", help="Text to speak")
     p.set_defaults(
         func=lambda args: speak_profile(
-            args.profile, " ".join(args.text), args.rate, args.pitch, args.volume
+            args.profile,
+            (args.text or "").strip() or sys.stdin.read().strip(),
+            args.rate,
+            args.pitch,
+            args.volume,
         )
     )
 

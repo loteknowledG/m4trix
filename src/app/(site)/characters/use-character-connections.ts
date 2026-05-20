@@ -225,22 +225,21 @@ export function useCharacterConnections({
 
     try {
       if (provider === 'lmstudio') {
-        const urlParam = encodeURIComponent(
-          normalizeLmstudioUrl(lmstudioUrlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL)
+        const targetUrl = normalizeLmstudioUrl(
+          lmstudioUrlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL
         );
-        const res = await fetch(`/api/models?provider=lmstudio&lmstudio_url=${urlParam}`);
+        const res = await fetch(
+          `/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`
+        );
         if (!res.ok) throw new Error('Failed to fetch LM Studio models');
 
-        const payload = (await res.json().catch(() => null)) as any;
-        const rawModels: any[] = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : Array.isArray(payload?.models)
-          ? payload.models
-          : [];
+        const payload = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          models?: Array<{ id: string; label: string }>;
+        } | null;
+        if (!payload?.ok) throw new Error('Failed to fetch LM Studio models');
 
-        const options = mapModelOptions(rawModels, provider);
+        const options = mapModelOptions(payload.models ?? [], provider);
         setModelOptions(prev => [...prev.filter(option => option.provider !== provider), ...options]);
         setLmstudioConnected(true);
         setActiveProvider('lmstudio');

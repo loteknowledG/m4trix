@@ -1,3 +1,5 @@
+import { get as idbGet, set as idbSet } from 'idb-keyval';
+
 const FEMALE_VOICE_PATTERNS = [
   'jenny',
   'jennyneural',
@@ -14,6 +16,12 @@ const FEMALE_VOICE_PATTERNS = [
 ];
 
 const VOICES_WAIT_TIMEOUT_MS = 1500;
+const INTRO_TTS_CACHE_PREFIX = 'tts:intro:';
+
+type IntroTtsCacheEntry = {
+  textHash: string;
+  updatedAt: number;
+};
 
 function matchesAnyPattern(voice: SpeechSynthesisVoice, patterns: string[]) {
   const haystack = `${voice.name} ${voice.voiceURI}`.toLowerCase();
@@ -114,6 +122,14 @@ async function speakAudioUrl(audioUrl: string) {
   }
 }
 
+function hashText(input: string) {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 33) ^ input.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 async function speakViaCoderobo(text: string) {
   if (typeof window === 'undefined') {
     return false;
@@ -152,10 +168,12 @@ async function speakViaCoderobo(text: string) {
 
 async function speakViaVoiceProfile(text: string, profile = 'jenny-neural') {
   if (typeof window === 'undefined') {
+    console.warn('[tts] speakViaVoiceProfile: window is undefined');
     return false;
   }
 
   try {
+    console.warn('[tts] speakViaVoiceProfile: calling /api/tts with profile:', profile);
     const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -166,23 +184,43 @@ async function speakViaVoiceProfile(text: string, profile = 'jenny-neural') {
       }),
     });
 
+    console.warn('[tts] speakViaVoiceProfile: response status:', response.status);
     if (!response.ok) {
       const body = await response.text().catch(() => '');
+      console.warn('[tts] speakViaVoiceProfile: error body:', body);
       throw new Error(body || `TTS voice profile failed with status ${response.status}`);
     }
 
     const data = (await response.json().catch(() => null)) as
       | { ok?: boolean; provider?: string; error?: string; detail?: string }
       | null;
+    console.warn('[tts] speakViaVoiceProfile: response data:', data);
     if (!data?.ok) {
       return false;
     }
 
+    console.warn('[tts] speakViaVoiceProfile: success!');
     return true;
   } catch (error) {
-    console.warn('[tts] voice profile speech failed', error);
+    console.warn('[tts] speakViaVoiceProfile: exception:', error);
     return false;
   }
+}
+
+export async function speakWithJennyVoice(text: string) {
+  console.warn('[tts] speakWithJennyVoice called with:', text.slice(0, 50));
+  const spokeWithJennyProfile = await speakViaVoiceProfile(text, 'jenny-neural');
+  console.warn('[tts] speakViaVoiceProfile result:', spokeWithJennyProfile);
+  if (spokeWithJennyProfile) {
+    return true;
+  }
+  console.warn('[tts] trying browser voice fallback');
+  const femaleBrowserVoice = await speakWithBrowserVoice(text, FEMALE_VOICE_PATTERNS);
+  console.warn('[tts] browser voice result:', femaleBrowserVoice);
+  if (femaleBrowserVoice) {
+    return true;
+  }
+  return false;
 }
 
 export async function speakWithJennyOnlyVoice(text: string) {
@@ -190,7 +228,11 @@ export async function speakWithJennyOnlyVoice(text: string) {
   if (viaProfile) {
     return true;
   }
-  return speakViaCoderobo(text);
+  const femaleBrowserVoice = await speakWithBrowserVoice(text, FEMALE_VOICE_PATTERNS);
+  if (femaleBrowserVoice) {
+    return true;
+  }
+  return false;
 }
 
 export async function speakWithFallbackVoice(text: string) {
@@ -202,22 +244,36 @@ export async function speakWithFallbackVoice(text: string) {
   return speakWithBrowserVoice(text, []);
 }
 
-export async function speakWithJennyVoice(text: string) {
-  const spokeWithProfile = await speakViaVoiceProfile(text, 'jenny-neural');
-  if (spokeWithProfile) {
+export async function speakWithCachedStoryIntro(text: string, storyId: string) {
+  if (typeof window === 'undefined') return false;
+  const normalized = (text || '').trim();
+  if (!normalized || !storyId) return false;
+
+  const cacheKey = `${INTRO_TTS_CACHE_PREFIX}${storyId}`;
+  const nextHash = hashText(normalized);
+
+  try {
+    const cached = await idbGet<IntroTtsCacheEntry>(cacheKey);
+    if (cached && cached.textHash === nextHash) {
+      const replayed = await speakWithJennyOnlyVoice(normalized);
+      if (replayed) return true;
+    }
+  } catch {
+    // ignore cache read failures
+  }
+
+  const spokeFresh = await speakWithJennyOnlyVoice(normalized);
+  if (spokeFresh) {
+    try {
+      await idbSet(cacheKey, {
+        textHash: nextHash,
+        updatedAt: Date.now(),
+      } as IntroTtsCacheEntry);
+    } catch {
+      // ignore cache write failures
+    }
     return true;
   }
 
-  const spokeWithJenny = await speakViaCoderobo(text);
-  if (spokeWithJenny) {
-    return true;
-  }
-
-  const spokeWithFemaleVoice = await speakWithBrowserVoice(text, FEMALE_VOICE_PATTERNS);
-  if (spokeWithFemaleVoice) {
-    return true;
-  }
-
-  // Last resort: speak with any available browser voice so audio still works.
-  return speakWithBrowserVoice(text, []);
+  return false;
 }

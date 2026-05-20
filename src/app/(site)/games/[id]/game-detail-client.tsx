@@ -1,13 +1,14 @@
 "use client";
 
-import { get, set } from "idb-keyval";
+import { del, get, keys, set } from "idb-keyval";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaBug } from "react-icons/fa";
 import { FaTags } from "react-icons/fa";
+import { FaBrain } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
-import { ChevronLeft, ChevronRight } from "@/components/icons";
+import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import { type CustomChatMessage, CustomChatWindow } from "@/components/ai/custom-chat-window";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
@@ -30,7 +31,7 @@ import {
   setConnectionItem,
 } from "@/lib/connection-storage";
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
-import { speakWithJennyVoice } from "@/lib/tts";
+import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import {
   buildSceneSummary,
@@ -61,6 +62,22 @@ import {
   storyTextForPrompt,
 } from "@/lib/game/story-moments";
 
+type CharacterTurnMemory = {
+  id: string;
+  sourceMessageId: string;
+  storyId: string;
+  storyTitle: string;
+  characterId: string;
+  characterName: string;
+  role: "npc" | "player";
+  speaker: "user" | "agent";
+  text: string;
+  sceneContext: string;
+  createdAt: number;
+};
+
+const CHARACTER_MEMORY_INJECTION_LIMIT = 2;
+
 export default function GamePage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -87,6 +104,11 @@ export default function GamePage() {
   const [storyHistory, setStoryHistory] = useState<OrchestratedMessage[]>([]);
   const [storySummary, setStorySummary] = useState("");
   const [externalMemorySummary, setExternalMemorySummary] = useState("");
+  const [lastInjectedCharacterMemory, setLastInjectedCharacterMemory] = useState("");
+  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryDebugInfo, setMemoryDebugInfo] = useState("Samus-Manus memory loading disabled.");
+  const memoryFileInputRef = useRef<HTMLInputElement | null>(null);
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
@@ -97,9 +119,9 @@ export default function GamePage() {
     player: typeof assignedPlayer,
   ) => {
     const details = [
-      npc ? `NPC: ${npc.name}` : "",
-      npc?.appearance ? `NPC appearance: ${npc.appearance}` : "",
-      player ? `Player: ${player.name}` : "",
+      npc ? `Character (you are): ${npc.name}` : "",
+      npc?.appearance ? `Character appearance: ${npc.appearance}` : "",
+      player ? `Player (user): ${player.name}` : "",
       player?.appearance ? `Player appearance: ${player.appearance}` : "",
     ].filter(Boolean);
     return {
@@ -110,6 +132,7 @@ export default function GamePage() {
   const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [connected, setConnected] = useState(false);
+  console.debug('[game] connected state:', connected);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       return getConnectionItem(CONNECTION_STORAGE_KEYS.gameConnectionModel);
@@ -142,6 +165,7 @@ export default function GamePage() {
   const [momentTags, setMomentTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [playerMode, setPlayerMode] = useState<'tell' | 'do' | 'think'>('tell');
   const [debugData, setDebugData] = useState<{
     request: any;
     response: any;
@@ -198,6 +222,44 @@ export default function GamePage() {
     [title, currentMoment?.name, assignedNpc, assignedPlayer],
   );
 
+  const gameContextText = useMemo(() => {
+    const sections = [
+      "Game mode context",
+      title ? `Title: ${title}` : "",
+      currentMoment?.name ? `Current moment: ${currentMoment.name}` : "",
+      storyDescription.trim() ? `Story premise:\n${storyTextForPrompt(storyDescription)}` : "",
+      storySummary.trim() ? `Story summary:\n${storySummary.trim()}` : "",
+      grokSceneContext.trim() ? `Scene snapshot:\n${grokSceneContext.trim()}` : "",
+      resolvedArcStage
+        ? `Story arc stage: ${resolvedArcStage.stageNumber} - ${resolvedArcStage.stageName}${
+            resolvedArcStage.shortDescription ? `\n${resolvedArcStage.shortDescription}` : ""
+          }`
+        : resolvedArcStageNumber != null
+          ? `Story arc stage: ${resolvedArcStageNumber}`
+          : "",
+      assignedNpc
+        ? `Character (you are): ${assignedNpc.name}${assignedNpc.description ? ` - ${assignedNpc.description}` : ""}`
+        : "",
+      assignedPlayer
+        ? `Player (user): ${assignedPlayer.name}${
+            assignedPlayer.description ? ` - ${assignedPlayer.description}` : ""
+          }`
+        : "",
+    ].filter(Boolean);
+
+    return sections.join("\n\n");
+  }, [
+    title,
+    currentMoment?.name,
+    storyDescription,
+    storySummary,
+    grokSceneContext,
+    resolvedArcStage,
+    resolvedArcStageNumber,
+    assignedNpc,
+    assignedPlayer,
+  ]);
+
   const grokChatMapping = useMemo(
     () => mapGameChatForGrokImage(chatMessages, assignedNpc, assignedPlayer),
     [chatMessages, assignedNpc, assignedPlayer],
@@ -207,6 +269,83 @@ export default function GamePage() {
   const gameMomentKey = getGameMomentKey(id);
   const summarizeInFlightRef = useRef(false);
   const hasSpokenOpeningRef = useRef<string | null>(null);
+  const characterMemoryKey = useCallback((characterId: string) => `game-character-memory:${characterId}`, []);
+
+  const persistMemoryForCharacter = useCallback(
+    async (
+      role: "npc" | "player",
+      character: { id: string; name: string } | null,
+      message: OrchestratedMessage,
+    ) => {
+      if (!id || !character?.id) return;
+      const text = (message.text || "").trim();
+      if (!text) return;
+      if (!message.id) return;
+
+      const key = characterMemoryKey(character.id);
+      const existing = (await get<CharacterTurnMemory[]>(key)) || [];
+      if (existing.some((item) => item.sourceMessageId === message.id)) {
+        return;
+      }
+
+      const entry: CharacterTurnMemory = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        sourceMessageId: message.id,
+        storyId: id,
+        storyTitle: title || "Game",
+        characterId: character.id,
+        characterName: character.name || (role === "npc" ? "NPC" : "Player"),
+        role,
+        speaker: message.from === "user" ? "user" : "agent",
+        text,
+        sceneContext: buildSceneSummary({
+          title,
+          currentMomentName: currentMoment?.name ?? "",
+          npc: assignedNpc,
+          player: assignedPlayer,
+        }),
+        createdAt: Date.now(),
+      };
+
+      await set(key, [...existing, entry].slice(-240));
+    },
+    [id, title, currentMoment?.name, assignedNpc, assignedPlayer, characterMemoryKey],
+  );
+
+  const buildCharacterMemoryContext = useCallback(async () => {
+    const chunks: string[] = [];
+    const targets: Array<{ role: "npc" | "player"; character: { id: string; name: string } | null }> = [
+      {
+        role: "npc",
+        character: assignedNpc ? { id: assignedNpc.id, name: assignedNpc.name || "NPC" } : null,
+      },
+      {
+        role: "player",
+        character: assignedPlayer
+          ? { id: assignedPlayer.id, name: assignedPlayer.name || "Player" }
+          : null,
+      },
+    ];
+
+    for (const target of targets) {
+      if (!target.character?.id) continue;
+      const key = characterMemoryKey(target.character.id);
+      const existing = (await get<CharacterTurnMemory[]>(key)) || [];
+      const latest = existing.slice(-CHARACTER_MEMORY_INJECTION_LIMIT);
+      if (latest.length === 0) continue;
+
+      const section = [
+        `Character memory (${target.role}: ${target.character.name}, id: ${target.character.id})`,
+        ...latest.map(
+          (m) =>
+            `- [${new Date(m.createdAt).toISOString()}] ${m.speaker}: ${m.text} | context: ${m.sceneContext}`,
+        ),
+      ].join("\n");
+      chunks.push(section);
+    }
+
+    return chunks.join("\n\n");
+  }, [assignedNpc, assignedPlayer, characterMemoryKey]);
 
   const goToPreviousMoment = () => {
     if (!hasMoments) return;
@@ -305,28 +444,164 @@ export default function GamePage() {
   }, [gameSummaryKey, storySummary]);
 
   useEffect(() => {
-    let mounted = true;
-    const loadExternalMemory = async () => {
+    if (!id) return;
+    if (!Array.isArray(storyHistory)) return;
+    if (storyHistory.length === 0) return;
+
+    void Promise.all(
+      storyHistory.map(async (message) => {
+        if (message.from === "agent") {
+          await persistMemoryForCharacter(
+            "npc",
+            assignedNpc ? { id: assignedNpc.id, name: assignedNpc.name || "NPC" } : null,
+            message,
+          );
+          return;
+        }
+        if (message.from === "user") {
+          await persistMemoryForCharacter(
+            "player",
+            assignedPlayer ? { id: assignedPlayer.id, name: assignedPlayer.name || "Player" } : null,
+            message,
+          );
+        }
+      }),
+    );
+  }, [id, storyHistory, assignedNpc, assignedPlayer, persistMemoryForCharacter]);
+
+  const loadExternalMemory = useCallback(async () => {
+    setMemoryLoading(true);
+    try {
+      const npcEntries =
+        assignedNpc?.id ? ((await get<any[]>(characterMemoryKey(assignedNpc.id))) || []) : [];
+      const playerEntries =
+        assignedPlayer?.id ? ((await get<any[]>(characterMemoryKey(assignedPlayer.id))) || []) : [];
+      const npcCount = npcEntries.length;
+      const playerCount = playerEntries.length;
+      const npcRecent = npcEntries
+        .slice(-CHARACTER_MEMORY_INJECTION_LIMIT)
+        .map(
+          (entry: any) =>
+            `- [${entry?.speaker || "unknown"}] ${String(entry?.text || "").slice(0, 220)}${
+              String(entry?.text || "").length > 220 ? "..." : ""
+            }`,
+        )
+        .join("\n");
+      const playerRecent = playerEntries
+        .slice(-CHARACTER_MEMORY_INJECTION_LIMIT)
+        .map(
+          (entry: any) =>
+            `- [${entry?.speaker || "unknown"}] ${String(entry?.text || "").slice(0, 220)}${
+              String(entry?.text || "").length > 220 ? "..." : ""
+            }`,
+        )
+        .join("\n");
+      setExternalMemorySummary("");
+      setMemoryDebugInfo(
+        [
+          "Samus-Manus memory: disabled",
+          `Story: ${id || "none"}`,
+          `NPC memory entries: ${npcCount}`,
+          `Player memory entries: ${playerCount}`,
+          "",
+          `NPC recent entries (${Math.min(npcCount, CHARACTER_MEMORY_INJECTION_LIMIT)}):`,
+          npcRecent || "- none",
+          "",
+          `Player recent entries (${Math.min(playerCount, CHARACTER_MEMORY_INJECTION_LIMIT)}):`,
+          playerRecent || "- none",
+        ].join("\n"),
+      );
+      return true;
+    } catch {
+      setMemoryDebugInfo("Samus-Manus memory: disabled\nLocal memory stats unavailable.");
+      return false;
+    } finally {
+      setMemoryLoading(false);
+    }
+  }, [id, assignedNpc?.id, assignedPlayer?.id, characterMemoryKey]);
+
+  useEffect(() => {
+    void loadExternalMemory();
+  }, [loadExternalMemory]);
+
+  const handleSaveMemory = useCallback(() => {
+    try {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        storyId: id || null,
+        storyTitle: title || "",
+        npcId: assignedNpc?.id || null,
+        npcName: assignedNpc?.name || "",
+        playerId: assignedPlayer?.id || null,
+        playerName: assignedPlayer?.name || "",
+        summary: externalMemorySummary || "",
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `game-memory-${id || "unknown"}-${Date.now()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // no-op
+    }
+  }, [id, title, assignedNpc?.id, assignedNpc?.name, assignedPlayer?.id, assignedPlayer?.name, externalMemorySummary]);
+
+  const handleLoadMemory = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
       try {
-        const response = await fetch("/api/samus-memory?limit=12", {
-          method: "GET",
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const data = (await response.json().catch(() => null)) as
-          | { ok?: boolean; summary?: string }
-          | null;
-        if (!mounted || !data?.ok || !data.summary) return;
-        setExternalMemorySummary(data.summary.slice(0, 6000));
+        const parsed = JSON.parse(String(reader.result || "{}")) as
+          | { summary?: string; records?: Array<{ type?: string; text?: string }> }
+          | Array<{ type?: string; text?: string }>;
+        let nextSummary = "";
+        if (Array.isArray(parsed)) {
+          nextSummary = parsed
+            .filter((r) => r && typeof r.text === "string" && r.text.trim())
+            .map((r) => `- [${r.type || "memory"}] ${r.text}`)
+            .join("\n");
+        } else if (typeof parsed?.summary === "string" && parsed.summary.trim()) {
+          nextSummary = parsed.summary.trim();
+        } else if (Array.isArray(parsed?.records)) {
+          nextSummary = parsed.records
+            .filter((r) => r && typeof r.text === "string" && r.text.trim())
+            .map((r) => `- [${r.type || "memory"}] ${r.text}`)
+            .join("\n");
+        }
+        if (nextSummary) {
+          setExternalMemorySummary(nextSummary.slice(0, 6000));
+        }
       } catch {
-        // optional integration; keep game flow working even when memory source is unavailable
+        // no-op
+      } finally {
+        if (memoryFileInputRef.current) memoryFileInputRef.current.value = "";
       }
     };
-    void loadExternalMemory();
-    return () => {
-      mounted = false;
-    };
+    reader.readAsText(file);
   }, []);
+
+  const handleDeleteMemory = useCallback(async () => {
+    try {
+      const allKeys = await keys();
+      const memoryKeys = (allKeys || [])
+        .map((key) => String(key))
+        .filter((key) => key.startsWith("game-character-memory:"));
+      if (memoryKeys.length === 0) return;
+      await Promise.all(memoryKeys.map((key) => del(key)));
+      setLastInjectedCharacterMemory("");
+      await loadExternalMemory();
+    } catch {
+      // no-op
+    }
+  }, [loadExternalMemory]);
 
   useEffect(() => {
     if (!id) return;
@@ -340,7 +615,7 @@ export default function GamePage() {
     if (!spokenText) return;
 
     const trySpeak = async () => {
-      const ok = await speakWithJennyVoice(spokenText);
+      const ok = id ? await speakWithCachedStoryIntro(spokenText, id) : await speakWithJennyVoice(spokenText);
       if (ok) {
         hasSpokenOpeningRef.current = id;
       }
@@ -479,11 +754,14 @@ export default function GamePage() {
       const lmstudioUrl = normalizeLmstudioUrl(
         getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
       );
+      const characterMemoryContext = await buildCharacterMemoryContext();
+      setLastInjectedCharacterMemory(characterMemoryContext || "");
       const storyContext = [
+        gameContextText,
         storySummary,
         currentSceneSummary,
         currentStoryDescription,
-        externalMemorySummary ? `External memory context:\n${externalMemorySummary}` : "",
+        characterMemoryContext ? `Character turn memory:\n${characterMemoryContext}` : "",
       ]
         .filter(Boolean)
         .join("\n\n")
@@ -502,6 +780,7 @@ export default function GamePage() {
         storyHistory,
         currentNpc,
         currentPlayer,
+        playerMode,
       });
 
       if (steerInstruction.trim()) {
@@ -1107,6 +1386,15 @@ export default function GamePage() {
             <FaTags className="h-4 w-4" />
           </Pressable>
 
+          <Pressable
+            type="button"
+            onClick={() => setMemoryDialogOpen(true)}
+            className="fixed bottom-4 left-40 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label="Show memory"
+          >
+            <FaBrain className="h-4 w-4" />
+          </Pressable>
+
           <div className="relative h-full w-full">
             <ResizablePanelGroup
               orientation="horizontal"
@@ -1198,6 +1486,8 @@ export default function GamePage() {
                     disabled={false}
                     connected={connected}
                     connectionModel={connectionModel}
+                    playerMode={playerMode}
+                    onPlayerModeChange={setPlayerMode}
                     sendIcon={<FaArrowUp className="h-4 w-4" />}
                     sendIconAriaLabel="Send message"
                   />
@@ -1324,6 +1614,26 @@ export default function GamePage() {
                 <h4 className="mb-2 text-sm font-medium text-slate-400">Story Memory</h4>
                 <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
                   {storySummary || "No story summary yet"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Game Context</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {gameContextText || "No game context yet"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Memory Debug</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {memoryDebugInfo}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">
+                  Injected Character Memory (Last {CHARACTER_MEMORY_INJECTION_LIMIT} Per Character)
+                </h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {lastInjectedCharacterMemory || "No character memory injected yet"}
                 </pre>
               </div>
               <div className="flex-shrink-0">
@@ -1461,6 +1771,70 @@ export default function GamePage() {
                 )}
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
+        <DialogContent
+          className="z-[210] w-[min(92vw,720px)] max-h-[85vh] overflow-hidden border-slate-700 bg-slate-900 text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">External Memory</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              Imported from Samus-Manus memory for game context.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 overflow-auto">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-400">
+                {memoryLoading ? "Loading memory..." : "Latest injected memory context"}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={memoryFileInputRef}
+                  type="file"
+                  accept="application/json"
+                  className="hidden"
+                  onChange={(e) => handleLoadMemory(e.target.files)}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveMemory}
+                  className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <ArrowDownIcon size={14} />
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => memoryFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <Upload size={14} />
+                  Load
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadExternalMemory()}
+                  className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteMemory()}
+                  className="rounded border border-red-700/60 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40"
+                >
+                  Delete Memory
+                </button>
+              </div>
+            </div>
+            <pre className="max-h-[55vh] overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+              {memoryDebugInfo}
+              {"\n\n"}
+              {externalMemorySummary || "No external memory loaded."}
+            </pre>
           </div>
         </DialogContent>
       </Dialog>

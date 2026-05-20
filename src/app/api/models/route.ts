@@ -1,8 +1,11 @@
 import type { NextRequest } from 'next/server';
-import { getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import {
+  getLmstudioModelsUrl,
+  normalizeLmstudioUrl,
+  parseLmstudioModelsResponse,
+} from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-static';
 
 // Hardcoded OpenCode endpoints.
 const ZEN_CHAT_URL = 'https://opencode.ai/zen/v1/chat/completions';
@@ -75,20 +78,10 @@ export async function GET(req: NextRequest) {
         );
       }
       const data = await resp.json();
-      // Normalize to array of { id, display_name }
-      const rawModels = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.models)
-        ? data.models
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
-      const mapped = rawModels
-        .map((m: any) => ({
-          id: m?.id || m?.model_id || m?.name || '',
-          display_name: m?.display_name || m?.name || m?.id || '',
-        }))
-        .filter((x: any) => x.id);
+      const mapped = parseLmstudioModelsResponse(data).map((model) => ({
+        id: model.id,
+        display_name: model.label,
+      }));
       return new Response(JSON.stringify(mapped), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -226,10 +219,7 @@ export async function GET(req: NextRequest) {
   let modelsUrl: string | null = null;
   let apiKeyToUse: string | null = null;
 
-  if (provider === 'lmstudio') {
-    // Handled above
-    return;
-  } else if (Boolean(nvidiaOverrideKey)) {
+  if (Boolean(nvidiaOverrideKey)) {
     // Handled above
     return;
   } else if (isHF) {

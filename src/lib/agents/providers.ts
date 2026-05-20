@@ -107,12 +107,12 @@ export type CallProviderOptions = {
   providerName: string;
   story?: string;
   steer?: string;
-  coordinatorAgent?: {
+  player?: {
     id: string;
     name: string;
     description: string;
   };
-  coordinatorMode?: 'tell' | 'do' | 'think';
+  playerMode?: 'tell' | 'do' | 'think';
   history?: {
     id: string;
     from: 'user' | 'agent';
@@ -149,11 +149,11 @@ export function buildProviderRequest(
   agent: { name: string; description: string },
   options: Omit<CallProviderOptions, 'url' | 'apiKey' | 'providerName'>
 ) {
-  const { model, story, steer, coordinatorAgent, coordinatorMode, history, temperature, interactionMode } =
+  const { model, story, steer, player, playerMode, history, temperature, interactionMode } =
     options;
 
   const agentDescription = stripHtmlToText(agent.description);
-  const coordinatorDescription = stripHtmlToText(coordinatorAgent?.description);
+  const playerDescription = stripHtmlToText(player?.description);
   const storyText = stripHtmlToText(story);
   const steerText = stripHtmlToText(steer);
 
@@ -165,22 +165,22 @@ export function buildProviderRequest(
   if (storyText) context += `The global story context is: ${storyText}. `;
   if (steerText)
     context += `The user has provided a steering note for the next response: ${steerText}. Follow it unless it conflicts with the story or user intent. `;
-  if (coordinatorAgent)
-    context += `The user is playing the role of ${coordinatorAgent.name}: ${coordinatorDescription}. `;
+  if (player)
+    context += `The user is playing the role of ${player.name}: ${playerDescription}. Respond as ${agent.name}, staying true to ${agent.name}'s own personality — do not merge with the user's character traits. `;
 
-  let coordinatorModeNote = '';
-  if (coordinatorMode === 'tell') {
-    coordinatorModeNote =
+  let playerModeNote = '';
+  if (playerMode === 'tell') {
+    playerModeNote =
       "Treat the user input as the coordinator speaking in-character (dialogue). Interpret first-person lines as the coordinator's voice and respond accordingly.";
-  } else if (coordinatorMode === 'do') {
-    coordinatorModeNote =
+  } else if (playerMode === 'do') {
+    playerModeNote =
       'Treat the user input as a description of actions. Focus replies on concrete steps, execution details, and expected outcomes.';
-  } else if (coordinatorMode === 'think') {
-    coordinatorModeNote =
+  } else if (playerMode === 'think') {
+    playerModeNote =
       'Treat the user input as a seed sentence to expand into a detailed, vivid narrative. When appropriate, expand the sentence into a short scene with sensory detail and internal thoughts.';
   }
 
-  if (coordinatorModeNote) context += `${coordinatorModeNote} `;
+  if (playerModeNote) context += `${playerModeNote} `;
 
   let personaModeNote = '';
   if (interactionMode === 'cooperative') {
@@ -230,7 +230,7 @@ export async function callProvider(
   agent: { name: string; description: string },
   options: CallProviderOptions
 ): Promise<string> {
-  const { url, apiKey, model, providerName, coordinatorAgent } = options;
+  const { url, apiKey, model, providerName, player } = options;
 
   const { providerPayload } = buildProviderRequest(prompt, agent, options);
 
@@ -332,8 +332,8 @@ export async function callProvider(
   // Sanitization: ensure agents do NOT impersonate the prompter/user
   try {
     const prompterName =
-      coordinatorAgent && typeof coordinatorAgent.name === 'string'
-        ? coordinatorAgent.name.trim()
+      player && typeof player.name === 'string'
+        ? player.name.trim()
         : '';
     if (prompterName) {
       const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

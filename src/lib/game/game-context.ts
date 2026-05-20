@@ -27,9 +27,9 @@ export function buildSceneSummary(params: {
   const sceneParts = [
     title ? `Story title: ${title}` : "",
     currentMomentName ? `Current moment: ${currentMomentName}` : "",
-    npc ? `NPC: ${npc.name}${npc.description ? ` - ${npc.description}` : ""}` : "",
-    npc?.appearance ? `NPC appearance: ${npc.appearance}` : "",
-    player ? `Player avatar: ${player.name}${player.description ? ` - ${player.description}` : ""}` : "",
+    npc ? `Character (you are): ${npc.name}${npc.description ? ` - ${npc.description}` : ""}` : "",
+    npc?.appearance ? `Character appearance: ${npc.appearance}` : "",
+    player ? `Player (user): ${player.name}${player.description ? ` - ${player.description}` : ""}` : "",
     player?.appearance ? `Player appearance: ${player.appearance}` : "",
   ].filter(Boolean);
   return sceneParts.join("\n");
@@ -78,7 +78,7 @@ export async function resolveGameAgentContext(params: {
             appearance: typeof storyMeta?.npcAppearance === "string" ? storyMeta.npcAppearance : "",
             avatarUrl: npc.avatarUrl,
           }
-        : null;
+        : assignedNpc;
       currentPlayer = player
         ? {
             id: player.id,
@@ -88,7 +88,7 @@ export async function resolveGameAgentContext(params: {
               typeof storyMeta?.playerAppearance === "string" ? storyMeta.playerAppearance : "",
             avatarUrl: player.avatarUrl,
           }
-        : null;
+        : assignedPlayer;
 
       currentSceneSummary = buildSceneSummaryFn(currentNpc, currentPlayer);
 

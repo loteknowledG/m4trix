@@ -5,7 +5,7 @@ import { AGENTS as DEFAULT_AGENTS } from './default-agents';
 import type { Agent, AgentId, AgentsResponse, ChatMessage } from './types';
 import type { ModelOption, Provider } from './use-character-connections';
 
-type PrompterMode = 'tell' | 'do' | 'think';
+type PlayerMode = 'tell' | 'do' | 'think';
 
 type UseCharacterChatArgs = {
   activeProvider: Provider;
@@ -15,7 +15,7 @@ type UseCharacterChatArgs = {
   model: string;
   modelOptions: ModelOption[];
   prompterAgent: Agent | null;
-  prompterMode: PrompterMode;
+  playerMode: PlayerMode;
   setAgents: (value: Agent[] | ((prev: Agent[]) => Agent[])) => void;
   story: string;
   googleApiKey: string;
@@ -47,7 +47,7 @@ export function useCharacterChat({
   modelOptions,
   nvidiaApiKey,
   prompterAgent,
-  prompterMode,
+  playerMode,
   setAgents,
   story,
   zenApiKey,
@@ -190,7 +190,7 @@ export function useCharacterChat({
         })),
         story,
         prompterAgent,
-        prompterMode,
+        playerMode,
         orchestration: 'auto' as const,
         interactionMode: 'neutral' as const,
         history: historyForApi,

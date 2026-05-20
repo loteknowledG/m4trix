@@ -4,7 +4,6 @@ const repositoryName = (process.env.GITHUB_REPOSITORY || "").split("/")[1] || ""
 
 const nextConfig = {
 	devIndicators: false,
-	output: "export",
 	trailingSlash: true,
 	basePath: isGithubActions && repositoryName ? `/${repositoryName}` : "",
 	assetPrefix: isGithubActions && repositoryName ? `/${repositoryName}/` : "",

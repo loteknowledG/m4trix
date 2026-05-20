@@ -61,8 +61,8 @@ export function decideOrchestrationAuto(
 type AgentRunContext = {
   story?: string;
   steer?: string;
-  coordinatorAgent?: Agent;
-  coordinatorMode?: "tell" | "do" | "think";
+  player?: Agent;
+  playerMode?: "tell" | "do" | "think";
   history?: OrchestratedMessage[];
   interactionMode?: "neutral" | "cooperative" | "competitive";
 };
@@ -75,8 +75,8 @@ export async function runOrchestration(
     stateless: boolean;
     story?: string;
     steer?: string;
-    coordinatorAgent?: Agent;
-    coordinatorMode?: "tell" | "do" | "think";
+    player?: Agent;
+    playerMode?: "tell" | "do" | "think";
     interactionMode?: "neutral" | "cooperative" | "competitive";
     history?: OrchestratedMessage[];
     callProvider: (prompt: string, agent: Agent, options: AgentRunContext) => Promise<string>;
@@ -98,8 +98,8 @@ export async function runOrchestration(
       const text = await options.callProvider(promptToAgent, agent, {
         story: options.story,
         steer: options.steer,
-        coordinatorAgent: options.coordinatorAgent,
-        coordinatorMode: options.coordinatorMode,
+        player: options.player,
+        playerMode: options.playerMode,
         interactionMode: options.interactionMode,
         history: historyForAgents,
       });
@@ -121,8 +121,8 @@ export async function runOrchestration(
           .callProvider(prompt, agent, {
             story: options.story,
             steer: options.steer,
-            coordinatorAgent: options.coordinatorAgent,
-            coordinatorMode: options.coordinatorMode,
+            player: options.player,
+            playerMode: options.playerMode,
             interactionMode: options.interactionMode,
             history: historyForAgents,
           })

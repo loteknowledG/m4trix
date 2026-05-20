@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { FaCompass } from 'react-icons/fa';
 import { FaArrowRight } from 'react-icons/fa6';
 import { FiVolume2, FiVolumeX } from 'react-icons/fi';
+import { GiThink, GiWeightLiftingUp, GiNothingToSay } from 'react-icons/gi';
 import { MdOutlineEditNote } from 'react-icons/md';
 import { Button } from '@/components/ui/button';
 import {
@@ -61,9 +62,9 @@ interface CustomChatWindowProps {
   // When provided, renders a connection icon + model label on the left side of the send row.
   connected?: boolean;
   connectionModel?: string | null;
-  // Optional compact prompter-mode selector (no visible label) rendered above the send control
-  prompterMode?: 'tell' | 'do' | 'think';
-  onPrompterModeChange?: (v: 'tell' | 'do' | 'think') => void;
+  // Optional compact player-mode selector (no visible label) rendered above the send control
+  playerMode?: 'tell' | 'do' | 'think';
+  onPlayerModeChange?: (v: 'tell' | 'do' | 'think') => void;
   ttsProfile?: string;
 }
 
@@ -82,8 +83,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   sendIconAriaLabel,
   connected,
   connectionModel,
-  prompterMode,
-  onPrompterModeChange,
+  playerMode,
+  onPlayerModeChange,
   ttsProfile,
 }) => {
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -166,6 +167,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     const latest = messages[messages.length - 1];
     if (latest.from !== 'agent') return;
     if (latest.id === lastSpokenIdRef.current) return;
+    if (latest.id === 'story-opening') return;
     if (latest.id.startsWith('pending-') || latest.id.startsWith('streaming-')) return;
     if (/^Working on that request\b/i.test(latest.text.trim())) return;
 
@@ -532,24 +534,24 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   </span>
                 ) : null}
 
-                {prompterMode !== undefined && onPrompterModeChange && (
-                  <div>
-                    <Select
-                      value={prompterMode}
-                      onValueChange={(v: string) =>
-                        onPrompterModeChange(v as 'tell' | 'do' | 'think')
-                      }
-                    >
-                      <SelectTrigger aria-label="Prompter mode" className="h-7 w-20 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tell">Tell</SelectItem>
-                        <SelectItem value="do">Do</SelectItem>
-                        <SelectItem value="think">Think</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {playerMode !== undefined && onPlayerModeChange && (
+                  <button
+                    onClick={() => {
+                      const modes: ('tell' | 'do' | 'think')[] = ['tell', 'do', 'think'];
+                      const next = modes[(modes.indexOf(playerMode) + 1) % modes.length];
+                      onPlayerModeChange(next);
+                    }}
+                    aria-label={`Player mode: ${playerMode}`}
+                    title={`Player mode: ${playerMode}`}
+                  >
+                    {playerMode === 'tell' ? (
+                      <GiNothingToSay className="h-4 w-4" />
+                    ) : playerMode === 'do' ? (
+                      <GiWeightLiftingUp className="h-4 w-4" />
+                    ) : (
+                      <GiThink className="h-4 w-4" />
+                    )}
+                  </button>
                 )}
                 </div>
 

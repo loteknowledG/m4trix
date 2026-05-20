@@ -129,26 +129,45 @@ export async function POST(request: NextRequest) {
       const voiceProfile = profile === 'jenny' ? 'jenny-neural' : profile;
       const runner = process.platform === 'win32' ? 'py' : 'python3';
       const scriptPath = 'tools/voice_profile.py';
-      const args = [scriptPath, 'speak', voiceProfile, text];
+      const args = [scriptPath, 'speak', voiceProfile];
+      console.warn('[tts api] spawning:', runner, args.join(' '), 'with stdin text');
 
-      const result = await new Promise<{ ok: boolean; stderr: string; code: number | null }>((resolve) => {
+      const result = await new Promise<{ ok: boolean; stderr: string; stdout: string; code: number | null }>((resolve) => {
+        console.warn('[tts api] child process starting');
         const child = spawn(runner, args, {
           cwd: process.cwd(),
           windowsHide: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['pipe', 'pipe', 'pipe'],
         });
+        console.warn('[tts api] child pid:', child.pid);
 
         let stderr = '';
+        let stdout = '';
         child.stderr.on('data', (chunk) => {
-          stderr += chunk.toString();
+          const s = chunk.toString();
+          stderr += s;
+          console.warn('[tts api] stderr chunk:', s);
+        });
+        child.stdout.on('data', (chunk) => {
+          const s = chunk.toString();
+          stdout += s;
+          console.warn('[tts api] stdout chunk:', s);
         });
         child.on('error', (err) => {
-          resolve({ ok: false, stderr: err.message, code: -1 });
+          console.warn('[tts api] child error:', err);
+          resolve({ ok: false, stderr: err.message, stdout: '', code: -1 });
         });
         child.on('close', (code) => {
-          resolve({ ok: code === 0, stderr, code });
+          console.warn('[tts api] child close with code:', code);
+          resolve({ ok: code === 0, stderr, stdout, code });
         });
+
+        console.warn('[tts api] writing text to stdin:', text.slice(0, 50));
+        child.stdin.write(text);
+        child.stdin.end();
       });
+
+      console.warn('[tts api] result:', result);
 
       if (!result.ok) {
         return NextResponse.json(

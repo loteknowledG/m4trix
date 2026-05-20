@@ -1,20 +1,41 @@
-import { DEFAULT_LMSTUDIO_URL, getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import { NextRequest } from 'next/server';
+import {
+  DEFAULT_LMSTUDIO_URL,
+  getLmstudioModelsUrl,
+  normalizeLmstudioUrl,
+  parseLmstudioModelsResponse,
+} from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-static';
 
 type HealthPayload = {
   ok: boolean;
   baseUrl: string;
   modelsUrl: string;
   modelCount?: number;
-  models?: string[];
+  models?: Array<{ id: string; label: string }>;
   error?: string;
 };
 
-/** No `Request` — required for `output: "export"` prerender (avoids `request.url` dynamic). */
-export async function GET() {
-  const lmstudioUrl = normalizeLmstudioUrl(DEFAULT_LMSTUDIO_URL);
+export async function GET(req: NextRequest) {
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    const payload: HealthPayload = {
+      ok: true,
+      baseUrl: DEFAULT_LMSTUDIO_URL,
+      modelsUrl: getLmstudioModelsUrl(DEFAULT_LMSTUDIO_URL),
+      modelCount: 0,
+      models: [],
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const lmstudioUrl = normalizeLmstudioUrl(
+    searchParams.get('lmstudio_url') || DEFAULT_LMSTUDIO_URL
+  );
   const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
 
   const controller = new AbortController();
@@ -40,29 +61,19 @@ export async function GET() {
       });
     }
 
-    let modelIds: string[] = [];
+    let models: Array<{ id: string; label: string }> = [];
     try {
-      const json = JSON.parse(text);
-      const rawModels = Array.isArray(json)
-        ? json
-        : Array.isArray(json?.data)
-        ? json.data
-        : Array.isArray(json?.models)
-        ? json.models
-        : [];
-      modelIds = rawModels
-        .map((m: any) => m?.id || m?.model_id || m?.name)
-        .filter((id: any): id is string => typeof id === 'string' && id.trim().length > 0);
+      models = parseLmstudioModelsResponse(JSON.parse(text));
     } catch {
-      modelIds = [];
+      models = [];
     }
 
     const payload: HealthPayload = {
       ok: true,
       baseUrl: lmstudioUrl,
       modelsUrl,
-      modelCount: modelIds.length,
-      models: modelIds,
+      modelCount: models.length,
+      models,
     };
 
     return new Response(JSON.stringify(payload), {

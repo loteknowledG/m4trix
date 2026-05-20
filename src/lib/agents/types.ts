@@ -68,9 +68,9 @@ export type AgentsRequest = {
    */
   steer?: string;
   /**
-   * Optional agent persona for the coordinator (user acting as a role).
+   * Optional agent persona for the player (user acting as a character role).
    */
-  coordinatorAgent?: Agent;
+  player?: Agent;
   /**
    * Optional conversation history (client-side). When provided and
    * `stateless` is false, this will be used to seed the running
@@ -83,7 +83,7 @@ export type AgentsRequest = {
    * - "do": the coordinator is describing actions
    * - "think": expand the sentence into a detailed story
    */
-  coordinatorMode?: "tell" | "do" | "think";
+  playerMode?: "tell" | "do" | "think";
   /**
    * Orchestration mode for this run. "auto" lets the server decide
    * (default). "sequential" forces turn-taking; "parallel" runs
