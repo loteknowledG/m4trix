@@ -31,6 +31,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 import { useAvatarCropper } from './use-avatar-cropper';
 import { useCharacterChat } from './use-character-chat';
 import { useCharacterConnections, type Provider } from './use-character-connections';
@@ -88,7 +89,7 @@ export default function CharactersPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [prompterAgent, setPrompterAgent] = useState<Agent | null>(null);
   // Player mode controls how the user input should be interpreted
-  const [playerMode, setPlayerMode] = useState<'tell' | 'do' | 'think'>('tell');
+  const [playerMode, setPlayerMode] = useState<PlayerMode>('say');
   const [useCustomModel] = useState(false);
   const [customModelId, setCustomModelId] = useState('');
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -181,9 +182,11 @@ export default function CharactersPage() {
       }
       if (prompterVal) setPrompterAgent(prompterVal);
 
-      // restore persisted player mode (tell | do | think)
+      // restore persisted player mode (say | do | think)
       const playerModeVal = await idbGet('PLAYGROUND_PLAYER_MODE');
-      if (playerModeVal) setPlayerMode(playerModeVal as 'tell' | 'do' | 'think');
+      if (playerModeVal) {
+        setPlayerMode(normalizePlayerMode(String(playerModeVal)) as PlayerMode);
+      }
 
       let storyVal = await idbGet('PLAYGROUND_STORY');
       if (!storyVal && typeof window !== 'undefined') {

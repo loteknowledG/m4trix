@@ -12,15 +12,10 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { ConnectionSheet } from '@/components/connection-sheet';
 import { speakWithJennyVoice } from '@/lib/tts';
 import { cn } from '@/lib/utils';
+import { normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 
 /** Identical square footprint for chat footer voice + send (border-box). */
 const CHAT_FOOTER_ICON_BOX: React.CSSProperties = {
@@ -50,6 +45,7 @@ interface CustomChatWindowProps {
   input: string;
   onInputChange: (v: string) => void;
   onSend: () => void;
+  onStartNewGame?: () => void;
   onEditMessage?: (messageId: string, nextText: string) => void;
   onMessageEdited?: (messageId: string, nextText: string) => void;
   onSteerMessage?: (messageId: string, nextText: string) => void;
@@ -63,8 +59,9 @@ interface CustomChatWindowProps {
   connected?: boolean;
   connectionModel?: string | null;
   // Optional compact player-mode selector (no visible label) rendered above the send control
-  playerMode?: 'tell' | 'do' | 'think';
-  onPlayerModeChange?: (v: 'tell' | 'do' | 'think') => void;
+  playerMode?: PlayerMode;
+  onPlayerModeChange?: (v: PlayerMode) => void;
+  playerIdentityHint?: string;
   ttsProfile?: string;
 }
 
@@ -73,6 +70,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   input,
   onInputChange,
   onSend,
+  onStartNewGame,
   onEditMessage,
   onMessageEdited,
   onSteerMessage,
@@ -85,6 +83,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   connectionModel,
   playerMode,
   onPlayerModeChange,
+  playerIdentityHint,
   ttsProfile,
 }) => {
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -96,11 +95,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const steerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [voiceEnabled, setVoiceEnabled] = React.useState(true);
-  const [storyDetailsOpen, setStoryDetailsOpen] = React.useState(false);
 
   const lastSpokenIdRef = useRef<string | null>(null);
   const wasInputDisabledRef = useRef(false);
-  const storyOpeningMessage = messages.find((msg) => msg.id === 'story-opening');
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
   const [editingText, setEditingText] = React.useState('');
   const [editingBubbleHeight, setEditingBubbleHeight] = React.useState<number | null>(null);
@@ -343,15 +340,17 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                         className="story-opening-html text-sm leading-6 text-amber-50/95 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_li]:mb-1 [&_strong]:font-semibold [&_em]:italic"
                         dangerouslySetInnerHTML={{ __html: msg.text }}
                       />
-                      {msg.details?.length ? (
-                        <button
-                          type="button"
-                          onClick={() => setStoryDetailsOpen(true)}
-                          className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-100 transition-colors hover:bg-amber-400/20"
-                        >
-                          Story details
-                        </button>
-                      ) : null}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {onStartNewGame ? (
+                          <button
+                            type="button"
+                            onClick={onStartNewGame}
+                            className="inline-flex items-center rounded-full border border-fuchsia-400/40 bg-fuchsia-500/15 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-fuchsia-100 transition-colors hover:bg-fuchsia-500/25"
+                          >
+                            Start New
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : isPendingAgentMessage(msg) ? (
                     <div className="flex items-center gap-3">
@@ -485,24 +484,6 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
         </div>
       </div>
 
-      <Dialog open={storyDetailsOpen} onOpenChange={setStoryDetailsOpen}>
-        <DialogContent className="max-w-xl border-amber-500/30 bg-zinc-950 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_30px_80px_rgba(0,0,0,0.7)]">
-          <DialogHeader className="text-left">
-            <DialogTitle className="flex items-center gap-2 text-amber-100">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
-              Story details
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 rounded-2xl border border-amber-500/15 bg-black/20 p-4 text-sm text-amber-100/90">
-            {storyOpeningMessage?.details?.map(detail => (
-              <div key={detail} className="leading-6">
-                {detail}
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <div ref={footerRef} className="flex-none bg-zinc-950/90 border-t border-zinc-800 p-4">
         <div className="space-y-2">
           <div className="rounded-md border border-zinc-800 bg-zinc-900/60 overflow-hidden">
@@ -534,19 +515,29 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   </span>
                 ) : null}
 
+                {playerIdentityHint ? (
+                  <span
+                    className="rounded-full border border-zinc-700/80 bg-zinc-900/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-zinc-400"
+                    title="How the NPC labels you in memory"
+                  >
+                    {playerIdentityHint}
+                  </span>
+                ) : null}
+
                 {playerMode !== undefined && onPlayerModeChange && (
                   <button
                     onClick={() => {
-                      const modes: ('tell' | 'do' | 'think')[] = ['tell', 'do', 'think'];
-                      const next = modes[(modes.indexOf(playerMode) + 1) % modes.length];
+                      const currentMode = normalizePlayerMode(playerMode);
+                      const modes: PlayerMode[] = ['say', 'do', 'think'];
+                      const next = modes[(modes.indexOf(currentMode) + 1) % modes.length];
                       onPlayerModeChange(next);
                     }}
-                    aria-label={`Player mode: ${playerMode}`}
-                    title={`Player mode: ${playerMode}`}
+                    aria-label={`Player mode: ${normalizePlayerMode(playerMode)}`}
+                    title={`Player mode: ${normalizePlayerMode(playerMode)}`}
                   >
-                    {playerMode === 'tell' ? (
+                    {normalizePlayerMode(playerMode) === 'say' ? (
                       <GiNothingToSay className="h-4 w-4" />
-                    ) : playerMode === 'do' ? (
+                    ) : normalizePlayerMode(playerMode) === 'do' ? (
                       <GiWeightLiftingUp className="h-4 w-4" />
                     ) : (
                       <GiThink className="h-4 w-4" />

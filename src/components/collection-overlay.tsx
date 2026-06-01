@@ -13,9 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import dynamic from 'next/dynamic';
 import { FaTags } from 'react-icons/fa';
 import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
-import MomentClassifier from '@/components/ai/moment-classifier';
+
+const MomentClassifier = dynamic(
+  () => import('@/components/ai/moment-classifier'),
+  { ssr: false }
+);
 
 const noop = () => {};
 

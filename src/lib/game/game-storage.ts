@@ -16,6 +16,28 @@ export const getGameSummaryKey = (id?: string | null) =>
 export const getGameMomentKey = (id?: string | null) =>
   id ? `game-moment:${id}` : null;
 
+export type GameSessionState = {
+  playerRevealedInGame?: boolean;
+};
+
+export const getGameSessionKey = (id?: string | null) =>
+  id ? `game-session:${id}` : null;
+
+export async function loadGameSession(gameSessionKey: string | null) {
+  if (!gameSessionKey) return null;
+  const stored = await safeGet<GameSessionState>(gameSessionKey);
+  if (!stored || typeof stored !== "object") return null;
+  return stored;
+}
+
+export function saveGameSession(
+  gameSessionKey: string | null,
+  session: GameSessionState,
+) {
+  if (!gameSessionKey) return Promise.resolve();
+  return safeSet(gameSessionKey, session);
+}
+
 export async function loadGameHistory(gameHistoryKey: string | null) {
   if (!gameHistoryKey) return [] as OrchestratedMessage[];
   const stored = (await safeGet<OrchestratedMessage[]>(gameHistoryKey)) || [];

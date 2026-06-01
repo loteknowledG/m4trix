@@ -171,15 +171,19 @@ async def _speak(
     try:
         import edge_tts
         import pygame
+        import numpy as np
     except Exception as exc:
         print(f"[VOICE] Missing audio dependency: {exc}", file=sys.stderr)
         return False
 
+    print(f"[voice_profile._speak] pygame version: {pygame.ver}, SDL: {pygame.get_sdl_version()}", file=sys.stderr)
     print(f"[voice_profile._speak] profile_key={profile_key} voice={voice}", file=sys.stderr)
 
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
+    print(f"[voice_profile._speak] SDL_AUDIODRIVER={os.environ.get('SDL_AUDIODRIVER')}", file=sys.stderr)
+
     import uuid
-    cache_buster = f"\u200b{uuid.uuid4().hex[:8]}\u200b"
-    text_to_speak = cache_buster + text
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         out_path = tmp.name
@@ -187,13 +191,9 @@ async def _speak(
     wet_path: str | None = None
     try:
         print(f"[voice_profile._speak] generating TTS with edge_tts voice={voice}", file=sys.stderr)
-        communicate = edge_tts.Communicate(
-            text_to_speak,
-            voice,
-            rate=rate or "",
-            pitch=pitch or "",
-            volume=volume or "",
-        )
+        uid = uuid.uuid4().hex
+        ssml = f"<speak><mark name='{uid}'/>{text}</speak>"
+        communicate = edge_tts.Communicate(ssml, voice, rate=rate or "", pitch=pitch or "", volume=volume or "")
         await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
         print(f"[voice_profile._speak] TTS saved to {out_path}", file=sys.stderr)
 
@@ -211,10 +211,12 @@ async def _speak(
                 play_path = wet_path
 
         print(f"[voice_profile._speak] playing audio file: {play_path}", file=sys.stderr)
-        pygame.mixer.init()
-        print(f"[voice_profile._speak] mixer init done, loading: {play_path}", file=sys.stderr)
+        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+        print(f"[voice_profile._speak] mixer init done, dev: {pygame.mixer.get_init()}", file=sys.stderr)
         pygame.mixer.music.load(play_path)
-        print(f"[voice_profile._speak] music loaded, calling play()", file=sys.stderr)
+        print(f"[voice_profile._speak] music loaded, volume: {pygame.mixer.music.get_volume()}", file=sys.stderr)
+        pygame.mixer.music.set_volume(1.0)
+        print(f"[voice_profile._speak] volume set to {pygame.mixer.music.get_volume()}, calling play()", file=sys.stderr)
         pygame.mixer.music.play()
         print(f"[voice_profile._speak] play() called, waiting for busy=False", file=sys.stderr)
         started = time.monotonic()

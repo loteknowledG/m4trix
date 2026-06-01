@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       const runner = process.platform === 'win32' ? 'py' : 'python3';
       const scriptPath = 'tools/voice_profile.py';
       const args = [scriptPath, 'speak', voiceProfile];
-      console.warn('[tts api] spawning:', runner, args.join(' '), 'with stdin text');
+      console.warn('[tts api] spawning:', runner, args.join(' '));
 
       const result = await new Promise<{ ok: boolean; stderr: string; stdout: string; code: number | null }>((resolve) => {
         console.warn('[tts api] child process starting');

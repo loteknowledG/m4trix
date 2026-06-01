@@ -13,7 +13,6 @@ import {
 } from "@/lib/agents";
 
 export const runtime = "nodejs";
-export const dynamic = "force-static";
 
 const AGENT_MARKDOWN_DIR = path.join(process.cwd(), "agents");
 
@@ -179,7 +178,9 @@ export async function POST(req: NextRequest) {
     steer,
     player,
     history,
-    playerMode = "tell",
+    playerMode = "say",
+    npcKnowsPlayer,
+    currentTurnNpcKnewPlayer,
     orchestration = "auto",
     interactionMode = "neutral",
     stateless = false,
@@ -265,6 +266,8 @@ export async function POST(req: NextRequest) {
         steer,
         player,
         playerMode,
+        npcKnowsPlayer,
+        currentTurnNpcKnewPlayer,
         interactionMode,
         history: stateless ? undefined : history,
         temperature: 0.7,

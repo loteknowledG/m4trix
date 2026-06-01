@@ -5,7 +5,7 @@ import { AGENTS as DEFAULT_AGENTS } from './default-agents';
 import type { Agent, AgentId, AgentsResponse, ChatMessage } from './types';
 import type { ModelOption, Provider } from './use-character-connections';
 
-type PlayerMode = 'tell' | 'do' | 'think';
+import type { PlayerMode } from '@/lib/player-mode';
 
 type UseCharacterChatArgs = {
   activeProvider: Provider;

@@ -19,6 +19,10 @@ export type OrchestratedMessage = {
   agentId?: AgentId;
   /** If a message is relayed (agent spoke for another agent) this records the origin. */
   relayedBy?: AgentId;
+  /** Player input mode when from === "user" (say, do, think). */
+  playerMode?: "say" | "do" | "think";
+  /** When from === "user", whether the NPC knew the player's identity on this turn. */
+  npcKnewPlayer?: boolean;
 };
 
 export type AgentsRequest = {
@@ -79,11 +83,21 @@ export type AgentsRequest = {
   history?: OrchestratedMessage[];
   /**
    * Coordinator mode controls how the user's input should be interpreted by agents.
-   * - "tell": the coordinator is speaking (dialogue)
+   * - "say": the coordinator is speaking (dialogue)
    * - "do": the coordinator is describing actions
-   * - "think": expand the sentence into a detailed story
+   * - "think": internal thoughts or narration seed
    */
-  playerMode?: "tell" | "do" | "think";
+  playerMode?: "say" | "do" | "think";
+  /**
+   * When false, the NPC treats the player as a stranger and does not know their
+   * name or shared history until it comes up in conversation.
+   */
+  npcKnowsPlayer?: boolean;
+  /**
+   * Tracks whether the NPC knew the player at the START of this turn.
+   * Used to determine if the NPC should act surprised when the player reveals their identity mid-conversation.
+   */
+  currentTurnNpcKnewPlayer?: boolean;
   /**
    * Orchestration mode for this run. "auto" lets the server decide
    * (default). "sequential" forces turn-taking; "parallel" runs

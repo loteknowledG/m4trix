@@ -62,7 +62,7 @@ type AgentRunContext = {
   story?: string;
   steer?: string;
   player?: Agent;
-  playerMode?: "tell" | "do" | "think";
+  playerMode?: "say" | "do" | "think";
   history?: OrchestratedMessage[];
   interactionMode?: "neutral" | "cooperative" | "competitive";
 };
@@ -76,7 +76,7 @@ export async function runOrchestration(
     story?: string;
     steer?: string;
     player?: Agent;
-    playerMode?: "tell" | "do" | "think";
+    playerMode?: "say" | "do" | "think";
     interactionMode?: "neutral" | "cooperative" | "competitive";
     history?: OrchestratedMessage[];
     callProvider: (prompt: string, agent: Agent, options: AgentRunContext) => Promise<string>;

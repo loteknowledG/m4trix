@@ -1,4 +1,5 @@
 import { getLmstudioChatUrl } from '@/lib/lmstudio';
+import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 
 export const LMSTUDIO_CHAT_URL = 'http://192.168.12.48:1234/v1/chat/completions';
 
@@ -111,13 +112,18 @@ export type CallProviderOptions = {
     id: string;
     name: string;
     description: string;
+    appearance?: string;
   };
-  playerMode?: 'tell' | 'do' | 'think';
+  playerMode?: PlayerMode;
+  npcKnowsPlayer?: boolean;
+  currentTurnNpcKnewPlayer?: boolean;
   history?: {
     id: string;
     from: 'user' | 'agent';
     text: string;
     agentId?: string;
+    playerMode?: PlayerMode;
+    npcKnewPlayer?: boolean;
   }[];
   temperature?: number;
   interactionMode?: 'neutral' | 'cooperative' | 'competitive';
@@ -144,14 +150,164 @@ function stripHtmlToText(value?: string) {
     .trim();
 }
 
+function formatPlayerSpeakerLabel(player?: { name?: string }, npcKnowsPlayer = true) {
+  if (npcKnowsPlayer === false) return 'Stranger (player)';
+  const name = player?.name?.trim();
+  return name ? `${name} (player)` : 'Player';
+}
+
+export function stripHistoryMessageText(
+  text: string,
+  agentName: string,
+  player?: { name?: string },
+  npcKnowsPlayer = true,
+) {
+  let cleaned = String(text || '').trim();
+  if (!cleaned) return '';
+
+  const labels = new Set<string>([
+    `${formatPlayerSpeakerLabel(player, npcKnowsPlayer)}:`,
+    `${agentName.trim() || 'NPC'} (you, NPC):`,
+    'NPC (you, NPC):',
+    'Stranger (player):',
+    'Player:',
+  ]);
+  if (player?.name?.trim()) {
+    const name = player.name.trim();
+    labels.add(`${name} (player):`);
+    labels.add(`${formatPlayerMemoryLabel(player, npcKnowsPlayer, 'say')}:`);
+    labels.add(`${formatPlayerMemoryLabel(player, npcKnowsPlayer, 'do')}:`);
+    labels.add(`${formatPlayerMemoryLabel(player, npcKnowsPlayer, 'think')}:`);
+  }
+  labels.add(`${formatPlayerMemoryLabel(player, npcKnowsPlayer, 'say')}:`);
+  labels.add(`${formatPlayerMemoryLabel(player, npcKnowsPlayer, 'do')}:`);
+  labels.add(`${formatPlayerMemoryLabel(player, npcKnowsPlayer, 'think')}:`);
+  if (agentName.trim()) {
+    labels.add(`${agentName.trim()}:`);
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const label of labels) {
+      if (cleaned.startsWith(label)) {
+        cleaned = cleaned.slice(label.length).trimStart();
+        changed = true;
+      }
+    }
+  }
+
+  return cleaned;
+}
+
+function buildInCharacterRules(agentName: string) {
+  return (
+    `Stay in character as ${agentName}. Reply with dialogue and action only — no speaker labels, no name prefixes, no "(you, NPC)", and no behind-the-scenes or production descriptions. ` +
+    `Never break the fourth wall or describe cameras, crew, lighting rigs, or filming. `
+  );
+}
+
+function buildFirstMeetingRules(agentName: string) {
+  return (
+    `FIRST MEETING (critical): You have never met this person before. You do not know their name, role, or shared history until they reveal it in the conversation. ` +
+    `Do not greet them by name, reference past meetings, or imply familiarity until they establish it. ` +
+    `You may react to what they say and how they look, but treat them as a stranger meeting ${agentName} for the first time. `
+  );
+}
+
+function buildGameRoleRules(
+  agentName: string,
+  player?: { name?: string },
+  npcKnowsPlayer = true,
+) {
+  if (!player) return '';
+
+  if (npcKnowsPlayer === false) {
+    return (
+      `ROLE RULES (critical): You are ${agentName}. The user controls a stranger you have never met before. ` +
+      `Every user message is that stranger speaking or acting — never ${agentName}. ` +
+      `When they say "I", "me", or "my", that refers to the stranger only. When they say "you", they address ${agentName}. ` +
+      `Do not use the stranger's name until they introduce themselves. Reply as ${agentName}; never speak as the stranger. `
+    );
+  }
+
+  const playerName = player.name?.trim() || 'the player';
+  return (
+    `ROLE RULES (critical): You are ${agentName}. The user controls ${playerName}, a separate character in the scene. ` +
+    `Every user message is ${playerName} speaking or acting — never ${agentName}. ` +
+    `When ${playerName} says "I", "me", or "my", that refers to ${playerName} only. ` +
+    `When ${playerName} says "you", they are addressing ${agentName}. ` +
+    `Do not reinterpret ${playerName}'s lines as ${agentName}'s thoughts, memories, or self-description. ` +
+    `Reply as ${agentName} to ${playerName}; never speak as ${playerName}. `
+  );
+}
+
+function buildPlayerModeNote(
+  playerMode: CallProviderOptions['playerMode'],
+  agentName: string,
+  player?: { name?: string },
+  npcKnowsPlayer = true,
+) {
+  const playerLabel = formatPlayerSpeakerLabel(player, npcKnowsPlayer);
+  const subject = npcKnowsPlayer === false ? 'the stranger' : player?.name?.trim() || 'the player';
+
+  if (normalizePlayerMode(playerMode) === 'say') {
+    return (
+      `User input is ${playerLabel} dialogue directed at the scene (often at ${agentName}). ` +
+      `Parse pronouns from ${subject}'s perspective: "you" means ${agentName}; "I/me/my" means ${subject}. `
+    );
+  }
+
+  if (playerMode === 'do') {
+    return `User input describes actions by ${subject}. Respond as ${agentName} to what ${subject} does. `;
+  }
+
+  if (playerMode === 'think') {
+    return `User input is ${subject}'s internal thoughts or narration seed. Respond as ${agentName} in the scene. `;
+  }
+
+  return '';
+}
+
+function formatHistoryMessage(
+  entry: NonNullable<CallProviderOptions['history']>[number],
+  agentName: string,
+  player?: { name?: string },
+  npcKnowsPlayer = true,
+) {
+  const cleanText = stripHistoryMessageText(entry.text, agentName, player, npcKnowsPlayer);
+
+  if (entry.from === 'user') {
+    const knowsPlayer =
+      entry.npcKnewPlayer !== undefined ? entry.npcKnewPlayer : npcKnowsPlayer;
+    return `${formatPlayerMemoryLabel(player, knowsPlayer, entry.playerMode)}: ${cleanText}`;
+  }
+
+  return cleanText;
+}
+
+function formatCurrentPlayerPrompt(
+  prompt: string,
+  player?: { name?: string },
+  npcKnowsPlayer = true,
+  agentName = 'NPC',
+  playerMode?: PlayerMode,
+) {
+  const cleanPrompt = stripHistoryMessageText(prompt, agentName, player, npcKnowsPlayer);
+  return `${formatPlayerMemoryLabel(player, npcKnowsPlayer, playerMode)}: ${cleanPrompt}`;
+}
+
 export function buildProviderRequest(
   prompt: string,
   agent: { name: string; description: string },
   options: Omit<CallProviderOptions, 'url' | 'apiKey' | 'providerName'>
 ) {
-  const { model, story, steer, player, playerMode, history, temperature, interactionMode } =
+  const { model, story, steer, player, playerMode, history, temperature, interactionMode, npcKnowsPlayer, currentTurnNpcKnewPlayer } =
     options;
 
+  const knowsPlayer = npcKnowsPlayer !== false;
+  const currentTurnKnowsPlayer =
+    typeof currentTurnNpcKnewPlayer === 'boolean' ? currentTurnNpcKnewPlayer : knowsPlayer;
   const agentDescription = stripHtmlToText(agent.description);
   const playerDescription = stripHtmlToText(player?.description);
   const storyText = stripHtmlToText(story);
@@ -161,26 +317,26 @@ export function buildProviderRequest(
     ? `You are ${agent.name}. ${agentDescription}`
     : `You are ${agent.name}.`;
 
-  let context = '';
+  let context = buildGameRoleRules(agent.name, player, knowsPlayer);
+  if (player && !knowsPlayer) context += buildFirstMeetingRules(agent.name);
   if (storyText) context += `The global story context is: ${storyText}. `;
   if (steerText)
     context += `The user has provided a steering note for the next response: ${steerText}. Follow it unless it conflicts with the story or user intent. `;
-  if (player)
-    context += `The user is playing the role of ${player.name}: ${playerDescription}. Respond as ${agent.name}, staying true to ${agent.name}'s own personality — do not merge with the user's character traits. `;
-
-  let playerModeNote = '';
-  if (playerMode === 'tell') {
-    playerModeNote =
-      "Treat the user input as the coordinator speaking in-character (dialogue). Interpret first-person lines as the coordinator's voice and respond accordingly.";
-  } else if (playerMode === 'do') {
-    playerModeNote =
-      'Treat the user input as a description of actions. Focus replies on concrete steps, execution details, and expected outcomes.';
-  } else if (playerMode === 'think') {
-    playerModeNote =
-      'Treat the user input as a seed sentence to expand into a detailed, vivid narrative. When appropriate, expand the sentence into a short scene with sensory detail and internal thoughts.';
+  if (player) {
+    if (knowsPlayer) {
+      context += `The player character is ${player.name}: ${playerDescription}. `;
+      if (player.appearance?.trim()) {
+        context += `${player.name}'s appearance: ${stripHtmlToText(player.appearance)}. `;
+      }
+    } else if (player.appearance?.trim()) {
+      context += `You see a stranger in the scene. Observable appearance: ${stripHtmlToText(player.appearance)}. `;
+    } else {
+      context += `You see a stranger in the scene whose name and background are unknown to you. `;
+    }
   }
 
-  if (playerModeNote) context += `${playerModeNote} `;
+  const playerModeNote = buildPlayerModeNote(playerMode, agent.name, player, knowsPlayer);
+  if (playerModeNote) context += playerModeNote;
 
   let personaModeNote = '';
   if (interactionMode === 'cooperative') {
@@ -192,6 +348,8 @@ export function buildProviderRequest(
   }
   if (personaModeNote) context += `${personaModeNote} `;
 
+  context += buildInCharacterRules(agent.name);
+
   const systemPrompt = context
     ? `${systemPromptBase} ${context} Do not simply repeat the user input; answer the user with an appropriate response.`
     : `${systemPromptBase} Do not simply repeat the user input; answer the user with an appropriate response.`;
@@ -201,15 +359,29 @@ export function buildProviderRequest(
   if (Array.isArray(history) && history.length) {
     for (const h of history) {
       if (h.from === 'user') {
-        apiMessages.push({ role: 'user', content: h.text });
+        apiMessages.push({
+          role: 'user',
+          content: player
+            ? formatHistoryMessage(h, agent.name, player, knowsPlayer)
+            : h.text,
+        });
       } else {
-        const prefix = h.agentId ? `${h.agentId}: ` : '';
-        apiMessages.push({ role: 'assistant', content: `${prefix}${h.text}` });
+        apiMessages.push({
+          role: 'assistant',
+          content: player
+            ? formatHistoryMessage(h, agent.name, player, knowsPlayer)
+            : `${h.agentId ? `${h.agentId}: ` : ''}${h.text}`,
+        });
       }
     }
   }
 
-  apiMessages.push({ role: 'user', content: prompt });
+  apiMessages.push({
+    role: 'user',
+    content: player
+      ? formatCurrentPlayerPrompt(prompt, player, currentTurnKnowsPlayer, agent.name, playerMode)
+      : prompt,
+  });
 
   const providerPayload = {
     model,

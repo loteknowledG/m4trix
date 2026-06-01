@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Carousel,
   CarouselContent,
@@ -19,6 +20,7 @@ type GamesCarouselProps = {
 };
 
 export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
+  const router = useRouter();
   const [stories, setStories] = useState<StoryMeta[]>([]);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,12 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
     },
     [stories, onTitleChange]
   );
+
+  useEffect(() => {
+    for (const story of stories) {
+      router.prefetch(`/games/new?game=${encodeURIComponent(story.id)}`);
+    }
+  }, [router, stories]);
 
   useEffect(() => {
     let mounted = true;

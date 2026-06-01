@@ -4,7 +4,9 @@ export interface StoryArcStage {
   shortDescription: string;
   emotionalState: string[];
   keyTags: string[];
+  passTest: string[];
   exampleDialogTone: string;
+  powerDynamic: string;
 }
 
 export interface StoryArc {
@@ -60,6 +62,55 @@ export function suggestNextStage(
   return matchedNextTags > matchedCurrentTags ? next : current;
 }
 
+type RawStoryArcStage = Partial<
+  StoryArcStage & {
+    shortDesc?: string;
+    name?: string;
+    stage?: number;
+  }
+>;
+
+export function normalizeStoryArcStage(
+  raw: RawStoryArcStage,
+  fallbackStageNumber?: number,
+): StoryArcStage | null {
+  const stageNumber =
+    typeof raw.stageNumber === "number"
+      ? raw.stageNumber
+      : typeof raw.stage === "number"
+        ? raw.stage
+        : fallbackStageNumber;
+  if (stageNumber == null || !Number.isFinite(stageNumber)) return null;
+
+  return {
+    stageNumber,
+    stageName:
+      typeof raw.stageName === "string"
+        ? raw.stageName
+        : typeof raw.name === "string"
+          ? raw.name
+          : "",
+    shortDescription:
+      typeof raw.shortDescription === "string"
+        ? raw.shortDescription
+        : typeof raw.shortDesc === "string"
+          ? raw.shortDesc
+          : "",
+    emotionalState: Array.isArray(raw.emotionalState)
+      ? raw.emotionalState.filter((value): value is string => typeof value === "string")
+      : [],
+    keyTags: Array.isArray(raw.keyTags)
+      ? raw.keyTags.filter((value): value is string => typeof value === "string")
+      : [],
+    passTest: Array.isArray(raw.passTest)
+      ? raw.passTest.filter((value): value is string => typeof value === "string")
+      : [],
+    exampleDialogTone:
+      typeof raw.exampleDialogTone === "string" ? raw.exampleDialogTone : "",
+    powerDynamic: typeof raw.powerDynamic === "string" ? raw.powerDynamic : "",
+  };
+}
+
 export function parseStoryArcJson(input: string): StoryArc {
   const parsed = JSON.parse(input) as unknown;
   if (!parsed || typeof parsed !== "object") {
@@ -72,16 +123,10 @@ export function parseStoryArcJson(input: string): StoryArc {
   }
 
   const cleanedStages = arc.stages
-    .map((stage) => stage as Partial<StoryArcStage>)
-    .filter(
-      (stage) =>
-        typeof stage.stageNumber === "number" &&
-        typeof stage.stageName === "string" &&
-        typeof stage.shortDescription === "string" &&
-        Array.isArray(stage.emotionalState) &&
-        Array.isArray(stage.keyTags) &&
-        typeof stage.exampleDialogTone === "string",
-    ) as StoryArcStage[];
+    .map((stage, index) =>
+      normalizeStoryArcStage(stage as RawStoryArcStage, index + 1),
+    )
+    .filter((stage): stage is StoryArcStage => stage !== null);
 
   if (!cleanedStages.length) {
     throw new Error("Invalid story arc JSON: no valid stages found.");

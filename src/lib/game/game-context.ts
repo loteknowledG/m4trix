@@ -1,6 +1,9 @@
 import { get } from "idb-keyval";
 
 import { storyTextForPrompt } from "@/lib/game/story-moments";
+import { formatPlayerMemoryLabel, type PlayerMode } from "@/lib/player-mode";
+
+export type { PlayerMode };
 
 export type GameCharacterContext = {
   id: string;
@@ -9,6 +12,19 @@ export type GameCharacterContext = {
   appearance?: string;
   avatarUrl?: string;
 } | null;
+
+export function formatGameSpeakerLabel(
+  from: "user" | "agent",
+  npc?: { name?: string } | null,
+  player?: { name?: string } | null,
+  npcKnowsPlayer = true,
+  playerMode?: PlayerMode | string | null,
+) {
+  if (from === "agent") {
+    return npc?.name?.trim() || "NPC";
+  }
+  return formatPlayerMemoryLabel(player, npcKnowsPlayer, playerMode);
+}
 
 export type GameContextResolution = {
   currentNpc: GameCharacterContext;
@@ -22,15 +38,30 @@ export function buildSceneSummary(params: {
   currentMomentName?: string;
   npc: GameCharacterContext;
   player: GameCharacterContext;
+  npcKnowsPlayer?: boolean;
 }) {
-  const { title, currentMomentName, npc, player } = params;
+  const { title, currentMomentName, npc, player, npcKnowsPlayer = true } = params;
+  const knowsPlayer = npcKnowsPlayer !== false;
   const sceneParts = [
     title ? `Story title: ${title}` : "",
     currentMomentName ? `Current moment: ${currentMomentName}` : "",
-    npc ? `Character (you are): ${npc.name}${npc.description ? ` - ${npc.description}` : ""}` : "",
-    npc?.appearance ? `Character appearance: ${npc.appearance}` : "",
-    player ? `Player (user): ${player.name}${player.description ? ` - ${player.description}` : ""}` : "",
-    player?.appearance ? `Player appearance: ${player.appearance}` : "",
+    npc ? `NPC (you are ${npc.name}): ${npc.description || "No description"}` : "",
+    npc?.appearance ? `${npc.name} appearance: ${npc.appearance}` : "",
+    player && knowsPlayer
+      ? `Player character (user controls ${player.name}): ${player.description || "No description"}`
+      : player
+        ? "Player character: a stranger you have never met before"
+        : "",
+    player && knowsPlayer && player.appearance
+      ? `${player.name} appearance: ${player.appearance}`
+      : player && !knowsPlayer && player.appearance
+        ? `Stranger's observable appearance: ${player.appearance}`
+        : "",
+    player && npc && knowsPlayer
+      ? `When ${player.name} says "you", they mean ${npc.name}. When they say "I/me/my", they mean ${player.name}.`
+      : player && npc && !knowsPlayer
+        ? `You do not know this stranger's name yet. When they say "you", they mean ${npc.name}.`
+        : "",
   ].filter(Boolean);
   return sceneParts.join("\n");
 }

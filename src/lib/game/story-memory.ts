@@ -1,12 +1,18 @@
 import { CONNECTION_STORAGE_KEYS, getConnectionItem } from "@/lib/connection-storage";
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
 import type { Agent, OrchestratedMessage } from "@/lib/agents/types";
+import { formatGameSpeakerLabel } from "@/lib/game/game-context";
 
 export type RefreshStorySummaryOptions = {
   sceneSummary: string;
   userText: string;
   assistantText: string;
   history: OrchestratedMessage[];
+  npcName?: string;
+  playerName?: string;
+  npcKnowsPlayer?: boolean;
+  playerMode?: OrchestratedMessage["playerMode"];
+  currentTurnNpcKnewPlayer?: boolean;
 };
 
 type RefreshStorySummaryArgs = {
@@ -33,12 +39,28 @@ export async function refreshStorySummary({
   if (!gameSummaryKey || summarizeInFlightRef.current) return;
   summarizeInFlightRef.current = true;
 
+  const npc = options.npcName ? { name: options.npcName } : null;
+  const player = options.playerName ? { name: options.playerName } : null;
+  const knowsPlayer = options.npcKnowsPlayer !== false;
+  const formatSpeaker = (
+    from: "user" | "agent",
+    playerMode?: OrchestratedMessage["playerMode"],
+    npcKnewPlayer?: boolean,
+  ) =>
+    formatGameSpeakerLabel(
+      from,
+      npc,
+      player,
+      from === "user" ? (npcKnewPlayer ?? knowsPlayer) : true,
+      playerMode,
+    );
+
   try {
     const summaryPrompt = [
       "Update the running story memory for this game.",
       "Keep it concise but durable.",
       "Preserve: current scene, story facts, character relationships, goals, unresolved threads, and immediate next beat.",
-      "Do not include filler, apologies, or meta commentary.",
+      "Do not include filler, apologies, meta commentary, speaker labels like \"Name (you, NPC):\", or behind-the-scenes/production notes.",
       "Write plain text only. Aim for 6-10 short bullet points or short paragraphs.",
       "",
       `Previous memory:\n${storySummary || "(none)"}`,
@@ -47,20 +69,22 @@ export async function refreshStorySummary({
       "",
       `Recent history:\n${options.history
         .slice(-12)
-        .map((msg) => `${msg.from === "user" ? "User" : "Agent"}: ${msg.text}`)
+        .map((msg) =>
+          `${formatSpeaker(msg.from, msg.from === "user" ? msg.playerMode : undefined, msg.npcKnewPlayer)}: ${msg.text}`,
+        )
         .join("\n")}`,
       "",
-      `Latest user turn:\n${options.userText}`,
+      `Latest ${formatSpeaker("user", options.playerMode, options.currentTurnNpcKnewPlayer)} turn:\n${options.userText}`,
       "",
-      `Latest assistant turn:\n${options.assistantText}`,
+      `Latest ${formatSpeaker("agent")} turn:\n${options.assistantText}`,
     ].join("\n");
 
     if (!connected) {
       const compact = [
         storySummary,
         options.sceneSummary,
-        `Latest user turn: ${options.userText}`,
-        `Latest assistant turn: ${options.assistantText}`,
+        `Latest ${formatSpeaker("user", options.playerMode, options.currentTurnNpcKnewPlayer)} turn: ${options.userText}`,
+        `Latest ${formatSpeaker("agent")} turn: ${options.assistantText}`,
       ]
         .filter(Boolean)
         .join("\n\n")
@@ -125,8 +149,8 @@ export async function refreshStorySummary({
       const fallback = [
         storySummary,
         options.sceneSummary,
-        `Latest user turn: ${options.userText}`,
-        `Latest assistant turn: ${options.assistantText}`,
+        `Latest ${formatSpeaker("user", options.playerMode, options.currentTurnNpcKnewPlayer)} turn: ${options.userText}`,
+        `Latest ${formatSpeaker("agent")} turn: ${options.assistantText}`,
       ]
         .filter(Boolean)
         .join("\n\n")
@@ -138,8 +162,8 @@ export async function refreshStorySummary({
     const fallback = [
       storySummary,
       options.sceneSummary,
-      `Latest user turn: ${options.userText}`,
-      `Latest assistant turn: ${options.assistantText}`,
+      `Latest ${formatSpeaker("user", options.playerMode, options.currentTurnNpcKnewPlayer)} turn: ${options.userText}`,
+      `Latest ${formatSpeaker("agent")} turn: ${options.assistantText}`,
     ]
       .filter(Boolean)
       .join("\n\n")

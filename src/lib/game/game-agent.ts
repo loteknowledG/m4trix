@@ -1,7 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
+import { normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import type { OrchestratedMessage } from "@/lib/agents/types";
+import { stripHistoryMessageText } from "@/lib/agents/providers";
 import type { GameCharacterContext } from "@/lib/game/game-context";
 
 export type GameAgentRequestBody = Record<string, unknown>;
@@ -24,6 +26,7 @@ type StreamAgentReplyArgs = {
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
   }) => void | Promise<void>;
 };
 
@@ -43,6 +46,7 @@ type DemoReplyArgs = {
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
   }) => void | Promise<void>;
   buildSceneSummary: (npc: GameCharacterContext, player: GameCharacterContext) => string;
 };
@@ -74,6 +78,7 @@ type ConnectedTurnArgs = {
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
   }) => void | Promise<void>;
 };
 
@@ -119,7 +124,9 @@ export function buildGameAgentRequest(params: {
   storyHistory: OrchestratedMessage[];
   currentNpc: GameCharacterContext;
   currentPlayer: GameCharacterContext;
-  playerMode?: 'tell' | 'do' | 'think';
+  playerMode?: PlayerMode;
+  npcKnowsPlayer?: boolean;
+  currentTurnNpcKnewPlayer?: boolean;
 }) {
   const {
     trimmed,
@@ -136,6 +143,8 @@ export function buildGameAgentRequest(params: {
     currentNpc,
     currentPlayer,
     playerMode,
+    npcKnowsPlayer,
+    currentTurnNpcKnewPlayer,
   } = params;
 
   const MAX_STORY_CONTEXT_CHARS = 6000;
@@ -186,6 +195,10 @@ export function buildGameAgentRequest(params: {
     };
   }
   if (playerMode) requestBody.playerMode = playerMode;
+  if (typeof npcKnowsPlayer === 'boolean') requestBody.npcKnowsPlayer = npcKnowsPlayer;
+  if (typeof currentTurnNpcKnewPlayer === 'boolean') {
+    requestBody.currentTurnNpcKnewPlayer = currentTurnNpcKnewPlayer;
+  }
 
   return requestBody;
 }
@@ -239,6 +252,18 @@ async function streamAgentReply({
     return extractAssistantText(raw);
   };
 
+  const npcName =
+    requestBody.character &&
+    typeof requestBody.character === "object" &&
+    typeof (requestBody.character as { name?: string }).name === "string"
+      ? (requestBody.character as { name: string }).name
+      : "NPC";
+  const playerInfo =
+    requestBody.player && typeof requestBody.player === "object"
+      ? (requestBody.player as { name?: string })
+      : undefined;
+  const knowsPlayer = requestBody.npcKnowsPlayer !== false;
+
   const readStreamedText = async () => {
     const res = await fetch("/api/agents", {
       method: "POST",
@@ -264,7 +289,10 @@ async function streamAgentReply({
         const decoded = decoder.decode(value, { stream: true });
         if (!decoded) continue;
         streamedText += decoded;
-        onChunk(pendingId, streamedText);
+        onChunk(
+          pendingId,
+          stripHistoryMessageText(streamedText, npcName, playerInfo, knowsPlayer),
+        );
       }
     }
 
@@ -280,6 +308,9 @@ async function streamAgentReply({
   if (!appendBaseText && !assistantText) {
     assistantText = await readNonStreamText();
   }
+
+  assistantText = stripHistoryMessageText(assistantText, npcName, playerInfo, knowsPlayer);
+
   const finalMessageId = `agent-${Date.now()}`;
   const finalMessage: CustomChatMessage = {
     id: finalMessageId,
@@ -324,6 +355,7 @@ async function streamAgentReply({
     userText: trimmed,
     assistantText: finalText,
     history: nextHistorySnapshot,
+    playerMode: userHistoryEntry?.playerMode ?? normalizePlayerMode(requestBody.playerMode as string | null | undefined),
   });
 }
 
@@ -385,6 +417,7 @@ export function queueDemoReply({
       userText: trimmed,
       assistantText: botMessage.text,
       history: nextHistorySnapshot,
+      playerMode: userHistoryEntry?.playerMode,
     });
   }, 450);
 }
