@@ -251,24 +251,10 @@ export default function GamePage() {
     [title, currentMoment?.name, assignedNpc, assignedPlayer, npcKnowsPlayerEffective],
   );
 
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+
   const gameContextText = useMemo(() => {
-    const sections = [
-      "Game mode context",
-      title ? `Title: ${title}` : "",
-      currentMoment?.name ? `Current moment: ${currentMoment.name}` : "",
-      storyDescription.trim() ? `Story premise:\n${storyTextForPrompt(storyDescription)}` : "",
-      directorNotes.trim()
-        ? `Director's notes (NPC-only — use for internal scene context, not player-facing narration):\n${directorNotes.trim()}`
-        : "",
-      storySummary.trim() ? `Story summary:\n${storySummary.trim()}` : "",
-      grokSceneContext.trim() ? `Scene snapshot:\n${grokSceneContext.trim()}` : "",
-      resolvedArcStage
-        ? `Story arc stage: ${resolvedArcStage.stageNumber} - ${resolvedArcStage.stageName}${
-            resolvedArcStage.shortDescription ? `\n${resolvedArcStage.shortDescription}` : ""
-          }`
-        : resolvedArcStageNumber != null
-          ? `Story arc stage: ${resolvedArcStageNumber}`
-          : "",
+    const characterSections = [
       assignedNpc
         ? `NPC (you are ${assignedNpc.name}): ${assignedNpc.description || "No description"}`
         : "",
@@ -292,13 +278,35 @@ export default function GamePage() {
           : "",
     ].filter(Boolean);
 
-    return sections.join("\n\n");
+    const staticSections = [
+      "Game mode context",
+      title ? `Title: ${title}` : "",
+      currentMoment?.name ? `Current moment: ${currentMoment.name}` : "",
+      storyDescription.trim() ? `Story premise:\n${storyTextForPrompt(storyDescription)}` : "",
+      directorNotes.trim()
+        ? `Director's notes (NPC-only — use for internal scene context, not player-facing narration):\n${directorNotes.trim()}`
+        : "",
+      storySummary.trim() ? `Story summary:\n${storySummary.trim()}` : "",
+      resolvedArcStage
+        ? `Story arc stage: ${resolvedArcStage.stageNumber} - ${resolvedArcStage.stageName}${
+            resolvedArcStage.shortDescription ? `\n${resolvedArcStage.shortDescription}` : ""
+          }`
+        : resolvedArcStageNumber != null
+          ? `Story arc stage: ${resolvedArcStageNumber}`
+          : "",
+    ].filter(Boolean);
+
+    const staticText = staticSections.join("\n\n");
+    if (!hasStartedPlaying) {
+      return [staticText, characterSections.join("\n")].filter(Boolean).join("\n\n");
+    }
+    return staticText;
   }, [
+    hasStartedPlaying,
     title,
     currentMoment?.name,
     storyDescription,
     storySummary,
-    grokSceneContext,
     resolvedArcStage,
     resolvedArcStageNumber,
     assignedNpc,
@@ -775,6 +783,7 @@ export default function GamePage() {
 
     if (userMessage) {
       setChatMessages((messages) => [...messages, userMessage]);
+      if (!hasStartedPlaying) setHasStartedPlaying(true);
     }
     const userHistoryEntry: OrchestratedMessage | undefined = userMessage
       ? {
