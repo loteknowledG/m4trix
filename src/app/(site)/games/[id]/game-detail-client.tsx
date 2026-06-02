@@ -484,6 +484,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!gameHistoryKey) return;
+    console.warn('[game] saving storyHistory, count:', storyHistory.length, 'key:', gameHistoryKey);
     void saveGameHistory(gameHistoryKey, storyHistory);
   }, [gameHistoryKey, storyHistory]);
 
@@ -1433,6 +1434,7 @@ export default function GamePage() {
               historyRevealedPlayerIdentity(backfilledHistory, playerName)),
         );
         setStoryHistory(nextHistory);
+        console.warn('[game] loaded history, count:', nextHistory.length, 'key:', historyKey);
 
         const openingText =
           resolvedDescription.trim() ||

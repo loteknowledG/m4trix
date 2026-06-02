@@ -125,49 +125,72 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
     }
 
-    if (profile === 'muthur' || profile === 'jenny-neural' || profile === 'jenny') {
+if (profile === 'muthur' || profile === 'jenny-neural' || profile === 'jenny') {
       const voiceProfile = profile === 'jenny' ? 'jenny-neural' : profile;
       const runner = process.platform === 'win32' ? 'py' : 'python3';
-      const scriptPath = 'tools/voice_profile.py';
-      const args = [scriptPath, 'speak', voiceProfile];
-      console.warn('[tts api] spawning:', runner, args.join(' '));
 
-      const result = await new Promise<{ ok: boolean; stderr: string; stdout: string; code: number | null }>((resolve) => {
-        console.warn('[tts api] child process starting');
-        const child = spawn(runner, args, {
+      const code = `
+import sys
+import os
+import asyncio
+import tempfile
+import subprocess
+import edge_tts
+
+async def speak_text(text, voice):
+    uid = os.urandom(8).hex()
+    ssml = f"<speak><mark name='{uid}'/>{text}</speak>"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+        out_path = f.name
+    await edge_tts.Communicate(ssml, voice).save(out_path)
+    print(out_path, flush=True)
+    return out_path
+
+async def play_and_cleanup(path):
+    import pygame
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    os.environ.setdefault("SDL_AUDIODRIVER", "winMM")
+    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+    try:
+        pygame.mixer.music.load(path)
+        pygame.mixer.music.set_volume(1.0)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+        print("PLAYBACK_OK", file=sys.stderr)
+    except Exception as e:
+        print(f"PLAYBACK_ERROR: {e}", file=sys.stderr)
+    finally:
+        pygame.mixer.quit()
+        try:
+            os.remove(path)
+        except:
+            pass
+
+voice = "en-US-JennyNeural"
+text = sys.stdin.read()
+if text.strip():
+    path = asyncio.run(speak_text(text.strip(), voice))
+    play_and_cleanup(path)
+`;
+
+      console.warn('[tts api] spawning inline python for voice:', voiceProfile);
+
+const result = await new Promise<{ ok: boolean; stderr: string; stdout: string; code: number | null }>((resolve) => {
+        const child = spawn(runner, ['-c', code], {
           cwd: process.cwd(),
-          windowsHide: true,
+          shell: true,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
-        console.warn('[tts api] child pid:', child.pid);
-
-        let stderr = '';
-        let stdout = '';
-        child.stderr.on('data', (chunk) => {
-          const s = chunk.toString();
-          stderr += s;
-          console.warn('[tts api] stderr chunk:', s);
-        });
-        child.stdout.on('data', (chunk) => {
-          const s = chunk.toString();
-          stdout += s;
-          console.warn('[tts api] stdout chunk:', s);
-        });
-        child.on('error', (err) => {
-          console.warn('[tts api] child error:', err);
-          resolve({ ok: false, stderr: err.message, stdout: '', code: -1 });
-        });
-        child.on('close', (code) => {
-          console.warn('[tts api] child close with code:', code);
-          resolve({ ok: code === 0, stderr, stdout, code });
-        });
-
-        console.warn('[tts api] writing text to stdin:', text.slice(0, 50));
+        let stderr = '', stdout = '';
+        child.stderr.on('data', (c) => { stderr += c.toString(); });
+        child.stdout.on('data', (c) => { stdout += c.toString(); });
+        child.on('close', (code) => resolve({ ok: stdout.includes('PLAYBACK_OK'), stderr, stdout, code }));
         child.stdin.write(text);
         child.stdin.end();
       });
 
-      console.warn('[tts api] result:', result);
+      console.warn('[tts api] inline result:', result.stdout?.slice(0, 100), result.stderr?.slice(0, 200));
 
       if (!result.ok) {
         return NextResponse.json(

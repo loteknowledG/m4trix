@@ -180,7 +180,7 @@ async def _speak(
     print(f"[voice_profile._speak] profile_key={profile_key} voice={voice}", file=sys.stderr)
 
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-    os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
+    os.environ.setdefault("SDL_AUDIODRIVER", "winMM")
     print(f"[voice_profile._speak] SDL_AUDIODRIVER={os.environ.get('SDL_AUDIODRIVER')}", file=sys.stderr)
 
     import uuid
