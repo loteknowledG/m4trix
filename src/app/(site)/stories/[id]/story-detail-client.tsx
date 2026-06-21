@@ -35,6 +35,14 @@ import { MomentsProvider } from "@/context/moments-collection";
 import useSelection from "@/hooks/use-selection";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { parseStoryArcJson, type StoryArc, type StoryArcStage } from "@/lib/game/story-arc";
+import {
+  type CheckpointObjective,
+  type ObjectiveInteractionType,
+  type ObjectiveType,
+  type SceneObject,
+  createObjective,
+  createSceneObject,
+} from "@/lib/game/objectives";
 import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +71,8 @@ type StageEditForm = {
   keyTags: string;
   passTest: string;
   exampleDialogTone: string;
+  objectives: CheckpointObjective[];
+  sceneObjects: SceneObject[];
 };
 
 function parseListField(value: string): string[] {
@@ -85,6 +95,8 @@ function createEmptyStageEditForm(): StageEditForm {
     keyTags: "",
     passTest: "",
     exampleDialogTone: "",
+    objectives: [],
+    sceneObjects: [],
   };
 }
 
@@ -814,6 +826,8 @@ export default function StoryPage() {
       passTest: [] as string[],
       exampleDialogTone: "",
       powerDynamic: "",
+      objectives: [] as CheckpointObjective[],
+      sceneObjects: [] as SceneObject[],
     }));
   }, [storyArcStages]);
 
@@ -832,6 +846,8 @@ export default function StoryPage() {
       keyTags: formatListField(stage?.keyTags ?? []),
       passTest: formatListField(stage?.passTest ?? []),
       exampleDialogTone: stage?.exampleDialogTone ?? "",
+      objectives: stage?.objectives ?? [],
+      sceneObjects: stage?.sceneObjects ?? [],
     });
   }, [stageEditTarget, stageOpen, stagePickerOptions]);
 
@@ -857,6 +873,8 @@ export default function StoryPage() {
       keyTags: parseListField(stageEditForm.keyTags),
       passTest: parseListField(stageEditForm.passTest),
       exampleDialogTone: stageEditForm.exampleDialogTone.trim(),
+      objectives: stageEditForm.objectives,
+      sceneObjects: stageEditForm.sceneObjects,
     };
 
     const stages = [...arc.stages];
@@ -1907,6 +1925,228 @@ export default function StoryPage() {
                     rows={3}
                     className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs uppercase text-muted-foreground">
+                      objectives ({stageEditForm.objectives.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newObj = createObjective({
+                          type: 'collect-object',
+                          description: 'New objective',
+                        });
+                        setStageEditForm((prev) => ({
+                          ...prev,
+                          objectives: [...prev.objectives, newObj],
+                        }));
+                      }}
+                      className="inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs hover:bg-accent/30"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  {stageEditForm.objectives.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No objectives yet. Click &quot;+ Add&quot; to create one.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-auto rounded border border-border p-2">
+                      {stageEditForm.objectives.map((obj, idx) => (
+                        <div key={obj.id} className="flex items-start gap-2 rounded bg-accent/20 p-2">
+                          <div className="flex-1 space-y-1">
+                            <select
+                              value={obj.type}
+                              onChange={(e) => {
+                                const updated = [...stageEditForm.objectives];
+                                updated[idx] = { ...obj, type: e.target.value as ObjectiveType };
+                                setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                              }}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+                            >
+                              <option value="collect-object">Collect Object</option>
+                              <option value="reach-location">Reach Location</option>
+                              <option value="interact-npc">Interact NPC</option>
+                              <option value="custom">Custom</option>
+                            </select>
+                            <input
+                              value={obj.description}
+                              placeholder="Description"
+                              onChange={(e) => {
+                                const updated = [...stageEditForm.objectives];
+                                updated[idx] = { ...obj, description: e.target.value };
+                                setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                              }}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+                            />
+                            <div className="flex gap-1">
+                              <input
+                                value={obj.targetObjectId ?? ''}
+                                placeholder="Target ID (optional)"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.objectives];
+                                  updated[idx] = { ...obj, targetObjectId: e.target.value };
+                                  setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                              <input
+                                type="number"
+                                min={1}
+                                value={obj.requiredCount}
+                                placeholder="Count"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.objectives];
+                                  updated[idx] = { ...obj, requiredCount: parseInt(e.target.value) || 1 };
+                                  setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                                }}
+                                className="w-16 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <div className="flex gap-1">
+                              <select
+                                value={obj.interactionType ?? ''}
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.objectives];
+                                  updated[idx] = {
+                                    ...obj,
+                                    interactionType: e.target.value as ObjectiveInteractionType || undefined,
+                                  };
+                                  setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              >
+                                <option value="">Interaction (any)</option>
+                                <option value="pickup">Pick Up</option>
+                                <option value="reach">Reach/Enter</option>
+                                <option value="interact">Interact</option>
+                                <option value="use">Use Item On</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStageEditForm((prev) => ({
+                                    ...prev,
+                                    objectives: prev.objectives.filter((_, i) => i !== idx),
+                                  }));
+                                }}
+                                className="inline-flex items-center justify-center rounded bg-destructive/20 px-2 py-1 text-xs text-destructive hover:bg-destructive/30"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs uppercase text-muted-foreground">
+                      scene objects ({stageEditForm.sceneObjects.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newObj = createSceneObject({ name: 'New Object' });
+                        setStageEditForm((prev) => ({
+                          ...prev,
+                          sceneObjects: [...prev.sceneObjects, newObj],
+                        }));
+                      }}
+                      className="inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs hover:bg-accent/30"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  {stageEditForm.sceneObjects.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No scene objects. Click &quot;+ Add&quot; to place interactive objects.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-auto rounded border border-border p-2">
+                      {stageEditForm.sceneObjects.map((obj, idx) => (
+                        <div key={obj.id} className="flex items-start gap-2 rounded bg-accent/20 p-2">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex gap-1">
+                              <input
+                                value={obj.name}
+                                placeholder="Object name"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.sceneObjects];
+                                  updated[idx] = { ...obj, name: e.target.value };
+                                  setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                              <select
+                                value={obj.type}
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.sceneObjects];
+                                  updated[idx] = {
+                                    ...obj,
+                                    type: e.target.value as SceneObject['type'],
+                                  };
+                                  setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                }}
+                                className="rounded border border-border bg-background px-2 py-1 text-xs"
+                              >
+                                <option value="collectible">Collectible</option>
+                                <option value="door">Door</option>
+                                <option value="npc">NPC</option>
+                                <option value="prop">Prop</option>
+                                <option value="vehicle">Vehicle</option>
+                                <option value="key">Key</option>
+                                <option value="other">Other</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-1">
+                              <input
+                                value={obj.locationId ?? ''}
+                                placeholder="Location ID (optional)"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.sceneObjects];
+                                  updated[idx] = { ...obj, locationId: e.target.value };
+                                  setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                              <label className="flex items-center gap-1 text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={obj.isObjectiveTarget ?? false}
+                                  onChange={(e) => {
+                                    const updated = [...stageEditForm.sceneObjects];
+                                    updated[idx] = { ...obj, isObjectiveTarget: e.target.checked };
+                                    setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                  }}
+                                  className="rounded"
+                                />
+                                Target
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStageEditForm((prev) => ({
+                                    ...prev,
+                                    sceneObjects: prev.sceneObjects.filter((_, i) => i !== idx),
+                                  }));
+                                }}
+                                className="inline-flex items-center justify-center rounded bg-destructive/20 px-2 py-1 text-xs text-destructive hover:bg-destructive/30"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">

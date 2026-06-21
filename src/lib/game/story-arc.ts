@@ -1,3 +1,12 @@
+import type {
+  CheckpointObjective,
+  ObjectiveInteractionType,
+  ObjectiveType,
+  SceneObject,
+} from './objectives';
+
+export type { CheckpointObjective, ObjectiveInteractionType, ObjectiveType, SceneObject };
+
 export interface StoryArcStage {
   stageNumber: number;
   stageName: string;
@@ -7,6 +16,8 @@ export interface StoryArcStage {
   passTest: string[];
   exampleDialogTone: string;
   powerDynamic: string;
+  objectives?: CheckpointObjective[];
+  sceneObjects?: SceneObject[];
 }
 
 export interface StoryArc {
@@ -68,7 +79,10 @@ type RawStoryArcStage = Partial<
     name?: string;
     stage?: number;
   }
->;
+> & {
+    objectives?: CheckpointObjective[];
+    sceneObjects?: SceneObject[];
+  };
 
 export function normalizeStoryArcStage(
   raw: RawStoryArcStage,
@@ -108,6 +122,8 @@ export function normalizeStoryArcStage(
     exampleDialogTone:
       typeof raw.exampleDialogTone === "string" ? raw.exampleDialogTone : "",
     powerDynamic: typeof raw.powerDynamic === "string" ? raw.powerDynamic : "",
+    objectives: Array.isArray(raw.objectives) ? raw.objectives.filter(Boolean) : undefined,
+    sceneObjects: Array.isArray(raw.sceneObjects) ? raw.sceneObjects.filter(Boolean) : undefined,
   };
 }
 
