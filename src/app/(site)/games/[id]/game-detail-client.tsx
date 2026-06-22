@@ -32,7 +32,7 @@ import {
   setConnectionItem,
 } from "@/lib/connection-storage";
 import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
-import { stripHistoryMessageText } from "@/lib/agents/providers";
+import { stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
@@ -256,13 +256,11 @@ export default function GamePage() {
   const gameContextText = useMemo(() => {
     const characterSections = [
       assignedNpc
-        ? `NPC (you are ${assignedNpc.name}): ${assignedNpc.description || "No description"}`
+        ? `NPC (you are ${assignedNpc.name}): ${stripHtmlImages(assignedNpc.description || "No description")}`
         : "",
       assignedNpc?.appearance ? `${assignedNpc.name} appearance: ${assignedNpc.appearance}` : "",
       assignedPlayer && npcKnowsPlayerEffective
-        ? `Player character (user controls ${assignedPlayer.name}): ${
-            assignedPlayer.description || "No description"
-          }`
+        ? `Player character (user controls ${assignedPlayer.name}): ${stripHtmlImages(assignedPlayer.description || "No description")}`
         : assignedPlayer
           ? "Player character: a stranger you have never met before"
           : "",

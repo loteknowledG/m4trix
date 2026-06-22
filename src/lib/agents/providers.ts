@@ -535,3 +535,19 @@ export async function callProvider(
 
   return content.trim();
 }
+
+export function stripHtmlImages(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/<img[^>]+src=["'][^"']+["'][^>]*>/gi, '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/p>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

@@ -2,6 +2,7 @@ import { get } from "idb-keyval";
 
 import { storyTextForPrompt } from "@/lib/game/story-moments";
 import { formatPlayerMemoryLabel, type PlayerMode } from "@/lib/player-mode";
+import { stripHtmlImages } from "@/lib/agents/providers";
 
 export type { PlayerMode };
 
@@ -45,10 +46,10 @@ export function buildSceneSummary(params: {
   const sceneParts = [
     title ? `Story title: ${title}` : "",
     currentMomentName ? `Current moment: ${currentMomentName}` : "",
-    npc ? `NPC (you are ${npc.name}): ${npc.description || "No description"}` : "",
+    npc ? `NPC (you are ${npc.name}): ${stripHtmlImages(npc.description || "No description")}` : "",
     npc?.appearance ? `${npc.name} appearance: ${npc.appearance}` : "",
     player && knowsPlayer
-      ? `Player character (user controls ${player.name}): ${player.description || "No description"}`
+      ? `Player character (user controls ${player.name}): ${stripHtmlImages(player.description || "No description")}`
       : player
         ? "Player character: a stranger you have never met before"
         : "",

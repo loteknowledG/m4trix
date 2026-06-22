@@ -378,11 +378,8 @@ export function queueDemoReply({
       id: appendToMessageId || `bot-${Date.now()}`,
       from: "agent",
       text: appendBaseText
-        ? joinContinuationText(
-            appendBaseText,
-            `You said: "${trimmed}". This is a demo response.`,
-          )
-        : `You said: "${trimmed}". This is a demo response.`,
+        ? joinContinuationText(appendBaseText, trimmed)
+        : trimmed,
     };
     setChatMessages((messages) =>
       appendToMessageId
