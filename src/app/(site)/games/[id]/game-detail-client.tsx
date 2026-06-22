@@ -695,10 +695,11 @@ export default function GamePage() {
     if (loading) return;
     if (hasSpokenOpeningRef.current === id) return;
 
-    const spokenText =
+    const spokenText = storyTextForPrompt(
       storyDescription.trim() ||
-      (typeof gameData?.description === "string" ? gameData.description.trim() : "") ||
-      title.trim();
+        (typeof gameData?.description === "string" ? gameData.description.trim() : "") ||
+        title.trim(),
+    );
     if (!spokenText) return;
 
     const trySpeak = async () => {

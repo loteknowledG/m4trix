@@ -1,5 +1,7 @@
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 
+import { storyTextForPrompt } from '@/lib/game/story-moments';
+
 const FEMALE_VOICE_PATTERNS = [
   'jenny',
   'jennyneural',
@@ -23,6 +25,10 @@ type IntroTtsCacheEntry = {
   audioBase64: string;
   updatedAt: number;
 };
+
+function sanitizeSpeechText(text: string) {
+  return storyTextForPrompt(text);
+}
 
 function matchesAnyPattern(voice: SpeechSynthesisVoice, patterns: string[]) {
   const haystack = `${voice.name} ${voice.voiceURI}`.toLowerCase();
@@ -201,13 +207,18 @@ async function speakViaVoiceProfile(text: string, profile = 'jenny-neural') {
     return false;
   }
 
+  const speechText = sanitizeSpeechText(text);
+  if (!speechText) {
+    return false;
+  }
+
   try {
     const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
       body: JSON.stringify({
-        text,
+        text: speechText,
         profile,
       }),
     });
@@ -257,7 +268,7 @@ export async function speakWithFallbackVoice(text: string) {
 
 export async function speakWithCachedStoryIntro(text: string, storyId: string) {
   if (typeof window === 'undefined') return false;
-  const normalized = (text || '').trim();
+  const normalized = sanitizeSpeechText(text);
   if (!normalized || !storyId) return false;
 
   const cacheKey = `${INTRO_TTS_CACHE_PREFIX}${storyId}`;

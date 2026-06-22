@@ -170,7 +170,6 @@ async def _render(
 ) -> bytes | None:
     try:
         import edge_tts
-        import uuid
     except Exception as exc:
         print(f"[VOICE] Missing audio dependency: {exc}", file=sys.stderr)
         return None
@@ -180,10 +179,8 @@ async def _render(
 
     wet_path: str | None = None
     try:
-        uid = uuid.uuid4().hex
-        ssml = f"<speak><mark name='{uid}'/>{text}</speak>"
         communicate = edge_tts.Communicate(
-            ssml,
+            text,
             voice,
             rate=rate or "",
             pitch=pitch or "",
@@ -240,17 +237,13 @@ async def _speak(
     os.environ.setdefault("SDL_AUDIODRIVER", "winMM")
     print(f"[voice_profile._speak] SDL_AUDIODRIVER={os.environ.get('SDL_AUDIODRIVER')}", file=sys.stderr)
 
-    import uuid
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         out_path = tmp.name
 
     wet_path: str | None = None
     try:
         print(f"[voice_profile._speak] generating TTS with edge_tts voice={voice}", file=sys.stderr)
-        uid = uuid.uuid4().hex
-        ssml = f"<speak><mark name='{uid}'/>{text}</speak>"
-        communicate = edge_tts.Communicate(ssml, voice, rate=rate or "", pitch=pitch or "", volume=volume or "")
+        communicate = edge_tts.Communicate(text, voice, rate=rate or "", pitch=pitch or "", volume=volume or "")
         await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
         print(f"[voice_profile._speak] TTS saved to {out_path}", file=sys.stderr)
 
