@@ -251,8 +251,6 @@ export default function GamePage() {
     [title, currentMoment?.name, assignedNpc, assignedPlayer, npcKnowsPlayerEffective],
   );
 
-  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
-
   const gameContextText = useMemo(() => {
     const characterSections = [
       assignedNpc
@@ -295,12 +293,8 @@ export default function GamePage() {
     ].filter(Boolean);
 
     const staticText = staticSections.join("\n\n");
-    if (!hasStartedPlaying) {
-      return [staticText, characterSections.join("\n")].filter(Boolean).join("\n\n");
-    }
-    return staticText;
+    return [staticText, characterSections.join("\n")].filter(Boolean).join("\n\n");
   }, [
-    hasStartedPlaying,
     title,
     currentMoment?.name,
     storyDescription,
@@ -316,6 +310,10 @@ export default function GamePage() {
   const grokChatMapping = useMemo(
     () => mapGameChatForGrokImage(chatMessages, assignedNpc, assignedPlayer),
     [chatMessages, assignedNpc, assignedPlayer],
+  );
+  const chatInFlight = useMemo(
+    () => chatMessages.some((message) => message.id.startsWith("pending-")),
+    [chatMessages],
   );
   const gameHistoryKey = getGameHistoryKey(id);
   const gameSummaryKey = getGameSummaryKey(id);
@@ -764,6 +762,7 @@ export default function GamePage() {
       appendBaseText?: string;
     },
   ) => {
+    if (chatInFlight) return;
     const showUserMessage = options?.showUserMessage ?? true;
     const appendToMessageId = options?.appendToMessageId;
     const appendBaseText = options?.appendBaseText;
@@ -781,7 +780,6 @@ export default function GamePage() {
 
     if (userMessage) {
       setChatMessages((messages) => [...messages, userMessage]);
-      if (!hasStartedPlaying) setHasStartedPlaying(true);
     }
     const userHistoryEntry: OrchestratedMessage | undefined = userMessage
       ? {
@@ -1618,7 +1616,7 @@ export default function GamePage() {
                     onSteerMessage={handleSteerChatMessage}
                     onContinueMessage={handleContinueChatMessage}
                     steerInstruction={steerInstruction}
-                    disabled={false}
+                    disabled={chatInFlight}
                     connected={connected}
                     connectionModel={connectionModel}
                     playerMode={playerMode}

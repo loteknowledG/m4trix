@@ -153,7 +153,7 @@ export function buildGameAgentRequest(params: {
   const clampText = (value: string, maxChars: number) => {
     const text = (value || "").trim();
     if (text.length <= maxChars) return text;
-    return text.slice(text.length - maxChars);
+    return text.slice(0, maxChars);
   };
 
   const compactHistory = (storyHistory || [])
@@ -230,6 +230,26 @@ async function streamAgentReply({
       if (typeof parsed?.response?.text === "string" && parsed.response.text.trim()) {
         return parsed.response.text.trim();
       }
+      const choiceContent = parsed?.choices?.[0]?.message?.content;
+      if (typeof choiceContent === "string" && choiceContent.trim()) {
+        return choiceContent.trim();
+      }
+      if (Array.isArray(choiceContent)) {
+        const joined = choiceContent
+          .map((part: unknown) => {
+            if (!part) return "";
+            if (typeof part === "string") return part;
+            if (typeof part === "object" && part && "text" in part) {
+              const maybeText = (part as { text?: unknown }).text;
+              return typeof maybeText === "string" ? maybeText : "";
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        if (joined) return joined;
+      }
       return text;
     } catch {
       return text;
@@ -262,7 +282,10 @@ async function streamAgentReply({
     requestBody.player && typeof requestBody.player === "object"
       ? (requestBody.player as { name?: string })
       : undefined;
-  const knowsPlayer = requestBody.npcKnowsPlayer !== false;
+  const knowsPlayerForStrip =
+    typeof requestBody.currentTurnNpcKnewPlayer === "boolean"
+      ? requestBody.currentTurnNpcKnewPlayer
+      : requestBody.npcKnowsPlayer !== false;
 
   const readStreamedText = async () => {
     const res = await fetch("/api/agents", {
@@ -291,7 +314,7 @@ async function streamAgentReply({
         streamedText += decoded;
         onChunk(
           pendingId,
-          stripHistoryMessageText(streamedText, npcName, playerInfo, knowsPlayer),
+          stripHistoryMessageText(streamedText, npcName, playerInfo, knowsPlayerForStrip),
         );
       }
     }
@@ -309,7 +332,7 @@ async function streamAgentReply({
     assistantText = await readNonStreamText();
   }
 
-  assistantText = stripHistoryMessageText(assistantText, npcName, playerInfo, knowsPlayer);
+  assistantText = stripHistoryMessageText(assistantText, npcName, playerInfo, knowsPlayerForStrip);
 
   const finalMessageId = `agent-${Date.now()}`;
   const finalMessage: CustomChatMessage = {
@@ -374,12 +397,17 @@ export function queueDemoReply({
   buildSceneSummary,
 }: DemoReplyArgs) {
   setTimeout(() => {
+    const npcName = assignedNpc?.name?.trim() || "NPC";
+    const demoText = appendBaseText
+      ? joinContinuationText(
+          appendBaseText,
+          "(Connect an AI provider in Connections to continue this scene.)",
+        )
+      : `(${npcName} is offline — connect an AI provider in Connections to get in-character replies.)`;
     const botMessage: CustomChatMessage = {
       id: appendToMessageId || `bot-${Date.now()}`,
       from: "agent",
-      text: appendBaseText
-        ? joinContinuationText(appendBaseText, trimmed)
-        : trimmed,
+      text: demoText,
     };
     setChatMessages((messages) =>
       appendToMessageId

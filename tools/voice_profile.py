@@ -160,6 +160,63 @@ def profile_env(
     return env
 
 
+async def _render(
+    text: str,
+    voice: str,
+    rate: str | None,
+    pitch: str | None,
+    volume: str | None,
+    profile_key: str | None = None,
+) -> bytes | None:
+    try:
+        import edge_tts
+        import uuid
+    except Exception as exc:
+        print(f"[VOICE] Missing audio dependency: {exc}", file=sys.stderr)
+        return None
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        out_path = tmp.name
+
+    wet_path: str | None = None
+    try:
+        uid = uuid.uuid4().hex
+        ssml = f"<speak><mark name='{uid}'/>{text}</speak>"
+        communicate = edge_tts.Communicate(
+            ssml,
+            voice,
+            rate=rate or "",
+            pitch=pitch or "",
+            volume=volume or "",
+        )
+        await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
+
+        play_path = out_path
+        reverb_on = os.environ.get("VOICE_PROFILE_REVERB", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+        if profile_key == "muthur" and reverb_on:
+            wet_path = _wet_mp3_with_reverb(out_path)
+            if wet_path:
+                play_path = wet_path
+
+        with open(play_path, "rb") as audio_file:
+            return audio_file.read()
+    finally:
+        try:
+            os.remove(out_path)
+        except Exception:
+            pass
+        if wet_path:
+            try:
+                os.remove(wet_path)
+            except Exception:
+                pass
+
+
 async def _speak(
     text: str,
     voice: str,
@@ -284,6 +341,33 @@ def emit_profile(
     raise SystemExit(f"Unsupported shell: {shell}")
 
 
+def render_profile(
+    profile_name: str,
+    text: str,
+    rate: str | None = None,
+    pitch: str | None = None,
+    volume: str | None = None,
+) -> int:
+    profile = resolve_profile(profile_name)
+    env = profile_env(profile, rate=rate, pitch=pitch, volume=volume)
+    audio = asyncio.run(
+        _render(
+            text,
+            env["BOOTUP_VOICE"],
+            env.get("BOOTUP_TTS_RATE"),
+            env.get("BOOTUP_TTS_PITCH"),
+            env.get("BOOTUP_TTS_VOLUME"),
+            profile_key=profile["profile"],
+        )
+    )
+    if not audio:
+        return 1
+    import base64
+
+    print(base64.b64encode(audio).decode("ascii"))
+    return 0
+
+
 def speak_profile(
     profile_name: str,
     text: str,
@@ -344,6 +428,22 @@ def main() -> int:
     p.add_argument("--volume", help="Optional TTS volume override")
     p.set_defaults(
         func=lambda args: emit_profile(args.profile, args.shell, args.rate, args.pitch, args.volume)
+    )
+
+    p = sub.add_parser("render", help="Render profile speech as base64 mp3 on stdout")
+    p.add_argument("profile", help="Profile name or alias")
+    p.add_argument("--rate", help="Optional TTS rate override")
+    p.add_argument("--pitch", help="Optional TTS pitch override")
+    p.add_argument("--volume", help="Optional TTS volume override")
+    p.add_argument("--text", help="Text to render")
+    p.set_defaults(
+        func=lambda args: render_profile(
+            args.profile,
+            (args.text or "").strip() or sys.stdin.read().strip(),
+            args.rate,
+            args.pitch,
+            args.volume,
+        )
     )
 
     p = sub.add_parser("speak", help="Speak text using a profile")

@@ -20,6 +20,7 @@ const INTRO_TTS_CACHE_PREFIX = 'tts:intro:';
 
 type IntroTtsCacheEntry = {
   textHash: string;
+  audioBase64: string;
   updatedAt: number;
 };
 
@@ -122,6 +123,35 @@ async function speakAudioUrl(audioUrl: string) {
   }
 }
 
+async function speakAudioBase64(audioBase64: string, contentType = 'audio/mpeg') {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    const binary = atob(audioBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const blob = new Blob([bytes], { type: contentType });
+    const url = URL.createObjectURL(blob);
+
+    try {
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      await audio.play();
+      return true;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (error) {
+    console.warn('[tts] base64 audio playback failed', error);
+    return false;
+  }
+}
+
 function hashText(input: string) {
   let hash = 5381;
   for (let i = 0; i < input.length; i += 1) {
@@ -168,12 +198,10 @@ async function speakViaCoderobo(text: string) {
 
 async function speakViaVoiceProfile(text: string, profile = 'jenny-neural') {
   if (typeof window === 'undefined') {
-    console.warn('[tts] speakViaVoiceProfile: window is undefined');
     return false;
   }
 
   try {
-    console.warn('[tts] speakViaVoiceProfile: calling /api/tts with profile:', profile);
     const response = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -184,55 +212,38 @@ async function speakViaVoiceProfile(text: string, profile = 'jenny-neural') {
       }),
     });
 
-    console.warn('[tts] speakViaVoiceProfile: response status:', response.status);
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      console.warn('[tts] speakViaVoiceProfile: error body:', body);
       throw new Error(body || `TTS voice profile failed with status ${response.status}`);
     }
 
     const data = (await response.json().catch(() => null)) as
-      | { ok?: boolean; provider?: string; error?: string; detail?: string }
+      | {
+          ok?: boolean;
+          audioBase64?: string;
+          contentType?: string;
+          error?: string;
+          detail?: string;
+        }
       | null;
-    console.warn('[tts] speakViaVoiceProfile: response data:', data);
-    if (!data?.ok) {
+
+    if (!data?.ok || !data.audioBase64) {
       return false;
     }
 
-    console.warn('[tts] speakViaVoiceProfile: success!');
-    return true;
+    return speakAudioBase64(data.audioBase64, data.contentType || 'audio/mpeg');
   } catch (error) {
-    console.warn('[tts] speakViaVoiceProfile: exception:', error);
+    console.warn('[tts] voice profile speech failed', error);
     return false;
   }
 }
 
 export async function speakWithJennyVoice(text: string) {
-  console.warn('[tts] speakWithJennyVoice called with:', text.slice(0, 50));
-  const spokeWithJennyProfile = await speakViaVoiceProfile(text, 'jenny-neural');
-  console.warn('[tts] speakViaVoiceProfile result:', spokeWithJennyProfile);
-  if (spokeWithJennyProfile) {
-    return true;
-  }
-  console.warn('[tts] trying browser voice fallback');
-  const femaleBrowserVoice = await speakWithBrowserVoice(text, FEMALE_VOICE_PATTERNS);
-  console.warn('[tts] browser voice result:', femaleBrowserVoice);
-  if (femaleBrowserVoice) {
-    return true;
-  }
-  return false;
+  return speakViaVoiceProfile(text, 'jenny-neural');
 }
 
 export async function speakWithJennyOnlyVoice(text: string) {
-  const viaProfile = await speakViaVoiceProfile(text, 'jenny-neural');
-  if (viaProfile) {
-    return true;
-  }
-  const femaleBrowserVoice = await speakWithBrowserVoice(text, FEMALE_VOICE_PATTERNS);
-  if (femaleBrowserVoice) {
-    return true;
-  }
-  return false;
+  return speakViaVoiceProfile(text, 'jenny-neural');
 }
 
 export async function speakWithFallbackVoice(text: string) {
@@ -254,26 +265,54 @@ export async function speakWithCachedStoryIntro(text: string, storyId: string) {
 
   try {
     const cached = await idbGet<IntroTtsCacheEntry>(cacheKey);
-    if (cached && cached.textHash === nextHash) {
-      const replayed = await speakWithJennyOnlyVoice(normalized);
+    if (cached?.textHash === nextHash && cached.audioBase64) {
+      const replayed = await speakAudioBase64(cached.audioBase64);
       if (replayed) return true;
     }
   } catch {
     // ignore cache read failures
   }
 
-  const spokeFresh = await speakWithJennyOnlyVoice(normalized);
-  if (spokeFresh) {
+  try {
+    const response = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({
+        text: normalized,
+        profile: 'jenny-neural',
+      }),
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = (await response.json().catch(() => null)) as
+      | { ok?: boolean; audioBase64?: string; contentType?: string }
+      | null;
+
+    if (!data?.ok || !data.audioBase64) {
+      return false;
+    }
+
+    const spokeFresh = await speakAudioBase64(data.audioBase64, data.contentType || 'audio/mpeg');
+    if (!spokeFresh) {
+      return false;
+    }
+
     try {
       await idbSet(cacheKey, {
         textHash: nextHash,
+        audioBase64: data.audioBase64,
         updatedAt: Date.now(),
       } as IntroTtsCacheEntry);
     } catch {
       // ignore cache write failures
     }
-    return true;
-  }
 
-  return false;
+    return true;
+  } catch {
+    return false;
+  }
 }

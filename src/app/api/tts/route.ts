@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
+import path from 'path';
 
 const DEFAULT_CODEROBO_API_URL = 'https://tts-api.coderobo.org';
 const DEFAULT_CODEROBO_JWT =
@@ -115,6 +116,44 @@ async function pollCoderoboAudioUrl(apiUrl: string, taskId: string, jwtToken: st
   throw new Error(`Timed out waiting for Coderobo TTS task ${taskId}`);
 }
 
+function spawnVoiceProfileRender(profile: string, text: string) {
+  const runner = process.platform === 'win32' ? 'py' : 'python3';
+  const scriptPath = path.join(process.cwd(), 'tools', 'voice_profile.py');
+
+  return new Promise<{ ok: boolean; audioBase64?: string; error?: string }>((resolve) => {
+    const child = spawn(runner, [scriptPath, 'render', profile], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => {
+      resolve({ ok: false, error: error.message });
+    });
+    child.on('close', (code) => {
+      const audioBase64 = stdout.trim();
+      if (code === 0 && audioBase64.length > 0) {
+        resolve({ ok: true, audioBase64 });
+        return;
+      }
+      resolve({ ok: false, error: stderr.trim() || `exit ${code ?? 'unknown'}` });
+    });
+
+    child.stdin.write(text);
+    child.stdin.end();
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -125,81 +164,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
     }
 
-if (profile === 'muthur' || profile === 'jenny-neural' || profile === 'jenny') {
+    if (profile === 'muthur' || profile === 'jenny-neural' || profile === 'jenny') {
       const voiceProfile = profile === 'jenny' ? 'jenny-neural' : profile;
-      const runner = process.platform === 'win32' ? 'py' : 'python3';
+      const result = await spawnVoiceProfileRender(voiceProfile, text);
 
-      const code = `
-import sys
-import os
-import asyncio
-import tempfile
-import subprocess
-import edge_tts
-
-async def speak_text(text, voice):
-    uid = os.urandom(8).hex()
-    ssml = f"<speak><mark name='{uid}'/>{text}</speak>"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-        out_path = f.name
-    await edge_tts.Communicate(ssml, voice).save(out_path)
-    print(out_path, flush=True)
-    return out_path
-
-async def play_and_cleanup(path):
-    import pygame
-    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-    os.environ.setdefault("SDL_AUDIODRIVER", "winMM")
-    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
-    try:
-        pygame.mixer.music.load(path)
-        pygame.mixer.music.set_volume(1.0)
-        pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
-        print("PLAYBACK_OK", file=sys.stderr)
-    except Exception as e:
-        print(f"PLAYBACK_ERROR: {e}", file=sys.stderr)
-    finally:
-        pygame.mixer.quit()
-        try:
-            os.remove(path)
-        except:
-            pass
-
-voice = "en-US-JennyNeural"
-text = sys.stdin.read()
-if text.strip():
-    path = asyncio.run(speak_text(text.strip(), voice))
-    play_and_cleanup(path)
-`;
-
-      console.warn('[tts api] spawning inline python for voice:', voiceProfile);
-
-const result = await new Promise<{ ok: boolean; stderr: string; stdout: string; code: number | null }>((resolve) => {
-        const child = spawn(runner, ['-c', code], {
-          cwd: process.cwd(),
-          shell: true,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        let stderr = '', stdout = '';
-        child.stderr.on('data', (c) => { stderr += c.toString(); });
-        child.stdout.on('data', (c) => { stdout += c.toString(); });
-        child.on('close', (code) => resolve({ ok: stdout.includes('PLAYBACK_OK'), stderr, stdout, code }));
-        child.stdin.write(text);
-        child.stdin.end();
-      });
-
-      console.warn('[tts api] inline result:', result.stdout?.slice(0, 100), result.stderr?.slice(0, 200));
-
-      if (!result.ok) {
+      if (!result.ok || !result.audioBase64) {
         return NextResponse.json(
-          { ok: false, error: 'VOICE_PROFILE_FAILED', detail: result.stderr || `exit ${result.code}` },
-          { status: 200 }
+          { ok: false, error: 'VOICE_PROFILE_FAILED', detail: result.error || 'No audio returned' },
+          { status: 200 },
         );
       }
 
-      return NextResponse.json({ ok: true, provider: 'voice-profile', profile: voiceProfile });
+      return NextResponse.json({
+        ok: true,
+        provider: 'voice-profile',
+        profile: voiceProfile,
+        audioBase64: result.audioBase64,
+        contentType: 'audio/mpeg',
+      });
     }
 
     const apiUrl = getCoderoboApiUrl();

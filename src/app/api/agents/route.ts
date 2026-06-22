@@ -95,6 +95,7 @@ async function streamOpenAiCompatibleResponse(response: Response) {
               const parsed = JSON.parse(data);
               const delta =
                 parsed?.choices?.[0]?.delta?.content ??
+                parsed?.choices?.[0]?.delta?.reasoning_content ??
                 parsed?.choices?.[0]?.message?.content ??
                 "";
 
