@@ -6,7 +6,11 @@ import {
   removeConnectionItem,
   setConnectionItem,
 } from '@/lib/connection-storage';
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import {
+  DEFAULT_LMSTUDIO_URL,
+  getLmstudioHealthApiUrl,
+  normalizeLmstudioUrl,
+} from '@/lib/lmstudio';
 
 export type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
 
@@ -228,9 +232,7 @@ export function useCharacterConnections({
         const targetUrl = normalizeLmstudioUrl(
           lmstudioUrlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL
         );
-        const res = await fetch(
-          `/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`
-        );
+        const res = await fetch(getLmstudioHealthApiUrl(targetUrl));
         if (!res.ok) throw new Error('Failed to fetch LM Studio models');
 
         const payload = (await res.json().catch(() => null)) as {

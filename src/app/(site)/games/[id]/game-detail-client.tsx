@@ -31,7 +31,12 @@ import {
   getConnectionItem,
   setConnectionItem,
 } from "@/lib/connection-storage";
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
+import {
+  DEFAULT_LMSTUDIO_URL,
+  getLmstudioHealthApiUrl,
+  LMSTUDIO_HEALTH_TIMEOUT_MS,
+  normalizeLmstudioUrl,
+} from "@/lib/lmstudio";
 import { stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
@@ -1173,9 +1178,9 @@ export default function GamePage() {
     setLmstudioHealth({ state: "checking" });
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    const timeout = window.setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);
 
-    fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(lmstudioUrl)}`, {
+    fetch(getLmstudioHealthApiUrl(lmstudioUrl), {
       signal: controller.signal,
     })
       .then(async (res) => {

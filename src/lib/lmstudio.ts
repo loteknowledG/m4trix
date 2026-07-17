@@ -1,6 +1,9 @@
 export const DEFAULT_LMSTUDIO_URL = 'http://192.168.12.48:1234';
 export const LMSTUDIO_CHAT_PATH = '/v1/chat/completions';
 export const LMSTUDIO_MODELS_PATH = '/v1/models';
+/** Keep trailing slash — next.config sets trailingSlash: true, so bare paths 308. */
+export const LMSTUDIO_HEALTH_API_PATH = '/api/lmstudio/health/';
+export const LMSTUDIO_HEALTH_TIMEOUT_MS = 20000;
 
 export function normalizeLmstudioUrl(input: string | null | undefined): string {
   const value = (input ?? '').trim();
@@ -16,6 +19,10 @@ export function getLmstudioChatUrl(input: string | null | undefined): string {
 
 export function getLmstudioModelsUrl(input: string | null | undefined): string {
   return `${normalizeLmstudioUrl(input)}${LMSTUDIO_MODELS_PATH}`;
+}
+
+export function getLmstudioHealthApiUrl(input: string | null | undefined): string {
+  return `${LMSTUDIO_HEALTH_API_PATH}?lmstudio_url=${encodeURIComponent(normalizeLmstudioUrl(input))}`;
 }
 
 export type LmstudioModelOption = { id: string; label: string };

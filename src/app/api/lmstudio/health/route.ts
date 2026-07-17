@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import {
   DEFAULT_LMSTUDIO_URL,
   getLmstudioModelsUrl,
+  LMSTUDIO_HEALTH_TIMEOUT_MS,
   normalizeLmstudioUrl,
   parseLmstudioModelsResponse,
 } from '@/lib/lmstudio';
@@ -39,12 +40,13 @@ export async function GET(req: NextRequest) {
   const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);
 
   try {
     const response = await fetch(modelsUrl, {
       method: 'GET',
       signal: controller.signal,
+      cache: 'no-store',
     });
 
     const text = await response.text();
@@ -81,11 +83,18 @@ export async function GET(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const aborted =
+      (err instanceof Error && err.name === 'AbortError') ||
+      (err instanceof Error && /aborted/i.test(err.message));
     const payload: HealthPayload = {
       ok: false,
       baseUrl: lmstudioUrl,
       modelsUrl,
-      error: err instanceof Error ? err.message : String(err),
+      error: aborted
+        ? `Timed out after ${LMSTUDIO_HEALTH_TIMEOUT_MS / 1000}s reaching ${modelsUrl}`
+        : err instanceof Error
+          ? err.message
+          : String(err),
     };
     return new Response(JSON.stringify(payload), {
       status: 502,

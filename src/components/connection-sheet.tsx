@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_LMSTUDIO_URL,
+  getLmstudioHealthApiUrl,
   normalizeLmstudioUrl,
   type LmstudioModelOption,
 } from '@/lib/lmstudio';
@@ -125,7 +126,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     setLmstudioHealth({ state: 'checking' });
 
     try {
-      const res = await fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`);
+      const res = await fetch(getLmstudioHealthApiUrl(targetUrl));
       const payload = (await res.json().catch(() => null)) as
         | {
             ok?: boolean;
@@ -301,10 +302,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
 
   const fetchLmstudioModels = async (urlOverride?: string): Promise<LmstudioModelOption[]> => {
     const normalizedUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
-    const res = await fetch(
-      `/api/lmstudio/health?lmstudio_url=${encodeURIComponent(normalizedUrl)}`,
-      { method: 'GET' }
-    );
+    const res = await fetch(getLmstudioHealthApiUrl(normalizedUrl), { method: 'GET' });
     const payload = (await res.json().catch(() => null)) as
       | { ok?: boolean; error?: string; models?: LmstudioModelOption[] }
       | null;
