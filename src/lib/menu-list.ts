@@ -69,6 +69,12 @@ export function getMenuList(): Group[] {
           href: '/games',
           label: 'Games',
           icon: Gamepad,
+          submenus: [
+            {
+              href: '/games',
+              label: 'All Games',
+            },
+          ],
         },
         {
           href: '/trash',

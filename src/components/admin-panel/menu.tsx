@@ -28,6 +28,7 @@ export function Menu({ isOpen }: MenuProps) {
     []
   );
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
+  const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [agentsList, setAgentsList] = useState<{ id: string; name: string }[]>([]);
   const [heapCount, setHeapCount] = useState<number>(0);
   const [trashCount, setTrashCount] = useState<number>(0);
@@ -53,6 +54,13 @@ export function Menu({ isOpen }: MenuProps) {
             if (mounted) setActiveStoryId(null);
           }
         }
+
+        const gameRouteId = pathname?.startsWith('/games/') ? pathname.split('/')[2] : null;
+        const gameParam =
+          gameRouteId && gameRouteId !== 'new'
+            ? gameRouteId
+            : searchParams?.get('game');
+        if (mounted) setActiveGameId(gameParam || null);
       } catch (err) {
         logger.error('Failed to load stories for menu', err);
       }
@@ -119,6 +127,14 @@ export function Menu({ isOpen }: MenuProps) {
       else setActiveStoryId(null);
     }
 
+    if (pathname?.startsWith('/games/')) {
+      const routeId = pathname.split('/')[2];
+      setActiveGameId(
+        routeId && routeId !== 'new' ? routeId : searchParams?.get('game') || null
+      );
+    } else {
+      setActiveGameId(searchParams?.get('game') || null);
+    }
   }, [pathname, searchParams]);
 
   const menuList = getMenuList();
@@ -202,11 +218,6 @@ export function Menu({ isOpen }: MenuProps) {
                                 />
                               </span>
                             )}
-                            {label === 'Games' && (
-                              <span className={cn(isOpen === false ? 'hidden' : 'ml-2')}>
-                                <CountBadge value={storiesList.length} />
-                              </span>
-                            )}
                             {label === 'Trash' && (
                               <span className={cn(isOpen === false ? 'hidden' : 'ml-2')}>
                                 <CountBadge
@@ -236,6 +247,10 @@ export function Menu({ isOpen }: MenuProps) {
                           ? isOpen === false
                             ? pathname === href && !activeStoryId
                             : pathname === href
+                          : label === 'Games'
+                          ? isOpen === false
+                            ? pathname === href && !activeGameId
+                            : pathname === href
                           : label === 'Characters'
                           ? pathname.startsWith('/characters')
                           : active === undefined
@@ -251,6 +266,16 @@ export function Menu({ isOpen }: MenuProps) {
                               active:
                                 pathname?.startsWith('/stories/') || !!searchParams?.get('story')
                                   ? s.id === activeStoryId
+                                  : false,
+                              count: s.count ?? 0,
+                            }))
+                          : label === 'Games'
+                          ? storiesList.map(s => ({
+                              href: `/games/new?game=${encodeURIComponent(s.id)}`,
+                              label: s.title && s.title.trim() ? s.title : 'Untitled',
+                              active:
+                                pathname?.startsWith('/games/') || !!searchParams?.get('game')
+                                  ? s.id === activeGameId
                                   : false,
                               count: s.count ?? 0,
                             }))
@@ -272,10 +297,11 @@ export function Menu({ isOpen }: MenuProps) {
                       isOpen={isOpen}
                       disableToggle={
                         (label === 'Stories' && storiesList.length === 0) ||
+                        (label === 'Games' && storiesList.length === 0) ||
                         (label === 'Characters' && agentsList.length === 0)
                       }
                       topCount={
-                        label === 'Stories'
+                        label === 'Stories' || label === 'Games'
                           ? storiesList.length
                           : label === 'Characters'
                           ? agentsList.length
