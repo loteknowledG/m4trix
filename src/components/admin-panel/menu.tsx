@@ -202,6 +202,11 @@ export function Menu({ isOpen }: MenuProps) {
                                 />
                               </span>
                             )}
+                            {label === 'Games' && (
+                              <span className={cn(isOpen === false ? 'hidden' : 'ml-2')}>
+                                <CountBadge value={storiesList.length} />
+                              </span>
+                            )}
                             {label === 'Trash' && (
                               <span className={cn(isOpen === false ? 'hidden' : 'ml-2')}>
                                 <CountBadge
