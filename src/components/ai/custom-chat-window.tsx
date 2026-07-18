@@ -104,7 +104,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const [steeringMessageId, setSteeringMessageId] = React.useState<string | null>(null);
   const [steeringText, setSteeringText] = React.useState('');
   const isPendingAgentMessage = (msg: CustomChatMessage) =>
-    msg.id.startsWith('pending-') || /^Working on that request\b/i.test(msg.text.trim());
+    msg.id.startsWith('pending-') ||
+    /^Working on that request\b/i.test(msg.text.trim()) ||
+    /^Waiting for LM Studio\b/i.test(msg.text.trim());
   const latestAgentMessage = [...messages]
     .reverse()
     .find((msg) => msg.from === 'agent' && msg.id !== 'story-opening' && !isPendingAgentMessage(msg));
@@ -167,6 +169,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     if (latest.id === 'story-opening') return;
     if (latest.id.startsWith('pending-') || latest.id.startsWith('streaming-')) return;
     if (/^Working on that request\b/i.test(latest.text.trim())) return;
+    if (/^Waiting for LM Studio\b/i.test(latest.text.trim())) return;
 
     lastSpokenIdRef.current = latest.id;
     const speechText = textForSpeech(latest.text);

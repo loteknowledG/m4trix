@@ -4,7 +4,7 @@ export const LMSTUDIO_MODELS_PATH = '/v1/models';
 /** Keep trailing slash — next.config sets trailingSlash: true, so bare paths 308. */
 export const LMSTUDIO_HEALTH_API_PATH = '/api/lmstudio/health/';
 export const LMSTUDIO_HEALTH_TIMEOUT_MS = 12000;
-export const LMSTUDIO_CHAT_TIMEOUT_MS = 90000;
+export const LMSTUDIO_CHAT_TIMEOUT_MS = 180000;
 
 export function getLmstudioHttpsPageHint(pageOrigin?: string): string {
   const origin = pageOrigin || (typeof window !== 'undefined' ? window.location.origin : 'this HTTPS page');

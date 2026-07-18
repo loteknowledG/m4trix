@@ -411,7 +411,7 @@ export async function callProvider(
   }
 
   const controller = new AbortController();
-  const timeoutMs = providerName.toLowerCase() === 'lmstudio' ? 90000 : 60000;
+  const timeoutMs = providerName.toLowerCase() === 'lmstudio' ? 180000 : 60000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;

@@ -454,57 +454,93 @@ export async function runConnectedChatTurn({
   setDebugData,
   refreshStorySummary,
 }: ConnectedTurnArgs) {
+  const isLmstudio = String(requestBody.provider || "").toLowerCase() === "lmstudio";
+  const waitingLabel = isLmstudio
+    ? "Waiting for LM Studio… (large local models can take 30–90s)"
+    : "Working on that request...";
+
   if (!appendToMessageId) {
     setChatMessages((messages) => [
       ...messages,
       {
         id: pendingId,
         from: "agent",
-        text: "Working on that request...",
+        text: waitingLabel,
       },
     ]);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  setDebugData({ request: requestBody, response: null, prompt: trimmed });
-  await streamAgentReply({
-    requestBody,
-    pendingId,
-    storyHistory,
-    userHistoryEntry,
-    trimmed,
-    currentSceneSummary,
-    appendBaseText,
-    onChunk: (messageId, text) =>
+  let waitTimer: number | null = null;
+  if (isLmstudio && typeof window !== "undefined" && !appendToMessageId) {
+    const startedAt = Date.now();
+    waitTimer = window.setInterval(() => {
+      const secs = Math.floor((Date.now() - startedAt) / 1000);
       setChatMessages((messages) =>
-        updateStreamingMessage(
-          messages,
-          appendToMessageId || messageId,
-          appendBaseText ? joinContinuationText(appendBaseText, text) : text,
+        messages.map((message) =>
+          message.id === pendingId &&
+          (message.text.startsWith("Waiting for LM Studio") ||
+            message.text.startsWith("Working on that request"))
+            ? {
+                ...message,
+                text: `Waiting for LM Studio… ${secs}s (large local models can take 30–90s)`,
+              }
+            : message,
         ),
-      ),
-    onFinalize: (messageId, finalId, text) =>
-      setChatMessages((messages) =>
-        appendToMessageId
-          ? messages.map((message) =>
-              message.id === appendToMessageId ? { ...message, text } : message,
-            )
-          : finalizeStreamingMessage(messages, messageId, finalId, text),
-      ),
-    onDebugResponse: (finalMessage) =>
-      setDebugData((prev) =>
-        prev
-          ? {
-              ...prev,
-              response: {
-                streamed: true,
-                messages: [finalMessage],
-              },
-            }
-          : null,
-      ),
-    onHistoryUpdate: (nextHistorySnapshot) => setStoryHistory(nextHistorySnapshot),
-    onMomentReset: () => setMomentSelectionMode("auto"),
-    refreshStorySummary,
-  });
+      );
+    }, 1000);
+  }
+
+  setDebugData({ request: requestBody, response: null, prompt: trimmed });
+  try {
+    await streamAgentReply({
+      requestBody,
+      pendingId,
+      storyHistory,
+      userHistoryEntry,
+      trimmed,
+      currentSceneSummary,
+      appendBaseText,
+      onChunk: (messageId, text) => {
+        if (waitTimer != null) {
+          window.clearInterval(waitTimer);
+          waitTimer = null;
+        }
+        setChatMessages((messages) =>
+          updateStreamingMessage(
+            messages,
+            appendToMessageId || messageId,
+            appendBaseText ? joinContinuationText(appendBaseText, text) : text,
+          ),
+        );
+      },
+      onFinalize: (messageId, finalId, text) =>
+        setChatMessages((messages) =>
+          appendToMessageId
+            ? messages.map((message) =>
+                message.id === appendToMessageId ? { ...message, text } : message,
+              )
+            : finalizeStreamingMessage(messages, messageId, finalId, text),
+        ),
+      onDebugResponse: (finalMessage) =>
+        setDebugData((prev) =>
+          prev
+            ? {
+                ...prev,
+                response: {
+                  streamed: true,
+                  messages: [finalMessage],
+                },
+              }
+            : null,
+        ),
+      onHistoryUpdate: (nextHistorySnapshot) => setStoryHistory(nextHistorySnapshot),
+      onMomentReset: () => setMomentSelectionMode("auto"),
+      refreshStorySummary,
+    });
+  } finally {
+    if (waitTimer != null && typeof window !== "undefined") {
+      window.clearInterval(waitTimer);
+    }
+  }
 }
