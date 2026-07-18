@@ -1336,18 +1336,26 @@ export default function StoryPage() {
                 )}
               </div>
               {loading ? (
-                <div className="text-sm text-muted-foreground">Loadingâ€¦</div>
+                <div className="text-sm text-muted-foreground">Loading…</div>
               ) : moments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Upload size={16} />
-                    <div className="font-medium">No story selected</div>
+                    <div className="font-medium">No moments yet</div>
                   </div>
                   <div className="text-sm">
-                    Create a new story from the heap to move moments here.
+                    Add moments from the heap, or drop images here.
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 flex items-center justify-center gap-2">
                     <button
+                      type="button"
+                      onClick={() => router.push("/heap/")}
+                      className="inline-flex items-center px-3 py-1.5 rounded border text-sm hover:bg-accent/10"
+                    >
+                      Open heap
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleDeleteStory}
                       className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
                     >
@@ -1357,26 +1365,7 @@ export default function StoryPage() {
                 </div>
               ) : (
                 <MomentsProvider collection={moments}>
-                  {moments.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2 mb-2">
-                        <Upload size={16} />
-                        <div className="font-medium">No story selected</div>
-                      </div>
-                      <div className="text-sm">
-                        Create a new story from the heap to move moments here.
-                      </div>
-                      <div className="mt-4">
-                        <button
-                          onClick={handleDeleteStory}
-                          className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
-                        >
-                          Delete story
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
+                  <>
                       {populatedStageNumbers.map((stageNumber) => {
                         const stageMoments = getStageMoments(stageNumber);
                         if (stageMoments.length === 0) return null;
@@ -1452,7 +1441,6 @@ export default function StoryPage() {
                         dragOverIndex={dragOverIndex}
                       />
                     </>
-                  )}
                   <CollectionOverlay />
                 </MomentsProvider>
               )}
