@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { del, get, set } from 'idb-keyval';
 import { logger } from '@/lib/logger';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
-import { Trash2 } from '@/components/icons';
+import { Plus, Trash2 } from '@/components/icons';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -13,10 +15,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
 
 export default function StoriesPage() {
+  const router = useRouter();
   const [stories, setStories] = useState<StoryMeta[]>([]);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const [selectedStories, setSelectedStories] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const selectedStoryIds = Object.keys(selectedStories).filter(id => selectedStories[id]);
 
   const toggleStorySelection = (storyId: string, selected: boolean) => {
@@ -24,6 +28,32 @@ export default function StoriesPage() {
       ...prev,
       [storyId]: selected,
     }));
+  };
+
+  const createNewStory = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const id = `${Date.now()}-${Math.random()}`;
+      await set(`story:${id}`, []);
+      const saved = (await get<StoryMeta[]>('stories')) || [];
+      const meta: StoryMeta = { id, count: 0, title: '' };
+      const nextStories = [meta, ...saved];
+      await set('stories', nextStories);
+      await set('stories-active', id);
+      setStories(nextStories);
+      setPreviews(prev => ({ ...prev, [id]: null }));
+      try {
+        window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
+      } catch {
+        /* ignore */
+      }
+      router.push(`/stories/new/?story=${encodeURIComponent(id)}`);
+    } catch (err) {
+      logger.error('Failed to create story', err);
+    } finally {
+      setCreating(false);
+    }
   };
 
   const moveSelectedToTrash = async () => {
@@ -156,7 +186,7 @@ export default function StoriesPage() {
               <div className="text-sm text-muted-foreground">Loading…</div>
             ) : stories.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                No stories yet. Create one from the heap.
+                No stories yet. Tap + to create one.
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -182,7 +212,10 @@ export default function StoriesPage() {
                           aria-label={`Select ${s.title && s.title.trim() ? s.title : 'Untitled'}`}
                         />
                       </label>
-                      <Link href={`/stories/new?story=${encodeURIComponent(s.id)}`} className="block h-full w-full">
+                      <Link
+                        href={`/stories/new/?story=${encodeURIComponent(s.id)}`}
+                        className="block h-full w-full"
+                      >
                         <span className="sr-only">
                           Open {s.title && s.title.trim() ? s.title : 'Untitled'}
                         </span>
@@ -213,6 +246,18 @@ export default function StoriesPage() {
             )}
           </div>
         </div>
+
+        <Button
+          onClick={() => void createNewStory()}
+          size="icon"
+          variant="default"
+          disabled={creating}
+          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
+          aria-label="New story"
+          title="New story"
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
       </ContentLayout>
     </>
   );
