@@ -24,7 +24,8 @@ export function getConnectionItem(key: string) {
 
   for (const store of stores) {
     const value = store.getItem(key);
-    if (value !== null) return value;
+    // Treat blank values as missing so session leftovers cannot shadow localStorage.
+    if (value !== null && value !== '') return value;
   }
 
   return null;
@@ -36,6 +37,7 @@ const PERSIST_KEYS: Record<string, true> = {
   [CONNECTION_STORAGE_KEYS.activeProvider]: true,
   [CONNECTION_STORAGE_KEYS.googleKey]: true,
   [CONNECTION_STORAGE_KEYS.hfKey]: true,
+  [CONNECTION_STORAGE_KEYS.lmstudioConnected]: true,
   [CONNECTION_STORAGE_KEYS.lmstudioUrl]: true,
   [CONNECTION_STORAGE_KEYS.nvidiaKey]: true,
   [CONNECTION_STORAGE_KEYS.zenKey]: true,
@@ -46,15 +48,19 @@ export function setConnectionItem(key: string, value: string) {
   const stores = getStores();
   if (!stores) return;
 
+  // Empty string means "clear" — don't leave a blank value that shadows localStorage.
+  if (!value) {
+    removeConnectionItem(key);
+    return;
+  }
+
   const useLocal = PERSIST_KEYS[key] === true;
   if (useLocal) {
     window.localStorage.setItem(key, value);
     window.sessionStorage.removeItem(key);
   } else {
     window.sessionStorage.setItem(key, value);
-    if (key !== CONNECTION_STORAGE_KEYS.lmstudioConnected) {
-      window.localStorage.removeItem(key);
-    }
+    window.localStorage.removeItem(key);
   }
 }
 

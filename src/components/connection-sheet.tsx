@@ -25,8 +25,8 @@ import {
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_LMSTUDIO_URL,
-  getLmstudioHealthApiUrl,
   normalizeLmstudioUrl,
+  probeLmstudioHealth,
   type LmstudioModelOption,
 } from '@/lib/lmstudio';
 
@@ -49,6 +49,7 @@ export interface ConnectionSheetProps {
 export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSheetProps) {
   const [open, setOpen] = useState(false);
   const [didExplicitlySelectModel, setDidExplicitlySelectModel] = useState(false);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
   const [activeProvider, setActiveProvider] = useState<Provider>('zen');
   const [lmstudioUrl, setLmstudioUrl] = useState('');
   const [lmstudioConnected, setLmstudioConnected] = useState(false);
@@ -121,44 +122,27 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     });
   };
 
-  const probeLmstudioHealth = async (urlOverride?: string) => {
+  const checkLmstudioHealth = async (urlOverride?: string) => {
     const targetUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
     setLmstudioHealth({ state: 'checking' });
 
-    try {
-      const res = await fetch(getLmstudioHealthApiUrl(targetUrl));
-      const payload = (await res.json().catch(() => null)) as
-        | {
-            ok?: boolean;
-            error?: string;
-            modelCount?: number;
-            models?: LmstudioModelOption[];
-          }
-        | null;
-
-      if (!res.ok || !payload?.ok) {
-        setLmstudioHealth({
-          state: 'error',
-          message: payload?.error || `Unable to reach ${targetUrl}`,
-        });
-        return;
-      }
-
-      const models = Array.isArray(payload.models) ? payload.models : [];
-      if (models.length) {
-        mergeLmstudioModelOptions(models);
-      }
-
-      setLmstudioHealth({
-        state: 'healthy',
-        modelCount: payload.modelCount ?? models.length,
-      });
-    } catch (err) {
+    const result = await probeLmstudioHealth(targetUrl);
+    if (!result.ok) {
       setLmstudioHealth({
         state: 'error',
-        message: err instanceof Error ? err.message : String(err),
+        message: result.error || `Unable to reach ${targetUrl}`,
       });
+      return;
     }
+
+    if (result.models.length) {
+      mergeLmstudioModelOptions(result.models);
+    }
+
+    setLmstudioHealth({
+      state: 'healthy',
+      modelCount: result.modelCount,
+    });
   };
 
   const storeSession = () => {
@@ -239,18 +223,35 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
           const options = await fetchLmstudioModels(storedLmstudioUrl || undefined);
           if (options.length) {
             mergeLmstudioModelOptions(options);
-            if (storedLmstudio === '1') setLmstudioConnected(true);
+            // Re-mark connected whenever a stored LM Studio session is still reachable.
+            setLmstudioConnected(true);
           }
         } catch {
           // Health probe on provider select will retry.
+        } finally {
+          setSessionHydrated(true);
         }
       })();
+    } else {
+      setSessionHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    // Avoid wiping persisted LM Studio state before restore finishes.
+    if (!sessionHydrated) return;
     storeSession();
-  }, [zenApiKey, googleApiKey, hfApiKey, nvidiaApiKey, activeProvider, model, lmstudioUrl, lmstudioConnected]);
+  }, [
+    sessionHydrated,
+    zenApiKey,
+    googleApiKey,
+    hfApiKey,
+    nvidiaApiKey,
+    activeProvider,
+    model,
+    lmstudioUrl,
+    lmstudioConnected,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -267,7 +268,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     }
 
     const timer = setTimeout(() => {
-      void probeLmstudioHealth();
+      void checkLmstudioHealth();
     }, 300);
 
     return () => clearTimeout(timer);
@@ -302,14 +303,11 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
 
   const fetchLmstudioModels = async (urlOverride?: string): Promise<LmstudioModelOption[]> => {
     const normalizedUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
-    const res = await fetch(getLmstudioHealthApiUrl(normalizedUrl), { method: 'GET' });
-    const payload = (await res.json().catch(() => null)) as
-      | { ok?: boolean; error?: string; models?: LmstudioModelOption[] }
-      | null;
-    if (!res.ok || !payload?.ok) {
-      throw new Error(payload?.error || 'Failed to fetch LM Studio models');
+    const result = await probeLmstudioHealth(normalizedUrl);
+    if (!result.ok) {
+      throw new Error(result.error || 'Failed to fetch LM Studio models');
     }
-    return Array.isArray(payload.models) ? payload.models : [];
+    return result.models;
   };
 
   const validateAndFetchModels = async (provider: Provider, keyToUse: string) => {

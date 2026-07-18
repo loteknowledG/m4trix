@@ -8,8 +8,8 @@ import {
 } from '@/lib/connection-storage';
 import {
   DEFAULT_LMSTUDIO_URL,
-  getLmstudioHealthApiUrl,
   normalizeLmstudioUrl,
+  probeLmstudioHealth,
 } from '@/lib/lmstudio';
 
 export type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
@@ -232,16 +232,10 @@ export function useCharacterConnections({
         const targetUrl = normalizeLmstudioUrl(
           lmstudioUrlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL
         );
-        const res = await fetch(getLmstudioHealthApiUrl(targetUrl));
-        if (!res.ok) throw new Error('Failed to fetch LM Studio models');
+        const result = await probeLmstudioHealth(targetUrl);
+        if (!result.ok) throw new Error(result.error || 'Failed to fetch LM Studio models');
 
-        const payload = (await res.json().catch(() => null)) as {
-          ok?: boolean;
-          models?: Array<{ id: string; label: string }>;
-        } | null;
-        if (!payload?.ok) throw new Error('Failed to fetch LM Studio models');
-
-        const options = mapModelOptions(payload.models ?? [], provider);
+        const options = mapModelOptions(result.models, provider);
         setModelOptions(prev => [...prev.filter(option => option.provider !== provider), ...options]);
         setLmstudioConnected(true);
         setActiveProvider('lmstudio');

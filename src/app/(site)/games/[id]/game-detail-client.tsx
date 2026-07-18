@@ -33,9 +33,8 @@ import {
 } from "@/lib/connection-storage";
 import {
   DEFAULT_LMSTUDIO_URL,
-  getLmstudioHealthApiUrl,
-  LMSTUDIO_HEALTH_TIMEOUT_MS,
   normalizeLmstudioUrl,
+  probeLmstudioHealth,
 } from "@/lib/lmstudio";
 import { stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
@@ -1177,39 +1176,25 @@ export default function GamePage() {
     );
     setLmstudioHealth({ state: "checking" });
 
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);
-
-    fetch(getLmstudioHealthApiUrl(lmstudioUrl), {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        const payload = (await res.json().catch(() => null)) as {
-          ok?: boolean;
-          error?: string;
-          modelCount?: number;
-        } | null;
-        if (!res.ok || !payload?.ok) {
-          setLmstudioHealth({
-            state: "error",
-            message: payload?.error || "LM Studio is not reachable",
-          });
-          return;
-        }
-        setLmstudioHealth({
-          state: "healthy",
-          modelCount: payload.modelCount ?? 0,
-        });
-      })
-      .catch((err) => {
+    let cancelled = false;
+    void probeLmstudioHealth(lmstudioUrl).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
         setLmstudioHealth({
           state: "error",
-          message: err instanceof Error ? err.message : String(err),
+          message: result.error || "LM Studio is not reachable",
         });
-      })
-      .finally(() => {
-        window.clearTimeout(timeout);
+        return;
+      }
+      setLmstudioHealth({
+        state: "healthy",
+        modelCount: result.modelCount,
       });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [connected, connectionModel]);
 
   useEffect(() => {

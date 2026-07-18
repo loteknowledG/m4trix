@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import { DEFAULT_LMSTUDIO_URL, fetchAgentsWithLmstudioBrowserProxy, normalizeLmstudioUrl } from '@/lib/lmstudio';
 import { AGENTS as DEFAULT_AGENTS } from './default-agents';
 import type { Agent, AgentId, AgentsResponse, ChatMessage } from './types';
 import type { ModelOption, Provider } from './use-character-connections';
@@ -214,10 +214,9 @@ export function useCharacterChat({
         delete requestBody.lmstudioUrl;
       }
 
-      const res = await fetch('/api/agents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+      const res = await fetchAgentsWithLmstudioBrowserProxy({
+        ...requestBody,
+        stream: false,
       });
 
       if (!res.ok) {

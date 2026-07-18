@@ -5,6 +5,7 @@ import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import { stripHistoryMessageText } from "@/lib/agents/providers";
 import type { GameCharacterContext } from "@/lib/game/game-context";
+import { fetchAgentsWithLmstudioBrowserProxy } from "@/lib/lmstudio";
 
 export type GameAgentRequestBody = Record<string, unknown>;
 
@@ -257,13 +258,7 @@ async function streamAgentReply({
   };
 
   const readNonStreamText = async () => {
-    const res = await fetch("/api/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ...requestBody, stream: false }),
-    });
+    const res = await fetchAgentsWithLmstudioBrowserProxy({ ...requestBody, stream: false });
     if (!res.ok) {
       const errorText = await res.text().catch(() => "");
       throw new Error(errorText || "Failed to get non-stream response from LLM");
@@ -288,13 +283,7 @@ async function streamAgentReply({
       : requestBody.npcKnowsPlayer !== false;
 
   const readStreamedText = async () => {
-    const res = await fetch("/api/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const res = await fetchAgentsWithLmstudioBrowserProxy(requestBody);
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => "");

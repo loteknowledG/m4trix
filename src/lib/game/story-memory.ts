@@ -1,5 +1,5 @@
 import { CONNECTION_STORAGE_KEYS, getConnectionItem } from "@/lib/connection-storage";
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
+import { DEFAULT_LMSTUDIO_URL, fetchAgentsWithLmstudioBrowserProxy, normalizeLmstudioUrl } from "@/lib/lmstudio";
 import type { Agent, OrchestratedMessage } from "@/lib/agents/types";
 import { formatGameSpeakerLabel } from "@/lib/game/game-context";
 
@@ -113,27 +113,22 @@ export async function refreshStorySummary({
       getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
     );
 
-    const res = await fetch("/api/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt: summaryPrompt,
-        model: connectionModel,
-        zenApiKey: zenKey,
-        googleApiKey: googleKey,
-        hfApiKey: hfKey,
-        nvidiaApiKey: nvidiaKey,
-        provider: activeProvider,
-        lmstudioUrl: activeProvider === "lmstudio" ? lmstudioUrl : undefined,
-        agents: [summarizerAgent],
-        stateless: true,
-        orchestration: "parallel",
-        interactionMode: "neutral",
-        story: options.sceneSummary || storySummary,
-        history: options.history.slice(-12),
-      }),
+    const res = await fetchAgentsWithLmstudioBrowserProxy({
+      prompt: summaryPrompt,
+      model: connectionModel,
+      zenApiKey: zenKey,
+      googleApiKey: googleKey,
+      hfApiKey: hfKey,
+      nvidiaApiKey: nvidiaKey,
+      provider: activeProvider,
+      lmstudioUrl: activeProvider === "lmstudio" ? lmstudioUrl : undefined,
+      agents: [summarizerAgent],
+      stateless: true,
+      orchestration: "parallel",
+      interactionMode: "neutral",
+      story: options.sceneSummary || storySummary,
+      history: options.history.slice(-12),
+      stream: false,
     });
 
     const data = await res.json().catch(() => null);
