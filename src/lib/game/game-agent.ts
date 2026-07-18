@@ -257,12 +257,22 @@ async function streamAgentReply({
     }
   };
 
+  const throwHttpError = async (res: Response, fallback: string) => {
+    const errorText = await res.text().catch(() => "");
+    try {
+      const parsed = JSON.parse(errorText) as { error?: string };
+      if (typeof parsed.error === "string" && parsed.error.trim()) {
+        throw new Error(parsed.error.trim());
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message && err.message !== errorText) throw err;
+    }
+    throw new Error(errorText || fallback);
+  };
+
   const readNonStreamText = async () => {
     const res = await fetchAgentsWithLmstudioBrowserProxy({ ...requestBody, stream: false });
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "");
-      throw new Error(errorText || "Failed to get non-stream response from LLM");
-    }
+    if (!res.ok) await throwHttpError(res, "Failed to get non-stream response from LLM");
     const raw = await res.text().catch(() => "");
     return extractAssistantText(raw);
   };
@@ -285,10 +295,7 @@ async function streamAgentReply({
   const readStreamedText = async () => {
     const res = await fetchAgentsWithLmstudioBrowserProxy(requestBody);
 
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "");
-      throw new Error(errorText || "Failed to get response from LLM");
-    }
+    if (!res.ok) await throwHttpError(res, "Failed to get response from LLM");
 
     const reader = res.body?.getReader();
     const decoder = new TextDecoder();
@@ -312,10 +319,6 @@ async function streamAgentReply({
   };
 
   let streamedText = await readStreamedText();
-  if (!appendBaseText && !streamedText.trim()) {
-    streamedText = await readStreamedText();
-  }
-
   let assistantText = extractAssistantText(streamedText);
   if (!appendBaseText && !assistantText) {
     assistantText = await readNonStreamText();

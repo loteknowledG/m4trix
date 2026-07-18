@@ -3,7 +3,11 @@ export const LMSTUDIO_CHAT_PATH = '/v1/chat/completions';
 export const LMSTUDIO_MODELS_PATH = '/v1/models';
 /** Keep trailing slash — next.config sets trailingSlash: true, so bare paths 308. */
 export const LMSTUDIO_HEALTH_API_PATH = '/api/lmstudio/health/';
-export const LMSTUDIO_HEALTH_TIMEOUT_MS = 20000;
+export const LMSTUDIO_HEALTH_TIMEOUT_MS = 12000;
+export const LMSTUDIO_CHAT_TIMEOUT_MS = 90000;
+
+export const LMSTUDIO_SECURE_CONTEXT_HINT =
+  'Browsers block https://m4trix.vercel.app from calling local http:// LM Studio. Open http://localhost:3000 (pnpm dev) or set an https:// tunnel URL for LM Studio.';
 
 export function normalizeLmstudioUrl(input: string | null | undefined): string {
   const value = (input ?? '').trim();
@@ -24,6 +28,42 @@ export function getLmstudioModelsUrl(input: string | null | undefined): string {
 
 export function getLmstudioHealthApiUrl(input: string | null | undefined): string {
   return `${LMSTUDIO_HEALTH_API_PATH}?lmstudio_url=${encodeURIComponent(normalizeLmstudioUrl(input))}`;
+}
+
+function isPrivateOrLocalHostname(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.local')) return true;
+  if (host === '::1' || host === '0:0:0:0:0:0:0:1') return true;
+
+  const ipv4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!ipv4) return false;
+  const a = Number(ipv4[1]);
+  const b = Number(ipv4[2]);
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+/**
+ * Public HTTPS pages cannot call private/local HTTP servers (mixed content +
+ * private-network access). Detect that before hanging on fetch.
+ */
+export function getLmstudioBrowserReachabilityError(
+  input: string | null | undefined,
+): string | null {
+  if (typeof window === 'undefined') return null;
+  if (!window.isSecureContext) return null;
+
+  try {
+    const url = new URL(normalizeLmstudioUrl(input));
+    if (url.protocol !== 'http:') return null;
+    if (!isPrivateOrLocalHostname(url.hostname)) return null;
+    return LMSTUDIO_SECURE_CONTEXT_HINT;
+  } catch {
+    return null;
+  }
 }
 
 export type LmstudioModelOption = { id: string; label: string };
@@ -68,14 +108,28 @@ export function parseLmstudioModelsResponse(payload: unknown): LmstudioModelOpti
 }
 
 /**
- * Probe LM Studio from the browser first (works on Vercel → LAN),
- * then fall back to the Next.js proxy (useful for local Electron/dev).
+ * Probe LM Studio from the browser first (works on local http → LAN),
+ * then fall back to the Next.js proxy (local Electron/dev only — Vercel cannot reach LAN).
  */
 export async function probeLmstudioHealth(
   input: string | null | undefined,
 ): Promise<LmstudioHealthResult> {
   const baseUrl = normalizeLmstudioUrl(input);
   const modelsUrl = getLmstudioModelsUrl(baseUrl);
+
+  const blocked = getLmstudioBrowserReachabilityError(baseUrl);
+  if (blocked) {
+    return {
+      ok: false,
+      baseUrl,
+      modelsUrl,
+      modelCount: 0,
+      models: [],
+      via: 'browser',
+      error: blocked,
+    };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);
 
@@ -136,7 +190,7 @@ export async function probeLmstudioHealth(
         error:
           `Cannot reach LM Studio at ${baseUrl}. ` +
           `Browser: ${browserMessage}. Proxy: ${proxyMessage}. ` +
-          `Use a LAN URL (not localhost) and keep LM Studio's server running.`,
+          `Use http://localhost:3000 with a LAN URL, or an https:// tunnel.`,
       };
     } catch (proxyErr) {
       const browserMessage =
@@ -151,7 +205,7 @@ export async function probeLmstudioHealth(
         via: 'browser',
         error:
           `Cannot reach LM Studio at ${baseUrl} (${browserMessage}). ` +
-          `Cloud hosts cannot reach your LAN — open m4trix locally or ensure the browser can reach that IP. ` +
+          `If you're on m4trix.vercel.app, open http://localhost:3000 instead. ` +
           `(Proxy also failed: ${proxyMessage})`,
       };
     }
@@ -289,11 +343,40 @@ export async function fetchAgentsWithLmstudioBrowserProxy(
     });
   }
 
-  const lmRes = await fetch(data.url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data.payload ?? {}),
-  });
+  const blocked = getLmstudioBrowserReachabilityError(data.url);
+  if (blocked) {
+    return new Response(JSON.stringify({ error: blocked }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LMSTUDIO_CHAT_TIMEOUT_MS);
+
+  let lmRes: Response;
+  try {
+    lmRes = await fetch(data.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data.payload ?? {}),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const aborted = err instanceof Error && err.name === 'AbortError';
+    return new Response(
+      JSON.stringify({
+        error: aborted
+          ? `LM Studio timed out after ${LMSTUDIO_CHAT_TIMEOUT_MS / 1000}s. Try a smaller/faster model, or confirm the server is still generating.`
+          : err instanceof Error
+            ? err.message
+            : String(err),
+      }),
+      { status: 502, headers: { 'Content-Type': 'application/json' } },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!lmRes.ok) {
     const text = await lmRes.text().catch(() => '');

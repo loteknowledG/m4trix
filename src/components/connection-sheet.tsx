@@ -715,7 +715,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                     placeholder={
                       activeProviderConnected
                         ? 'Connected'
-                        : 'Enter LM Studio IP address (e.g. http://192.168.12.48:1234)'
+                        : 'LM Studio URL (use http://localhost:3000 for local HTTP servers)'
                     }
                     value={lmstudioUrl}
                     onChange={e => setLmstudioUrl(e.target.value)}
