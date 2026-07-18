@@ -1,61 +1,40 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('game resizable panels', () => {
+test.describe('game visual novel stage', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/games/1');
 
-    // Ensure the game page has rendered and the panels are available.
+    await page.waitForSelector('[data-testid="game-vn-stage"]');
     await page.waitForSelector('[data-testid="game-sidebar-panel"]');
     await page.waitForSelector('[data-testid="game-chat-panel"]');
   });
 
-  test('resizer can be dragged to resize the sidebar', async ({ page }) => {
-    const handle = page.locator('[role="separator"]');
+  test('scene and dialogue share one fullscreen stage', async ({ page }) => {
+    const stage = page.locator('[data-testid="game-vn-stage"]');
+    const scene = page.locator('[data-testid="game-sidebar-panel"]');
+    const chat = page.locator('[data-testid="game-chat-panel"]');
 
-    const handleBox = await handle.boundingBox();
-    expect(handleBox).not.toBeNull();
-    if (!handleBox) throw new Error('Handle not found');
+    await expect(stage).toBeVisible();
+    await expect(scene).toBeVisible();
+    await expect(chat).toBeVisible();
 
-    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(
-      handleBox.x + handleBox.width / 2 + 150,
-      handleBox.y + handleBox.height / 2,
-      {
-        steps: 10,
-      }
-    );
-    await page.mouse.up();
+    const stageBox = await stage.boundingBox();
+    const sceneBox = await scene.boundingBox();
+    const chatBox = await chat.boundingBox();
+    const viewport = page.viewportSize();
 
-    const afterHandleBox = await handle.boundingBox();
-    expect(afterHandleBox).not.toBeNull();
-    expect(Math.abs((afterHandleBox?.x ?? 0) - handleBox!.x)).toBeGreaterThan(0.5);
+    expect(stageBox).not.toBeNull();
+    expect(sceneBox).not.toBeNull();
+    expect(chatBox).not.toBeNull();
+    expect(viewport).not.toBeNull();
+
+    // Scene fills the stage; dialogue overlays the bottom rather than sitting beside it.
+    expect(Math.abs((sceneBox!.width ?? 0) - (stageBox!.width ?? 0))).toBeLessThan(4);
+    expect(chatBox!.y).toBeGreaterThan((viewport!.height ?? 0) * 0.35);
+    expect(chatBox!.x + chatBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
   });
 
-  test('chat panel stays within viewport when resizing', async ({ page }) => {
-    const chatPanel = page.locator('[data-testid="game-chat-panel"]');
-    const handle = page.locator('[role="separator"]');
-
-    const handleBox = await handle.boundingBox();
-    expect(handleBox).not.toBeNull();
-    if (!handleBox) throw new Error('Handle not found');
-
-    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(
-      handleBox.x + handleBox.width / 2 - 200,
-      handleBox.y + handleBox.height / 2,
-      {
-        steps: 10,
-      }
-    );
-    await page.mouse.up();
-
-    const chatBox = await chatPanel.boundingBox();
-    expect(chatBox).not.toBeNull();
-
-    const viewportSize = page.viewportSize();
-    expect(viewportSize).not.toBeNull();
-    expect(chatBox!.x + chatBox!.width).toBeLessThanOrEqual(viewportSize!.width);
+  test('no side-panel resizer remains', async ({ page }) => {
+    await expect(page.locator('[role="separator"]')).toHaveCount(0);
   });
 });

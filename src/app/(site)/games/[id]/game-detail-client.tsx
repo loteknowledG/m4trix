@@ -25,7 +25,6 @@ import {
 import { FullscreenDialog } from "@/components/ui/full-screen-dialog";
 import { Pressable } from "@/components/ui/pressable";
 import { CarouselNavButton } from "@/components/ui/carousel";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   CONNECTION_STORAGE_KEYS,
   getConnectionItem,
@@ -780,6 +779,7 @@ export default function GamePage() {
           id: `user-${Date.now()}`,
           from: "user" as const,
           text: trimmed,
+          name: assignedPlayer?.name?.trim() || "You",
         }
       : null;
 
@@ -1447,6 +1447,10 @@ export default function GamePage() {
             id: entry.id,
             from: entry.from,
             text: entry.text,
+            name:
+              entry.from === "user"
+                ? player?.name?.trim() || "You"
+                : npc?.name?.trim() || "Narrator",
           })),
         ]);
       } catch (e) {
@@ -1476,7 +1480,7 @@ export default function GamePage() {
           <Pressable
             type="button"
             onClick={() => setConfirmQuit(true)}
-            className="fixed bottom-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
+            className="group fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
             aria-label="Quit game"
           >
             <MdExitToApp className="h-5 w-5" />
@@ -1489,7 +1493,7 @@ export default function GamePage() {
           <Pressable
             type="button"
             onClick={() => setDebugOpen(true)}
-            className="fixed bottom-4 left-16 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
+            className="fixed left-16 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
             aria-label="Debug"
           >
             <FaBug className="h-4 w-4" />
@@ -1498,7 +1502,7 @@ export default function GamePage() {
           <Pressable
             type="button"
             onClick={() => setTagDialogOpen(true)}
-            className="fixed bottom-4 left-28 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="fixed left-28 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Tag current moment"
             disabled={!currentMoment}
           >
@@ -1508,96 +1512,99 @@ export default function GamePage() {
           <Pressable
             type="button"
             onClick={() => setMemoryDialogOpen(true)}
-            className="fixed bottom-4 left-40 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
+            className="fixed left-40 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
             aria-label="Show memory"
           >
             <FaBrain className="h-4 w-4" />
           </Pressable>
 
-          <div className="relative h-full w-full">
+          <div className="relative h-full w-full bg-black">
             {!gameShellReady ? (
               <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-muted-foreground">
                 Loading game…
               </div>
             ) : (
-            <ResizablePanelGroup
-              orientation="horizontal"
+            <div
               className="absolute inset-0 h-full w-full"
+              data-testid="game-vn-stage"
             >
-              <ResizablePanel
-                defaultSize="55%"
-                className="border-r border-slate-700/40"
+              <div
+                className="absolute inset-0 overflow-hidden"
                 data-testid="game-sidebar-panel"
               >
-                <div className="relative h-full w-full overflow-hidden">
-                    <GameCard
-                      id={id ?? "unknown"}
-                      title={currentMoment?.name || gameData?.title || title}
-                      subtitle={
-                        currentMoment?.name ||
-                        gameData?.subtitle ||
-                        gameData?.description ||
-                        (id ? `Game ID: ${id}` : "No game selected")
-                      }
-                      previewSrc={previewSrc}
-                      previewFit="contain"
-                      showFooter={false}
-                      fullHeight
-                      className="w-full h-full"
-                    />
-                    <div className="pointer-events-none absolute inset-0 top-[54%] -mt-6 z-10 flex items-center justify-between px-1">
-                      <CarouselNavButton
-                        type="button"
-                        onClick={goToPreviousMoment}
-                        disabled={!hasMoments}
-                        aria-label="Previous moment"
-                        title="Previous moment"
-                        buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]/90 hover:text-white"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </CarouselNavButton>
-                      <CarouselNavButton
-                        type="button"
-                        onClick={goToNextMoment}
-                        disabled={!hasMoments}
-                        aria-label="Next moment"
-                        title="Next moment"
-                        buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]/90 hover:text-white"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </CarouselNavButton>
-                    </div>
+                {previewSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewSrc}
+                    alt={currentMoment?.name || gameData?.title || title || "Scene"}
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                ) : (
+                  <GameCard
+                    id={id ?? "unknown"}
+                    title={currentMoment?.name || gameData?.title || title}
+                    subtitle={
+                      currentMoment?.name ||
+                      gameData?.subtitle ||
+                      gameData?.description ||
+                      (id ? `Game ID: ${id}` : "No game selected")
+                    }
+                    previewSrc={previewSrc}
+                    previewFit="contain"
+                    showFooter={false}
+                    fullHeight
+                    className="h-full w-full rounded-none border-0 ring-0"
+                  />
+                )}
+                <div className="pointer-events-none absolute inset-0 top-[42%] z-10 flex -mt-6 items-center justify-between px-2">
+                  <CarouselNavButton
+                    type="button"
+                    onClick={goToPreviousMoment}
+                    disabled={!hasMoments}
+                    aria-label="Previous moment"
+                    title="Previous moment"
+                    buttonClassName="bg-black/55 text-white hover:bg-black/75 hover:text-white"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </CarouselNavButton>
+                  <CarouselNavButton
+                    type="button"
+                    onClick={goToNextMoment}
+                    disabled={!hasMoments}
+                    aria-label="Next moment"
+                    title="Next moment"
+                    buttonClassName="bg-black/55 text-white hover:bg-black/75 hover:text-white"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </CarouselNavButton>
                 </div>
-              </ResizablePanel>
+              </div>
 
-              <ResizableHandle withHandle />
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4 pl-52">
+                <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] min-w-0 items-center rounded-full border border-white/20 bg-black/45 px-3 py-1 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
+                  <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.85)]" />
+                  <span className="truncate">{title}</span>
+                </div>
+                <div className="pointer-events-auto">
+                  <GrokImagePromptButton
+                    agents={grokChatMapping.agents}
+                    className="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
+                    focusAgentId={grokChatMapping.focusAgentId}
+                    messages={grokChatMapping.messages}
+                    prompterAgent={grokChatMapping.prompterAgent}
+                    sceneContext={grokSceneContext}
+                    story={grokStoryText}
+                  />
+                </div>
+              </div>
 
-              <ResizablePanel
-                defaultSize="45%"
-                minSize={0.2}
-                className="p-4 flex flex-col min-h-0 min-w-0 max-w-full"
+              <div
+                className="absolute inset-x-0 bottom-0 z-20 flex max-h-[46%] min-h-[11rem] flex-col justify-end bg-gradient-to-t from-black/80 via-black/35 to-transparent px-3 pb-3 pt-16 sm:px-6 sm:pb-5"
                 data-testid="game-chat-panel"
-                style={{ flexShrink: 1 }}
               >
-                <div className="mb-3 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-center">
-                  <div className="inline-flex max-w-full min-w-0 items-center justify-center rounded-full border border-zinc-700/80 bg-zinc-900/70 px-3 py-1 text-sm font-medium text-zinc-100 shadow-sm">
-                    <span className="mr-2 h-2 w-2 shrink-0 rounded-full bg-fuchsia-500 shadow-[0_0_12px_rgba(217,70,239,0.85)] animate-pulse" />
-                    <span className="truncate">{title}</span>
-                  </div>
-                  <div className="flex justify-center sm:justify-end sm:pl-2">
-                    <GrokImagePromptButton
-                      agents={grokChatMapping.agents}
-                      className="h-8 border-zinc-600 bg-zinc-900/80 text-xs text-zinc-100 hover:bg-zinc-800"
-                      focusAgentId={grokChatMapping.focusAgentId}
-                      messages={grokChatMapping.messages}
-                      prompterAgent={grokChatMapping.prompterAgent}
-                      sceneContext={grokSceneContext}
-                      story={grokStoryText}
-                    />
-                  </div>
-                </div>
-                <div className="flex-1 min-h-0">
+                <div className="mx-auto flex h-full max-h-full w-full max-w-4xl min-h-0 flex-col rounded-sm border border-white/70 bg-black/55 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-[2px] sm:px-5 sm:py-4">
                   <CustomChatWindow
+                    variant="visualNovel"
                     messages={chatMessages}
                     input={chatInput}
                     onInputChange={setChatInput}
@@ -1617,8 +1624,8 @@ export default function GamePage() {
                     sendIconAriaLabel="Send message"
                   />
                 </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+              </div>
+            </div>
             )}
           </div>
 

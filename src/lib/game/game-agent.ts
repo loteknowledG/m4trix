@@ -331,6 +331,7 @@ async function streamAgentReply({
     id: finalMessageId,
     from: "agent",
     text: assistantText,
+    name: npcName,
   };
 
   const finalText = appendBaseText
@@ -400,6 +401,7 @@ export function queueDemoReply({
       id: appendToMessageId || `bot-${Date.now()}`,
       from: "agent",
       text: demoText,
+      name: npcName,
     };
     setChatMessages((messages) =>
       appendToMessageId
@@ -460,12 +462,19 @@ export async function runConnectedChatTurn({
     : "Working on that request...";
 
   if (!appendToMessageId) {
+    const pendingNpcName =
+      requestBody.character &&
+      typeof requestBody.character === "object" &&
+      typeof (requestBody.character as { name?: string }).name === "string"
+        ? (requestBody.character as { name: string }).name
+        : "NPC";
     setChatMessages((messages) => [
       ...messages,
       {
         id: pendingId,
         from: "agent",
         text: waitingLabel,
+        name: pendingNpcName,
       },
     ]);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

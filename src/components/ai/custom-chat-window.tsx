@@ -63,6 +63,8 @@ interface CustomChatWindowProps {
   onPlayerModeChange?: (v: PlayerMode) => void;
   playerIdentityHint?: string;
   ttsProfile?: string;
+  /** Visual-novel overlay: dialogue sits on the scene instead of a side panel. */
+  variant?: 'default' | 'visualNovel';
 }
 
 export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
@@ -85,7 +87,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   onPlayerModeChange,
   playerIdentityHint,
   ttsProfile,
+  variant = 'default',
 }) => {
+  const isVn = variant === 'visualNovel';
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
@@ -299,48 +303,104 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   return (
     <div
       ref={outerRef}
-      className="grid h-full min-h-0 w-full grid-rows-[1fr_auto] border border-transparent"
+      className={cn(
+        'grid h-full min-h-0 w-full grid-rows-[1fr_auto]',
+        isVn ? 'border-0' : 'border border-transparent',
+      )}
     >
       <div
         ref={scrollRef}
-        className="overflow-y-auto bg-background/60 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
+        className={cn(
+          'overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent',
+          isVn ? 'bg-transparent' : 'bg-background/60 scrollbar-track-zinc-900',
+        )}
         style={{ maxHeight: '100%', scrollbarGutter: 'stable' }}
       >
-        <div className="p-6 space-y-6">
+        <div className={cn(isVn ? 'space-y-4 px-1 py-2 sm:px-2' : 'space-y-6 p-6')}>
           {messages.length === 0 ? (
-            <div className="text-center text-muted-foreground text-sm opacity-70 py-8">
+            <div
+              className={cn(
+                'text-center text-sm opacity-70',
+                isVn ? 'py-4 text-white/70' : 'py-8 text-muted-foreground',
+              )}
+            >
               No messages yet. Start the conversation!
             </div>
           ) : (
-            messages.map(msg => (
+            messages.map(msg => {
+              const speakerName =
+                msg.name?.trim() ||
+                (msg.from === 'user' ? 'You' : msg.id === 'story-opening' ? 'Story' : 'Narrator');
+
+              return (
               <div
                 key={msg.id}
-                className={`flex items-end ${
-                  msg.from === 'user' ? 'justify-end' : 'justify-start'
-                } gap-3 w-full`}
+                className={cn(
+                  'flex w-full gap-3',
+                  isVn
+                    ? 'items-start justify-start'
+                    : `items-end ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`,
+                )}
               >
                 <div
                   ref={(el) => {
                     bubbleRefs.current[msg.id] = el;
                   }}
-                  className={`px-4 py-3 text-sm whitespace-pre-line ${
-                    msg.id === 'story-opening'
-                      ? 'w-full rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-950/80 to-zinc-900/80 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_20px_45px_rgba(0,0,0,0.45)]'
-                      : isPendingAgentMessage(msg)
-                        ? 'mr-auto inline-flex max-w-[70%] items-center gap-2 rounded-2xl rounded-bl-none border border-zinc-700 bg-zinc-900/90 text-zinc-200 shadow'
-                      : msg.from === 'user'
-                        ? 'relative ml-auto inline-block max-w-[70%] text-right bg-violet-700 text-white border border-violet-500 rounded-2xl rounded-br-none shadow'
-                        : 'w-full mr-auto max-w-[calc(100%+20px)] -ml-5 text-left text-muted-foreground'
-                  }`}
+                  className={cn(
+                    'whitespace-pre-line text-sm',
+                    isVn
+                      ? cn(
+                          'w-full px-0 py-0',
+                          msg.id === 'story-opening'
+                            ? 'text-amber-50/95'
+                            : isPendingAgentMessage(msg)
+                              ? 'text-zinc-200'
+                              : msg.from === 'user'
+                                ? 'text-white/90'
+                                : 'text-white',
+                        )
+                      : cn(
+                          'px-4 py-3',
+                          msg.id === 'story-opening'
+                            ? 'w-full rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-950/80 to-zinc-900/80 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_20px_45px_rgba(0,0,0,0.45)]'
+                            : isPendingAgentMessage(msg)
+                              ? 'mr-auto inline-flex max-w-[70%] items-center gap-2 rounded-2xl rounded-bl-none border border-zinc-700 bg-zinc-900/90 text-zinc-200 shadow'
+                              : msg.from === 'user'
+                                ? 'relative ml-auto inline-block max-w-[70%] rounded-2xl rounded-br-none border border-violet-500 bg-violet-700 text-right text-white shadow'
+                                : 'mr-auto -ml-5 w-full max-w-[calc(100%+20px)] text-left text-muted-foreground',
+                        ),
+                  )}
                 >
+                  {isVn && msg.id !== 'story-opening' ? (
+                    <div
+                      className={cn(
+                        'mb-1 text-sm font-bold uppercase tracking-wide',
+                        msg.from === 'user' ? 'text-sky-300' : 'text-lime-400',
+                      )}
+                      style={{ textShadow: '0 1px 2px rgba(0,0,0,0.85)' }}
+                    >
+                      {speakerName}
+                    </div>
+                  ) : null}
                   {msg.id === 'story-opening' ? (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-amber-200/80">
-                        <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
+                      <div
+                        className={cn(
+                          'flex items-center gap-2 text-[11px] uppercase tracking-[0.22em]',
+                          isVn ? 'font-bold text-lime-400' : 'text-amber-200/80',
+                        )}
+                      >
+                        {!isVn ? (
+                          <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
+                        ) : null}
                         Story Opening
                       </div>
                       <div
-                        className="story-opening-html text-sm leading-6 text-amber-50/95 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_li]:mb-1 [&_strong]:font-semibold [&_em]:italic"
+                        className={cn(
+                          'story-opening-html text-sm leading-6 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:ml-5 [&_ul]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_li]:mb-1 [&_strong]:font-semibold [&_em]:italic',
+                          isVn ? 'text-white/95' : 'text-amber-50/95',
+                        )}
+                        style={isVn ? { textShadow: '0 1px 2px rgba(0,0,0,0.75)' } : undefined}
                         dangerouslySetInnerHTML={{ __html: msg.text }}
                       />
                       <div className="flex flex-wrap items-center gap-2">
@@ -357,8 +417,14 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     </div>
                   ) : isPendingAgentMessage(msg) ? (
                     <div className="flex items-center gap-3">
-                      <span className="text-zinc-300">{msg.text}</span>
-                      <span className="flex items-center gap-1.5 text-zinc-400" aria-label="Loading">
+                      <span className={isVn ? 'text-white/85' : 'text-zinc-300'}>{msg.text}</span>
+                      <span
+                        className={cn(
+                          'flex items-center gap-1.5',
+                          isVn ? 'text-white/60' : 'text-zinc-400',
+                        )}
+                        aria-label="Loading"
+                      >
                         <span
                           className="h-2 w-2 rounded-full bg-current animate-bounce"
                           style={{ animationDelay: '0ms', animationDuration: '1s' }}
@@ -388,7 +454,14 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                           className="w-full resize-none rounded-md border border-violet-500 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400"
                         />
                       ) : (
-                        <div>{msg.text}</div>
+                        <div
+                          className={cn(isVn && 'leading-relaxed')}
+                          style={
+                            isVn ? { textShadow: '0 1px 2px rgba(0,0,0,0.75)' } : undefined
+                          }
+                        >
+                          {msg.text}
+                        </div>
                       )}
                       {msg.from === 'agent' &&
                       msg.id !== 'story-opening' &&
@@ -415,7 +488,12 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={() => beginEdit(msg)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                                className={cn(
+                                  'inline-flex h-8 w-8 items-center justify-center rounded-md border',
+                                  isVn
+                                    ? 'border-white/25 bg-black/35 text-white/80 hover:bg-black/55 hover:text-white'
+                                    : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                                )}
                                 aria-label="Edit response"
                                 title="Edit response"
                               >
@@ -459,7 +537,12 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onContinueMessage?.(msg.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                                className={cn(
+                                  'inline-flex h-8 w-8 items-center justify-center rounded-md border',
+                                  isVn
+                                    ? 'border-white/25 bg-black/35 text-white/80 hover:bg-black/55 hover:text-white'
+                                    : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                                )}
                                 aria-label="Continue response"
                                 title="Continue response"
                               >
@@ -468,7 +551,12 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={() => beginSteer(msg)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                                className={cn(
+                                  'inline-flex h-8 w-8 items-center justify-center rounded-md border',
+                                  isVn
+                                    ? 'border-white/25 bg-black/35 text-white/80 hover:bg-black/55 hover:text-white'
+                                    : 'border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                                )}
                                 aria-label="Steer next response"
                                 title="Steer next response"
                               >
@@ -482,18 +570,32 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   )}
                 </div>
               </div>
-            ))
+            );
+            })
           )}
         </div>
       </div>
 
-      <div ref={footerRef} className="flex-none bg-zinc-950/90 border-t border-zinc-800 p-4">
+      <div
+        ref={footerRef}
+        className={cn(
+          'flex-none',
+          isVn ? 'border-t border-white/15 bg-transparent pt-3' : 'border-t border-zinc-800 bg-zinc-950/90 p-4',
+        )}
+      >
         <div className="space-y-2">
-          <div className="rounded-md border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+          <div
+            className={cn(
+              'overflow-hidden',
+              isVn
+                ? 'rounded-sm border border-white/20 bg-black/35'
+                : 'rounded-md border border-zinc-800 bg-zinc-900/60',
+            )}
+          >
             <textarea
               ref={textareaRef}
               className="w-full resize-none bg-transparent px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-0"
-              rows={2}
+              rows={isVn ? 1 : 2}
               value={input}
               onChange={e => onInputChange(e.target.value)}
               onKeyDown={e => {
@@ -506,14 +608,24 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
               placeholder="Type your message..."
             />
 
-              <div className="flex items-center justify-between gap-2 border-t border-zinc-800 p-2">
+              <div
+                className={cn(
+                  'flex items-center justify-between gap-2 p-2',
+                  isVn ? 'border-t border-white/10' : 'border-t border-zinc-800',
+                )}
+              >
                 <div className="flex items-center gap-2">
                 <ConnectionSheet
                   side="bottom"
                   triggerClassName="aspect-square h-10 w-10 min-h-10 min-w-10 max-h-10 max-w-10 shrink-0 gap-0 rounded-md p-0"
                 />
                 {connected && connectionModel ? (
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span
+                    className={cn(
+                      'text-xs font-medium',
+                      isVn ? 'text-white/70' : 'text-muted-foreground',
+                    )}
+                  >
                     {connectionModel}
                   </span>
                 ) : null}
@@ -537,6 +649,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     }}
                     aria-label={`Player mode: ${normalizePlayerMode(playerMode)}`}
                     title={`Player mode: ${normalizePlayerMode(playerMode)}`}
+                    className={isVn ? 'text-white/80 hover:text-white' : undefined}
                   >
                     {normalizePlayerMode(playerMode) === 'say' ? (
                       <GiNothingToSay className="h-4 w-4" />
