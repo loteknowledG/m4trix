@@ -1344,7 +1344,7 @@ export default function StoryPage() {
                     <div className="font-medium">No moments yet</div>
                   </div>
                   <div className="text-sm">
-                    Add moments from the heap, or drop images here.
+                    Add moments from the heap or drag animated gifs into this story.
                   </div>
                   <div className="mt-4 flex items-center justify-center gap-2">
                     <button
