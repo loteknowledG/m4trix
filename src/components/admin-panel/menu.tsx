@@ -271,7 +271,7 @@ export function Menu({ isOpen }: MenuProps) {
                             }))
                           : label === 'Games'
                           ? storiesList.map(s => ({
-                              href: `/games/new?game=${encodeURIComponent(s.id)}`,
+                              href: `/games/new/?game=${encodeURIComponent(s.id)}`,
                               label: s.title && s.title.trim() ? s.title : 'Untitled',
                               active:
                                 pathname?.startsWith('/games/') || !!searchParams?.get('game')
