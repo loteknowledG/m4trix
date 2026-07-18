@@ -7,6 +7,7 @@ import {
   checkForAppUpdate,
   dismissAppUpdate,
   fetchAppReleaseVersion,
+  getDesktopBridge,
   promptForAppUpdate,
   restartAppForUpdate,
   shouldPollForAppUpdates,
@@ -83,6 +84,22 @@ export function AppUpdatePrompt() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [checkForUpdate]);
+
+  useEffect(() => {
+    const desktop = getDesktopBridge();
+    if (!desktop) return;
+
+    // Only prompt once the installer payload is ready to apply.
+    const unsubscribeDownloaded = desktop.onUpdateDownloaded(info => {
+      if (info?.version) promptForAppUpdate(info.version, { force: true });
+    });
+
+    void desktop.checkForUpdates();
+
+    return () => {
+      unsubscribeDownloaded();
+    };
+  }, []);
 
   useEffect(() => {
     if (!shouldPollForAppUpdates()) return;

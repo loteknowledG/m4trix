@@ -4,9 +4,7 @@ import { del, get, keys, set } from "idb-keyval";
 import dynamic from "next/dynamic";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaBug } from "react-icons/fa";
-import { FaTags } from "react-icons/fa";
-import { FaBrain } from "react-icons/fa";
+import { FaBrain, FaBug, FaDesktop, FaTags } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
@@ -30,6 +28,8 @@ import {
   getConnectionItem,
   setConnectionItem,
 } from "@/lib/connection-storage";
+import { getDesktopBridge } from "@/lib/app-update-client";
+import { openDesktopInstallerDownload } from "@/lib/desktop-release";
 import {
   DEFAULT_LMSTUDIO_URL,
   normalizeLmstudioUrl,
@@ -145,6 +145,8 @@ export default function GamePage() {
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryDebugInfo, setMemoryDebugInfo] = useState("Samus-Manus memory loading disabled.");
   const memoryFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [desktopInstallBusy, setDesktopInstallBusy] = useState(false);
+  const [showDesktopInstall, setShowDesktopInstall] = useState(false);
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
@@ -444,6 +446,20 @@ export default function GamePage() {
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
     setPreviewSrc(typeof src === "string" ? src : undefined);
   }, [currentMoment]);
+
+  useEffect(() => {
+    setShowDesktopInstall(!getDesktopBridge());
+  }, []);
+
+  const handleInstallDesktop = useCallback(async () => {
+    if (desktopInstallBusy) return;
+    setDesktopInstallBusy(true);
+    try {
+      await openDesktopInstallerDownload();
+    } finally {
+      setDesktopInstallBusy(false);
+    }
+  }, [desktopInstallBusy]);
 
   useEffect(() => {
     if (!gameMomentKey) return;
@@ -1518,6 +1534,21 @@ export default function GamePage() {
             <FaBrain className="h-4 w-4" />
           </Pressable>
 
+          {showDesktopInstall ? (
+            <Pressable
+              type="button"
+              onClick={() => void handleInstallDesktop()}
+              disabled={desktopInstallBusy}
+              className="group fixed left-52 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg shadow-black/30 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Install desktop app"
+            >
+              <FaDesktop className="h-4 w-4" />
+              <span className="pointer-events-none absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
+                {desktopInstallBusy ? "Fetching installer…" : "Install desktop (auto-update)"}
+              </span>
+            </Pressable>
+          ) : null}
+
           <div className="relative h-full w-full bg-black">
             {!gameShellReady ? (
               <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-muted-foreground">
@@ -1580,7 +1611,7 @@ export default function GamePage() {
                 </div>
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4 pl-52">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4 pl-64">
                 <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] min-w-0 items-center rounded-full border border-white/20 bg-black/45 px-3 py-1 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
                   <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.85)]" />
                   <span className="truncate">{title}</span>

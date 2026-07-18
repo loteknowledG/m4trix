@@ -6,11 +6,26 @@ type AppVersionResponse = {
   version?: string;
 };
 
+export type M4trixDesktopBridge = {
+  isElectron: true;
+  getVersion: () => Promise<string>;
+  checkForUpdates: () => Promise<unknown>;
+  installUpdate: () => void;
+  onUpdateAvailable: (callback: (info: { version: string }) => void) => () => void;
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
+};
+
 export type AppUpdateCheckResult =
   | { status: "up-to-date"; running: string; latest: string }
   | { status: "update-available"; running: string; latest: string }
   | { status: "unavailable"; message?: string }
   | { status: "local-dev"; message: string };
+
+export function getDesktopBridge(): M4trixDesktopBridge | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as Window & { m4trixDesktop?: M4trixDesktopBridge }).m4trixDesktop;
+  return bridge?.isElectron ? bridge : null;
+}
 
 export async function fetchAppReleaseVersion(): Promise<string | null> {
   try {
@@ -98,6 +113,13 @@ export function promptForAppUpdate(version: string, options?: { force?: boolean 
 }
 
 export async function restartAppForUpdate(waitingWorker?: ServiceWorker | null) {
+  const desktop = getDesktopBridge();
+  if (desktop) {
+    clearDismissedAppUpdate();
+    desktop.installUpdate();
+    return;
+  }
+
   const latest = await fetchAppReleaseVersion();
   if (latest) {
     setStoredRunningVersion(latest);
@@ -116,6 +138,17 @@ export async function checkForAppUpdate(options?: {
   manual?: boolean;
 }): Promise<AppUpdateCheckResult> {
   const manual = options?.manual ?? false;
+  const desktop = getDesktopBridge();
+
+  if (desktop) {
+    if (manual) {
+      await desktop.checkForUpdates();
+    }
+    return {
+      status: "local-dev",
+      message: "Desktop updates are handled by electron-updater.",
+    };
+  }
 
   if (!manual && !shouldPollForAppUpdates()) {
     return {
@@ -155,6 +188,7 @@ export async function checkForAppUpdate(options?: {
 export function shouldPollForAppUpdates(): boolean {
   if (typeof window === "undefined") return false;
   if (process.env.NODE_ENV === "development") return false;
+  if (getDesktopBridge()) return false;
 
   const host = window.location.hostname;
   return host !== "localhost" && host !== "127.0.0.1";

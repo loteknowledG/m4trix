@@ -154,9 +154,19 @@ Run in development:
 
 - `pnpm run electron:dev` — starts the Next.js dev server and launches Electron.
 
-Build and run production:
+Build and run production (local Next server + Electron shell):
 
-- `pnpm run electron:prod` — builds the Next.js app and launches Electron.
+- `pnpm run electron:prod` — builds the Next.js app and launches Electron against `next start`.
+
+### Desktop installer + auto-update
+
+Packaged builds embed the Next.js standalone server and use `electron-updater` against GitHub Releases.
+
+- `pnpm electron:dist` — build Windows NSIS installer to `release/m4trix-Setup-<version>.exe` (no upload)
+- `pnpm electron:pack` — unpacked app only (`release/win-unpacked`) for local testing
+- `pnpm electron:publish` — build and publish to GitHub Releases (requires `GH_TOKEN`)
+
+Bump `version` in `package.json` before each release. Installed apps check GitHub Releases on launch and can apply updates without a manual reinstall.
 
 ## Demo & Source
 

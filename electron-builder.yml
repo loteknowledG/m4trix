@@ -1,0 +1,32 @@
+appId: com.loteknowledg.m4trix
+productName: m4trix
+copyright: Copyright © loteknowledG
+directories:
+  output: release
+  buildResources: electron/build
+files:
+  - electron/**/*
+  - package.json
+  - "!electron/build/**/*"
+  # electron-builder also packs production dependencies (electron-updater).
+extraResources:
+  - from: .next/standalone
+    to: next
+    filter:
+      - "**/*"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: m4trix
+  artifactName: ${productName}-Setup-${version}.${ext}
+publish:
+  provider: github
+  owner: loteknowledG
+  repo: m4trix
