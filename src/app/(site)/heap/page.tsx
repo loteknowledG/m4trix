@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToastProvider, useToast } from '@/components/ui/toast';
+import { createEmptyStory, storyEditorHref } from '@/lib/stories';
 
 // Local TextScramble removed (unused)
 
@@ -605,8 +606,10 @@ function HeapInner() {
                     setStorySheetOpen(false);
                     try {
                       const selected = moments.filter(g => (selectedIds || []).includes(g.id));
+                      // Same as stories FAB / New story with no moments selected yet.
                       if (selected.length === 0) {
-                        router.push('/stories');
+                        const meta = await createEmptyStory();
+                        router.push(storyEditorHref(meta.id));
                         return;
                       }
                       const id = `${Date.now()}-${Math.random()}`;
@@ -628,7 +631,7 @@ function HeapInner() {
                         /* ignore */
                       }
                       setMoments(prev => prev.filter(g => !(selectedIds || []).includes(g.id)));
-                      router.push(`/stories/new?story=${encodeURIComponent(id)}`);
+                      router.push(storyEditorHref(id));
                     } catch (err) {
                       logger.error('Failed to create story', err);
                       router.push('/stories');

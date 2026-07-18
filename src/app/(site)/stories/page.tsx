@@ -6,13 +6,12 @@ import { useEffect, useState } from 'react';
 import { del, get, set } from 'idb-keyval';
 import { logger } from '@/lib/logger';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
-import { Plus, Trash2 } from '@/components/icons';
+import { SquarePen, Trash2 } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
-type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
+import { createEmptyStory, storyEditorHref, type StoryMeta } from '@/lib/stories';
 
 export default function StoriesPage() {
   const router = useRouter();
@@ -34,21 +33,10 @@ export default function StoriesPage() {
     if (creating) return;
     setCreating(true);
     try {
-      const id = `${Date.now()}-${Math.random()}`;
-      await set(`story:${id}`, []);
-      const saved = (await get<StoryMeta[]>('stories')) || [];
-      const meta: StoryMeta = { id, count: 0, title: '' };
-      const nextStories = [meta, ...saved];
-      await set('stories', nextStories);
-      await set('stories-active', id);
-      setStories(nextStories);
-      setPreviews(prev => ({ ...prev, [id]: null }));
-      try {
-        window.dispatchEvent(new CustomEvent('stories-updated', { detail: { id } }));
-      } catch {
-        /* ignore */
-      }
-      router.push(`/stories/new/?story=${encodeURIComponent(id)}`);
+      const meta = await createEmptyStory();
+      setStories(prev => [meta, ...prev.filter(story => story.id !== meta.id)]);
+      setPreviews(prev => ({ ...prev, [meta.id]: null }));
+      router.push(storyEditorHref(meta.id));
     } catch (err) {
       logger.error('Failed to create story', err);
     } finally {
@@ -256,7 +244,7 @@ export default function StoriesPage() {
           aria-label="New story"
           title="New story"
         >
-          <Plus className="h-5 w-5" />
+          <SquarePen className="h-5 w-5" />
         </Button>
       </ContentLayout>
     </>
