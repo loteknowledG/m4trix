@@ -341,7 +341,7 @@ export async function POST(req: NextRequest) {
       });
 
       const providerController = new AbortController();
-      const timeoutMs = isLmstudio ? 90000 : 60000;
+      const timeoutMs = isLmstudio ? 180000 : 60000;
       const timeout = setTimeout(() => providerController.abort(), timeoutMs);
 
       const providerResponse = await fetch(providerConfig.url, {
