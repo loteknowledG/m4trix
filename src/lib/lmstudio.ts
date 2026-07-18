@@ -6,8 +6,16 @@ export const LMSTUDIO_HEALTH_API_PATH = '/api/lmstudio/health/';
 export const LMSTUDIO_HEALTH_TIMEOUT_MS = 12000;
 export const LMSTUDIO_CHAT_TIMEOUT_MS = 90000;
 
-export const LMSTUDIO_SECURE_CONTEXT_HINT =
-  'Browsers block https://m4trix.vercel.app from calling local http:// LM Studio. Open http://localhost:3000 (pnpm dev) or set an https:// tunnel URL for LM Studio.';
+export function getLmstudioHttpsPageHint(pageOrigin?: string): string {
+  const origin = pageOrigin || (typeof window !== 'undefined' ? window.location.origin : 'this HTTPS page');
+  return (
+    `Browsers block ${origin} from calling http:// LM Studio (mixed content). ` +
+    `Open http://localhost:3000 (pnpm dev) or set an https:// tunnel URL for LM Studio.`
+  );
+}
+
+/** @deprecated use getLmstudioHttpsPageHint() — kept for older call sites */
+export const LMSTUDIO_SECURE_CONTEXT_HINT = getLmstudioHttpsPageHint('https://m4trix.vercel.app');
 
 export function normalizeLmstudioUrl(input: string | null | undefined): string {
   const value = (input ?? '').trim();
@@ -30,37 +38,20 @@ export function getLmstudioHealthApiUrl(input: string | null | undefined): strin
   return `${LMSTUDIO_HEALTH_API_PATH}?lmstudio_url=${encodeURIComponent(normalizeLmstudioUrl(input))}`;
 }
 
-function isPrivateOrLocalHostname(hostname: string): boolean {
-  const host = hostname.trim().toLowerCase();
-  if (!host || host === 'localhost' || host.endsWith('.local')) return true;
-  if (host === '::1' || host === '0:0:0:0:0:0:0:1') return true;
-
-  const ipv4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (!ipv4) return false;
-  const a = Number(ipv4[1]);
-  const b = Number(ipv4[2]);
-  if (a === 10) return true;
-  if (a === 127) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  return false;
-}
-
 /**
- * Public HTTPS pages cannot call private/local HTTP servers (mixed content +
- * private-network access). Detect that before hanging on fetch.
+ * HTTPS pages cannot call http:// LM Studio (mixed content).
+ * http://localhost is a "secure context" but is NOT https — LAN HTTP works there.
  */
 export function getLmstudioBrowserReachabilityError(
   input: string | null | undefined,
 ): string | null {
   if (typeof window === 'undefined') return null;
-  if (!window.isSecureContext) return null;
+  if (window.location.protocol !== 'https:') return null;
 
   try {
     const url = new URL(normalizeLmstudioUrl(input));
     if (url.protocol !== 'http:') return null;
-    if (!isPrivateOrLocalHostname(url.hostname)) return null;
-    return LMSTUDIO_SECURE_CONTEXT_HINT;
+    return getLmstudioHttpsPageHint(window.location.origin);
   } catch {
     return null;
   }
