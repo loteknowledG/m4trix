@@ -1,7 +1,6 @@
 "use client"
 
 import { ContentEditable as LexicalContentEditable } from "@lexical/react/LexicalContentEditable"
-import type { ComponentProps, ReactNode } from "react"
 
 type ContentEditableProps = {
   className?: string

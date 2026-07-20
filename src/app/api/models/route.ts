@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server';
 import { getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const dynamic =
+  process.env.M4TRIX_BUILD_TARGET === 'desktop' ? 'force-dynamic' : 'force-static';
 
 // Hardcoded OpenCode endpoints.
 const ZEN_CHAT_URL = 'https://opencode.ai/zen/v1/chat/completions';
@@ -39,6 +40,18 @@ function deriveModelsUrlFromChatUrl(chatUrl: string | undefined): string | null 
 }
 
 export async function GET(req: NextRequest) {
+  // Pages static export prerender: avoid `request.url` / headers.
+  // Desktop standalone must not bake an empty list — models are fetched at runtime.
+  if (
+    process.env.NEXT_PHASE === 'phase-production-build' &&
+    process.env.M4TRIX_BUILD_TARGET !== 'desktop'
+  ) {
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Debug: Log incoming request and provider selection
   console.log('[API/models] Incoming request:', req.url);
 

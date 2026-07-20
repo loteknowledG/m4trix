@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>m4trix</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #09090b;
+        color: #e4e4e7;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      main {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 2rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        margin: 0;
+        color: #a1a1aa;
+        max-width: 36rem;
+        line-height: 1.5;
+      }
+      code {
+        color: #f0abfc;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <h1 id="title">Starting m4trix…</h1>
+        <p id="message">Booting local app server.</p>
+      </div>
+    </main>
+    <script>
+      window.__m4trixSetStatus = (title, message) => {
+        const titleEl = document.getElementById('title');
+        const messageEl = document.getElementById('message');
+        if (titleEl && typeof title === 'string') titleEl.textContent = title;
+        if (messageEl && typeof message === 'string') messageEl.textContent = message;
+      };
+    </script>
+  </body>
+</html>

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/breadcrumb';
 import JsonTree from '@/components/ui/json-tree';
 import { logger } from '@/lib/logger';
+import { materializeMomentList } from '@/lib/moments';
 
 type StoryBackupRecord = {
   id: string;
@@ -55,6 +56,24 @@ function normalizeStoryBackupRecord(meta: any, stored: any): StoryBackupRecord {
   }
 
   return merged;
+}
+
+async function embedMomentSources(items: any[]): Promise<any[]> {
+  if (!Array.isArray(items) || items.length === 0) return Array.isArray(items) ? items : [];
+  return materializeMomentList(items);
+}
+
+async function embedStorySources(stories: StoryBackupRecord[]): Promise<StoryBackupRecord[]> {
+  return Promise.all(
+    stories.map(async story => {
+      const items = await embedMomentSources(Array.isArray(story.items) ? story.items : []);
+      return {
+        ...story,
+        items,
+        count: story.count ?? items.length,
+      };
+    })
+  );
 }
 
 function sanitizeAndStringify(raw: string): string {
@@ -109,6 +128,14 @@ export default function BackupsPage() {
         })
       );
 
+      // Inline remote / proxied images so imported games keep their pictures.
+      setMessage('Embedding pictures into backup…');
+      const [heapEmbedded, trashEmbedded, storiesEmbedded] = await Promise.all([
+        embedMomentSources(Array.isArray(heap) ? heap : []),
+        embedMomentSources(Array.isArray(trash) ? trash : []),
+        embedStorySources(storiesWithItems),
+      ]);
+
       const agents = (await get('PLAYGROUND_AGENTS')) || [];
       const prompter = await get('PLAYGROUND_PROMPTER');
       const story = await get('PLAYGROUND_STORY');
@@ -116,9 +143,9 @@ export default function BackupsPage() {
       const selectedAgentId = await get('PLAYGROUND_SELECTED_AGENT_ID');
 
       const payload = {
-        heap,
-        trash,
-        stories: storiesWithItems,
+        heap: heapEmbedded,
+        trash: trashEmbedded,
+        stories: storiesEmbedded,
         agents,
         trashCharacters,
         prompter,
@@ -127,9 +154,9 @@ export default function BackupsPage() {
         selectedAgentId,
       };
       previewSummary = {
-        heapCount: Array.isArray(heap) ? heap.length : 0,
-        trashCount: Array.isArray(trash) ? trash.length : 0,
-        storiesCount: Array.isArray(savedStories) ? savedStories.length : 0,
+        heapCount: Array.isArray(heapEmbedded) ? heapEmbedded.length : 0,
+        trashCount: Array.isArray(trashEmbedded) ? trashEmbedded.length : 0,
+        storiesCount: Array.isArray(storiesEmbedded) ? storiesEmbedded.length : 0,
         charactersCount: Array.isArray(agents) ? agents.length : 0,
       };
       // collect any per-item overlay text saved in indexedDB
@@ -230,6 +257,8 @@ export default function BackupsPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      setMessage('Export complete');
+      setTimeout(() => setMessage(null), 4000);
     } catch (e) {
       logger.error('Export failed', e);
       try {
@@ -332,6 +361,12 @@ export default function BackupsPage() {
           setTimeout(() => setMessage(null), 4000);
           return;
         }
+
+        // Older backups may still reference /api/img or Google URLs — embed when possible.
+        setMessage('Restoring pictures…');
+        validated = await embedMomentSources(validated);
+        if (trashPayload) trashPayload = await embedMomentSources(trashPayload);
+        if (storiesPayload) storiesPayload = await embedStorySources(storiesPayload);
         // wipe existing IndexedDB data before restoring
         try {
           await clear();

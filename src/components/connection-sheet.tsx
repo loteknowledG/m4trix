@@ -27,6 +27,13 @@ import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
 
+const DEFAULT_PROVIDER_KEYS = {
+  zen: (process.env.NEXT_PUBLIC_ZEN_API_KEY || '').trim(),
+  google: (process.env.NEXT_PUBLIC_GOOGLE_API_KEY || '').trim(),
+  huggingface: (process.env.NEXT_PUBLIC_HF_API_KEY || '').trim(),
+  nvidia: (process.env.NEXT_PUBLIC_NVIDIA_API_KEY || '').trim(),
+} as const;
+
 export interface ConnectionSheetProps {
   /** Side to open the sheet from */
   side?: 'top' | 'bottom' | 'left' | 'right';
@@ -60,6 +67,36 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     Array<{ id: string; label: string; provider: Provider }>
   >([]);
 
+  const applyLmstudioModels = (rawModels: unknown[]) => {
+    const options = rawModels
+      .map((entry) => {
+        if (typeof entry === 'string') {
+          const id = entry.trim();
+          return id ? { id, label: id, provider: 'lmstudio' as Provider } : null;
+        }
+        if (!entry || typeof entry !== 'object') return null;
+        const row = entry as { id?: string; name?: string; label?: string; display_name?: string };
+        const id = (row.id || row.name || '').trim();
+        if (!id) return null;
+        const label = (row.label || row.display_name || row.name || id).trim() || id;
+        return { id, label, provider: 'lmstudio' as Provider };
+      })
+      .filter((m): m is { id: string; label: string; provider: Provider } => Boolean(m));
+
+    if (!options.length) return options;
+
+    setModelOptions((prev) => {
+      const filtered = prev.filter((p) => p.provider !== 'lmstudio');
+      return [...filtered, ...options];
+    });
+
+    setModel((current) => {
+      if (current && options.some((o) => o.id === current)) return current;
+      return options[0]!.id;
+    });
+
+    return options;
+  };
   const connected =
     zenConnected || googleConnected || hfConnected || nvidiaConnected || lmstudioConnected;
 
@@ -105,7 +142,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     try {
       const res = await fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`);
       const payload = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: string; modelCount?: number }
+        | { ok?: boolean; error?: string; modelCount?: number; models?: string[] }
         | null;
 
       if (!res.ok || !payload?.ok) {
@@ -116,9 +153,14 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
         return;
       }
 
+      const healthModels = Array.isArray(payload.models) ? payload.models : [];
+      if (healthModels.length) {
+        applyLmstudioModels(healthModels);
+      }
+
       setLmstudioHealth({
         state: 'healthy',
-        modelCount: payload.modelCount ?? 0,
+        modelCount: payload.modelCount ?? healthModels.length,
       });
     } catch (err) {
       setLmstudioHealth({
@@ -164,10 +206,13 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const storedZen = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey);
-    const storedGoogle = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey);
-    const storedHf = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey);
-    const storedNvidia = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey);
+    const storedZen = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) || DEFAULT_PROVIDER_KEYS.zen;
+    const storedGoogle =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) || DEFAULT_PROVIDER_KEYS.google;
+    const storedHf =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) || DEFAULT_PROVIDER_KEYS.huggingface;
+    const storedNvidia =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || DEFAULT_PROVIDER_KEYS.nvidia;
     const storedProvider = getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) as Provider | null;
     const storedModelProvider = getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) as Provider | null;
     const storedLmstudio = getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioConnected);
@@ -261,7 +306,6 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setConnectionError(null);
       setIsConnecting(true);
       try {
-        // Default to localhost for LM Studio URL
         const normalizedLmstudioUrl = normalizeLmstudioUrl(lmstudioUrl || DEFAULT_LMSTUDIO_URL);
         const res = await fetch(
           `/api/models?provider=lmstudio&lmstudio_url=${encodeURIComponent(
@@ -272,57 +316,56 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
           }
         );
         if (!res.ok) throw new Error('Failed to fetch LM Studio models');
-        const payload = (await res.json().catch(() => null)) as any;
-        // Debug: log the raw payload from the backend
-        setTimeout(() => {
-          // eslint-disable-next-line no-console
-          console.log('LM Studio raw payload:', payload);
-        }, 0);
-        // Explicitly handle LM Studio response structure
-        let rawModels: any[] = [];
+        const payload = (await res.json().catch(() => null)) as unknown;
+        let rawModels: unknown[] = [];
         if (Array.isArray(payload)) {
           rawModels = payload;
-        } else if (payload && Array.isArray(payload.data)) {
-          rawModels = payload.data;
-        } else if (payload && Array.isArray(payload.models)) {
-          rawModels = payload.models;
-        } else if (payload && payload.object === 'list' && Array.isArray(payload.data)) {
-          // LM Studio OpenAI-compatible response
-          rawModels = payload.data;
+        } else if (payload && typeof payload === 'object') {
+          const obj = payload as { data?: unknown[]; models?: unknown[]; object?: string };
+          if (Array.isArray(obj.data)) rawModels = obj.data;
+          else if (Array.isArray(obj.models)) rawModels = obj.models;
         }
-        const options: Array<{ id: string; label: string; provider: Provider }> = rawModels
-          .map((m: any) => {
+
+        let options: Array<{ id: string; label: string; provider: Provider }> = rawModels
+          .map((m: unknown) => {
+            if (!m || typeof m !== 'object') return null;
+            const row = m as { id?: string; model_id?: string; name?: string; display_name?: string };
             const id =
-              (typeof m?.id === 'string' && m.id) ||
-              (typeof m?.model_id === 'string' && m.model_id) ||
-              (typeof m?.name === 'string' && m.name);
+              (typeof row.id === 'string' && row.id) ||
+              (typeof row.model_id === 'string' && row.model_id) ||
+              (typeof row.name === 'string' && row.name);
             if (!id) return null;
             const label =
-              (typeof m?.display_name === 'string' && m.display_name) ||
-              (typeof m?.name === 'string' && m.name) ||
+              (typeof row.display_name === 'string' && row.display_name) ||
+              (typeof row.name === 'string' && row.name) ||
               id;
             return { id, label, provider };
           })
-          .filter((m: any): m is any => Boolean(m));
-        setModelOptions(prev => {
-          // Always remove old lmstudio models and add new ones
-          const filtered = prev.filter(p => p.provider !== 'lmstudio');
-          const combined = [
-            ...filtered,
-            ...options.map(o => ({ ...o, provider: 'lmstudio' as Provider })),
-          ];
-          // Debug: log the model options after update
-          setTimeout(() => {
-            // eslint-disable-next-line no-console
-            console.log('LM Studio modelOptions:', combined);
-          }, 0);
-          return combined;
-        });
-        if (options.length && (!model || activeProvider === provider)) {
-          setModel(options[0]!.id);
+          .filter((m): m is { id: string; label: string; provider: Provider } => Boolean(m));
+
+        // Desktop builds previously baked an empty /api/models response; fall back to health.
+        if (!options.length) {
+          const healthRes = await fetch(
+            `/api/lmstudio/health?lmstudio_url=${encodeURIComponent(normalizedLmstudioUrl)}`
+          );
+          const health = (await healthRes.json().catch(() => null)) as
+            | { ok?: boolean; models?: string[] }
+            | null;
+          if (health?.ok && Array.isArray(health.models) && health.models.length) {
+            options = applyLmstudioModels(health.models);
+          }
+        } else {
+          setModelOptions((prev) => {
+            const filtered = prev.filter((p) => p.provider !== 'lmstudio');
+            return [...filtered, ...options.map((o) => ({ ...o, provider: 'lmstudio' as Provider }))];
+          });
+          if (options.length && (!model || activeProvider === provider)) {
+            setModel(options[0]!.id);
+          }
         }
+
         toast.success(
-          `LM Studio connected — ${options.length} model${options.length > 1 ? 's' : ''} loaded`
+          `LM Studio connected — ${options.length} model${options.length === 1 ? '' : 's'} loaded`
         );
       } catch (e) {
         setConnectionError('Failed to connect to LM Studio');
@@ -507,7 +550,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
               </SheetTrigger>
             </div>
           </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
+          <TooltipContent sideOffset={6}>
             <p>{connected ? 'Connected' : 'Disconnected'}</p>
           </TooltipContent>
         </Tooltip>

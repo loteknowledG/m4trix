@@ -148,15 +148,20 @@ This setup makes the new UI behavior easy to share across pages and to migrate i
 
 ## Electron App
 
-This repository includes an Electron wrapper so the Next.js app can run as a desktop application. The Electron source is in the `electron/` folder.
+This repository includes an Electron desktop wrapper (`electron/`).
 
-Run in development:
+**Daily development** (keep using this):
 
-- `pnpm run electron:dev` — starts the Next.js dev server and launches Electron.
+- `pnpm dev` — Next.js at `http://localhost:3000`
+- `pnpm run electron:dev` — Next + Electron window against the compiler
 
-Build and run production:
+**Release desktop package** (no `pnpm dev` required at runtime):
 
-- `pnpm run electron:prod` — builds the Next.js app and launches Electron.
+- `pnpm desktop:pack` — unpacked app in `release/win-unpacked/`
+- `pnpm desktop:dist` — Windows installer `release/m4trix-Setup-<version>.exe`
+- Installer upgrades in place (same app id) — no need to uninstall first; local app data is kept
+
+The packaged app starts its own local Next server (API routes included) on `127.0.0.1:3210`.
 
 ## Demo & Source
 

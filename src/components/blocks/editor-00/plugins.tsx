@@ -23,6 +23,11 @@ export function Plugins() {
               </div>
             </div>
           }
+          placeholder={
+            <div className="pointer-events-none absolute left-4 top-3 text-sm text-zinc-500">
+              Start typing ...
+            </div>
+          }
           ErrorBoundary={LexicalErrorBoundary}
         />
         {/* editor plugins */}

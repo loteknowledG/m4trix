@@ -107,10 +107,15 @@ async function pollCoderoboAudioUrl(apiUrl: string, taskId: string, jwtToken: st
   throw new Error(`Timed out waiting for Coderobo TTS task ${taskId}`);
 }
 
+const DEFAULT_VOICE_PROFILE = 'jeeny-neural';
+
+export const dynamic = 'force-static';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const text = (body?.text || '').toString().trim();
+    const voiceProfile = (body?.profile || DEFAULT_VOICE_PROFILE).toString().trim();
 
     if (!text) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });

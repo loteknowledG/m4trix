@@ -317,7 +317,7 @@ export default function CharactersPage() {
                   </SheetTrigger>
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>
+              <TooltipContent sideOffset={6}>
                 <p>
                   {zenConnected || googleConnected || hfConnected || nvidiaConnected
                     ? 'Connected'
@@ -797,6 +797,7 @@ export default function CharactersPage() {
                 sendIcon={<Send className="h-4 w-4" />}
                 prompterMode={prompterMode}
                 onPrompterModeChange={v => setPrompterMode(v)}
+                ttsProfile="muthur"
               />
             </div>
             {error && (

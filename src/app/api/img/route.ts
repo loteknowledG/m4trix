@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const dynamic =
+  process.env.M4TRIX_BUILD_TARGET === "desktop" ? "force-dynamic" : "force-static";
 
 function isAllowedHost(urlStr: string): boolean {
   try {
@@ -19,6 +20,12 @@ function isAllowedHost(urlStr: string): boolean {
 
 export async function GET(req: NextRequest) {
   try {
+    if (
+      process.env.NEXT_PHASE === "phase-production-build" &&
+      process.env.M4TRIX_BUILD_TARGET !== "desktop"
+    ) {
+      return new Response(null, { status: 204 });
+    }
     const url = new URL(req.url);
     const target = url.searchParams.get("u");
     if (!target || !isAllowedHost(target)) {
@@ -29,7 +36,7 @@ export async function GET(req: NextRequest) {
       // Keep it simple; allow upstream to respond normally
       headers: {
         // Some CDNs behave differently with a UA present
-        "User-Agent": "MatrixApp/1.0 (+https://m4trix)"
+        "User-Agent": "MatrixApp/1.0 (+https://m4trix)",
       },
     });
 
@@ -46,7 +53,8 @@ export async function GET(req: NextRequest) {
         "Cache-Control": "public, max-age=3600",
       },
     });
-  } catch (err: any) {
-    return new Response(String(err?.message || err || "Proxy failed"), { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err || "Proxy failed");
+    return new Response(message, { status: 500 });
   }
 }

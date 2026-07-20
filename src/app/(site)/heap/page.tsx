@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToastProvider, useToast } from '@/components/ui/toast';
+import { isEphemeralMomentSrc, materializeMomentSrc } from '@/lib/moments';
 
 // Local TextScramble removed (unused)
 
@@ -42,6 +43,7 @@ function HeapInner() {
   const isImageLikeUrl = useCallback((u: string) => {
     if (!u) return false;
     const clean = u.trim();
+    if (clean.startsWith('/api/img?u=')) return true;
     const base = clean.split('?')[0];
     const hasExt = ['.gif', '.jpg', '.jpeg', '.png', '.webp'].some(ext =>
       base.toLowerCase().endsWith(ext)
@@ -256,13 +258,18 @@ function HeapInner() {
       const isDataMoment = u.startsWith('data:image/');
       const isMomentUrl = isImageLikeUrl(u);
       if (!isDataMoment && !isMomentUrl) return;
-      setMoments(s => {
-        if (s.some(x => x.src === u)) {
-          queueDuplicateToast(u);
-          return s;
-        }
-        return [{ id: `${Date.now()}-${Math.random()}`, src: u, name: u }, ...s];
-      });
+
+      void (async () => {
+        const durable = isEphemeralMomentSrc(u) ? await materializeMomentSrc(u) : u;
+        const finalSrc = durable || u;
+        setMoments(s => {
+          if (s.some(x => x.src === finalSrc || x.src === u)) {
+            queueDuplicateToast(finalSrc);
+            return s;
+          }
+          return [{ id: `${Date.now()}-${Math.random()}`, src: finalSrc, name: u }, ...s];
+        });
+      })();
     },
     [queueDuplicateToast, isImageLikeUrl]
   );

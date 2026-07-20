@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server';
 import { DEFAULT_LMSTUDIO_URL, getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const dynamic =
+  process.env.M4TRIX_BUILD_TARGET === 'desktop' ? 'force-dynamic' : 'force-static';
 
 type HealthPayload = {
   ok: boolean;
@@ -13,11 +14,38 @@ type HealthPayload = {
   error?: string;
 };
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const lmstudioUrl = normalizeLmstudioUrl(
-    searchParams.get('lmstudio_url') || DEFAULT_LMSTUDIO_URL
-  );
+function resolveBaseUrl(req?: NextRequest): string {
+  if (req) {
+    try {
+      const param = new URL(req.url).searchParams.get('lmstudio_url');
+      if (param) return normalizeLmstudioUrl(param);
+    } catch {
+      // fall through to default
+    }
+  }
+  return normalizeLmstudioUrl(DEFAULT_LMSTUDIO_URL);
+}
+
+export async function GET(req?: NextRequest) {
+  // Pages static export: avoid reading request.url during prerender.
+  if (
+    process.env.NEXT_PHASE === 'phase-production-build' &&
+    process.env.M4TRIX_BUILD_TARGET !== 'desktop'
+  ) {
+    const baseUrl = normalizeLmstudioUrl(DEFAULT_LMSTUDIO_URL);
+    const payload: HealthPayload = {
+      ok: false,
+      baseUrl,
+      modelsUrl: getLmstudioModelsUrl(baseUrl),
+      error: 'Health check unavailable during static export build',
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const lmstudioUrl = resolveBaseUrl(req);
   const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
 
   const controller = new AbortController();
@@ -49,13 +77,13 @@ export async function GET(req: NextRequest) {
       const rawModels = Array.isArray(json)
         ? json
         : Array.isArray(json?.data)
-        ? json.data
-        : Array.isArray(json?.models)
-        ? json.models
-        : [];
+          ? json.data
+          : Array.isArray(json?.models)
+            ? json.models
+            : [];
       modelIds = rawModels
-        .map((m: any) => m?.id || m?.model_id || m?.name)
-        .filter((id: any): id is string => typeof id === 'string' && id.trim().length > 0);
+        .map((m: { id?: string; model_id?: string; name?: string }) => m?.id || m?.model_id || m?.name)
+        .filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0);
     } catch {
       modelIds = [];
     }

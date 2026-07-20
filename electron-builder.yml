@@ -1,0 +1,62 @@
+# Electron Builder config for m4trix desktop release.
+# Daily development stays on `pnpm dev`. This is only for release packaging.
+
+appId: com.m4trix.app
+productName: m4trix
+copyright: Copyright © m4trix
+
+directories:
+  output: release
+  buildResources: electron/build
+
+files:
+  - from: electron
+    to: electron
+  - filter:
+      - package.json
+  - "!**/node_modules/**"
+
+extraMetadata:
+  name: m4trix
+  main: electron/main.js
+
+afterPack: scripts/electron-after-pack.js
+
+asar: true
+
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+nsis:
+  # Stable identity so each new installer upgrades in place (no manual uninstall).
+  # Keep this guid forever — changing it creates a separate app install.
+  guid: 6b3f2c8e-1a94-4d7b-9e2f-0c8a5b7d4e21
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  # Keep IndexedDB / local data across upgrades and uninstalls.
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: m4trix
+  uninstallDisplayName: m4trix
+  runAfterFinish: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+mac:
+  target:
+    - dmg
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+linux:
+  target:
+    - AppImage
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}

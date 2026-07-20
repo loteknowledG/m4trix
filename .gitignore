@@ -15,10 +15,14 @@
 
 # production
 /build
+/desktop-dist/
+/release/
 
 # misc
 .DS_Store
 *.pem
+__pycache__/
+*.pyc
 
 # debug
 npm-debug.log*
