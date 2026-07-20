@@ -24,6 +24,12 @@ import { FullscreenDialog } from "@/components/ui/full-screen-dialog";
 import { Pressable } from "@/components/ui/pressable";
 import { CarouselNavButton } from "@/components/ui/carousel";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   CONNECTION_STORAGE_KEYS,
   getConnectionItem,
   setConnectionItem,
@@ -1493,61 +1499,113 @@ export default function GamePage() {
         contentClassName="p-0"
       >
         <div className="relative h-full">
-          <Pressable
-            type="button"
-            onClick={() => setConfirmQuit(true)}
-            className="group fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
-            aria-label="Quit game"
-          >
-            <MdExitToApp className="h-5 w-5" />
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setConfirmQuit(true)}
+                  className="fixed left-4 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Quit game"
+                >
+                  <MdExitToApp className="h-5 w-5" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Quit game
+              </TooltipContent>
+            </Tooltip>
 
-            <span className="pointer-events-none absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
-              Quit game
-            </span>
-          </Pressable>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setDebugOpen(true)}
+                  className="fixed left-16 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Debug"
+                >
+                  <FaBug className="h-4 w-4" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Debug
+              </TooltipContent>
+            </Tooltip>
 
-          <Pressable
-            type="button"
-            onClick={() => setDebugOpen(true)}
-            className="fixed left-16 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
-            aria-label="Debug"
-          >
-            <FaBug className="h-4 w-4" />
-          </Pressable>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setTagDialogOpen(true)}
+                  className="fixed left-28 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Tag current moment"
+                  disabled={!currentMoment}
+                >
+                  <FaTags className="h-4 w-4" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Tag current moment
+              </TooltipContent>
+            </Tooltip>
 
-          <Pressable
-            type="button"
-            onClick={() => setTagDialogOpen(true)}
-            className="fixed left-28 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Tag current moment"
-            disabled={!currentMoment}
-          >
-            <FaTags className="h-4 w-4" />
-          </Pressable>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setMemoryDialogOpen(true)}
+                  className="fixed left-40 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Show memory"
+                >
+                  <FaBrain className="h-4 w-4" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Memory
+              </TooltipContent>
+            </Tooltip>
 
-          <Pressable
-            type="button"
-            onClick={() => setMemoryDialogOpen(true)}
-            className="fixed left-40 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
-            aria-label="Show memory"
-          >
-            <FaBrain className="h-4 w-4" />
-          </Pressable>
-
-          {showDesktopInstall ? (
-            <Pressable
-              type="button"
-              onClick={() => void handleInstallDesktop()}
-              disabled={desktopInstallBusy}
-              className="group fixed left-52 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg shadow-black/30 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Install desktop app"
-            >
-              <FaDesktop className="h-4 w-4" />
-              <span className="pointer-events-none absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
-                {desktopInstallBusy ? "Fetching installer…" : "Install desktop (auto-update)"}
-              </span>
-            </Pressable>
-          ) : null}
+            {showDesktopInstall ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pressable
+                    type="button"
+                    onClick={() => void handleInstallDesktop()}
+                    disabled={desktopInstallBusy}
+                    className="fixed left-52 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg shadow-black/30 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Install desktop app"
+                  >
+                    <FaDesktop className="h-4 w-4" />
+                  </Pressable>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={10}
+                  className="z-[60] border-0 bg-black/90 text-white"
+                >
+                  {desktopInstallBusy
+                    ? "Fetching installer…"
+                    : "Install desktop (auto-update)"}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </TooltipProvider>
 
           <div className="relative h-full w-full bg-black">
             {!gameShellReady ? (
