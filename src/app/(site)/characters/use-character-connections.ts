@@ -6,7 +6,11 @@ import {
   removeConnectionItem,
   setConnectionItem,
 } from '@/lib/connection-storage';
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import {
+  DEFAULT_LMSTUDIO_URL,
+  normalizeLmstudioUrl,
+  probeLmstudioHealth,
+} from '@/lib/lmstudio';
 
 export type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
 
@@ -225,22 +229,13 @@ export function useCharacterConnections({
 
     try {
       if (provider === 'lmstudio') {
-        const urlParam = encodeURIComponent(
-          normalizeLmstudioUrl(lmstudioUrlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL)
+        const targetUrl = normalizeLmstudioUrl(
+          lmstudioUrlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL
         );
-        const res = await fetch(`/api/models?provider=lmstudio&lmstudio_url=${urlParam}`);
-        if (!res.ok) throw new Error('Failed to fetch LM Studio models');
+        const result = await probeLmstudioHealth(targetUrl);
+        if (!result.ok) throw new Error(result.error || 'Failed to fetch LM Studio models');
 
-        const payload = (await res.json().catch(() => null)) as any;
-        const rawModels: any[] = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : Array.isArray(payload?.models)
-          ? payload.models
-          : [];
-
-        const options = mapModelOptions(rawModels, provider);
+        const options = mapModelOptions(result.models, provider);
         setModelOptions(prev => [...prev.filter(option => option.provider !== provider), ...options]);
         setLmstudioConnected(true);
         setActiveProvider('lmstudio');

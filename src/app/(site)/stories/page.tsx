@@ -1,19 +1,84 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { get } from 'idb-keyval';
+import { del, get, set } from 'idb-keyval';
 import { logger } from '@/lib/logger';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
+import { SquarePen, Trash2 } from '@/components/icons';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
-
-type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { createEmptyStory, storyEditorHref, type StoryMeta } from '@/lib/stories';
 
 export default function StoriesPage() {
+  const router = useRouter();
   const [stories, setStories] = useState<StoryMeta[]>([]);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
+  const [selectedStories, setSelectedStories] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const selectedStoryIds = Object.keys(selectedStories).filter(id => selectedStories[id]);
+
+  const toggleStorySelection = (storyId: string, selected: boolean) => {
+    setSelectedStories(prev => ({
+      ...prev,
+      [storyId]: selected,
+    }));
+  };
+
+  const createNewStory = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const meta = await createEmptyStory();
+      setStories(prev => [meta, ...prev.filter(story => story.id !== meta.id)]);
+      setPreviews(prev => ({ ...prev, [meta.id]: null }));
+      router.push(storyEditorHref(meta.id));
+    } catch (err) {
+      logger.error('Failed to create story', err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const moveSelectedToTrash = async () => {
+    if (selectedStoryIds.length === 0) return;
+
+    try {
+      const selectedSet = new Set(selectedStoryIds);
+      const remainingStories = stories.filter(story => !selectedSet.has(story.id));
+      const toTrash = stories.filter(story => selectedSet.has(story.id));
+      const existingTrash = (await get<StoryMeta[]>('trash-stories')) || [];
+
+      await set('stories', remainingStories);
+      await set('trash-stories', [...toTrash, ...existingTrash]);
+      await Promise.all(
+        selectedStoryIds.map(async id => {
+          const storyPayload = await get<any>(`story:${id}`);
+          if (storyPayload !== undefined) {
+            await set(`trash-story:${id}`, storyPayload);
+          }
+          await del(`story:${id}`);
+        })
+      );
+
+      setStories(remainingStories);
+      setSelectedStories({});
+      setPreviews(prev => {
+        const next = { ...prev };
+        selectedStoryIds.forEach(id => {
+          delete next[id];
+        });
+        return next;
+      });
+      window.dispatchEvent(new CustomEvent('stories-updated', { detail: {} }));
+    } catch (err) {
+      logger.error('Failed to move selected stories to trash', err);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -76,7 +141,30 @@ export default function StoriesPage() {
 
   return (
     <>
-      <ContentLayout title="Stories" navLeft={null}>
+      <ContentLayout
+        title="Stories"
+        navLeft={null}
+        navRight={
+          selectedStoryIds.length > 0 ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={moveSelectedToTrash}
+                    title="Move selected stories to trash"
+                    className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10}>
+                  <p>Move to Trash</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null
+        }
+      >
         <div
           className="overflow-auto"
           style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
@@ -86,14 +174,39 @@ export default function StoriesPage() {
               <div className="text-sm text-muted-foreground">Loading…</div>
             ) : stories.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                No stories yet. Create one from the heap.
+                No stories yet. Tap + to create one.
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {stories.map(s => (
-                  <Link key={s.id} href={`/stories/${s.id}`}>
-                    <Card className="overflow-hidden hover:shadow-2xl transition-shadow duration-150 transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 cursor-pointer">
-                      <div className="relative aspect-square">
+                  <Card
+                    key={s.id}
+                    className={`group relative overflow-hidden transition-shadow duration-150 transition-transform duration-150 ease-out hover:shadow-2xl hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 ${
+                      selectedStories[s.id] ? 'ring-2 ring-primary' : ''
+                    }`}
+                  >
+                    <div className="relative aspect-square">
+                      <label
+                        className={`absolute left-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-white/70 bg-black/45 transition-opacity ${
+                          selectedStories[s.id] ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 cursor-pointer accent-primary"
+                          checked={Boolean(selectedStories[s.id])}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => toggleStorySelection(s.id, e.target.checked)}
+                          aria-label={`Select ${s.title && s.title.trim() ? s.title : 'Untitled'}`}
+                        />
+                      </label>
+                      <Link
+                        href={`/stories/new/?story=${encodeURIComponent(s.id)}`}
+                        className="block h-full w-full"
+                      >
+                        <span className="sr-only">
+                          Open {s.title && s.title.trim() ? s.title : 'Untitled'}
+                        </span>
                         {previews[s.id] ? (
                           <img
                             src={previews[s.id] || undefined}
@@ -113,14 +226,26 @@ export default function StoriesPage() {
                             <div className="text-xs text-white">{s.count ?? 0}</div>
                           </div>
                         </div>
-                      </div>
-                    </Card>
-                  </Link>
+                      </Link>
+                    </div>
+                  </Card>
                 ))}
               </div>
             )}
           </div>
         </div>
+
+        <Button
+          onClick={() => void createNewStory()}
+          size="icon"
+          variant="default"
+          disabled={creating}
+          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
+          aria-label="New story"
+          title="New story"
+        >
+          <SquarePen className="h-5 w-5" />
+        </Button>
       </ContentLayout>
     </>
   );

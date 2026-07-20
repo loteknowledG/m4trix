@@ -16,7 +16,11 @@
 # production
 /build
 /desktop-dist/
-/release/
+/release
+/dist
+*.exe
+*.blockmap
+latest.yml
 
 # misc
 .DS_Store

@@ -9,11 +9,16 @@ export type PressableProps<T extends React.ElementType> = {
   className?: string;
 } & Omit<React.ComponentPropsWithoutRef<T>, 'className'>;
 
-export function Pressable<T extends React.ElementType = 'button'>({
-  as,
-  className,
-  ...props
-}: PressableProps<T>) {
+function PressableInner<T extends React.ElementType = 'button'>(
+  { as, className, ...props }: PressableProps<T>,
+  ref: React.ComponentPropsWithRef<T>['ref'],
+) {
   const Component = (as || 'button') as React.ElementType;
-  return <Component className={cn(pressableClass, className)} {...props} />;
+  return <Component ref={ref} className={cn(pressableClass, className)} {...props} />;
 }
+
+export const Pressable = React.forwardRef(PressableInner) as <
+  T extends React.ElementType = 'button',
+>(
+  props: PressableProps<T> & { ref?: React.ComponentPropsWithRef<T>['ref'] },
+) => React.ReactElement | null;

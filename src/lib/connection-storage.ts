@@ -15,7 +15,7 @@ export const CONNECTION_STORAGE_KEYS = {
 
 function getStores() {
   if (typeof window === 'undefined') return null;
-  return [window.localStorage, window.sessionStorage] as const;
+  return [window.sessionStorage, window.localStorage] as const;
 }
 
 export function getConnectionItem(key: string) {
@@ -24,26 +24,48 @@ export function getConnectionItem(key: string) {
 
   for (const store of stores) {
     const value = store.getItem(key);
-    if (value !== null) return value;
+    // Treat blank values as missing so session leftovers cannot shadow localStorage.
+    if (value !== null && value !== '') return value;
   }
 
   return null;
 }
 
+const PERSIST_KEYS: Record<string, true> = {
+  [CONNECTION_STORAGE_KEYS.activeModel]: true,
+  [CONNECTION_STORAGE_KEYS.activeModelProvider]: true,
+  [CONNECTION_STORAGE_KEYS.activeProvider]: true,
+  [CONNECTION_STORAGE_KEYS.googleKey]: true,
+  [CONNECTION_STORAGE_KEYS.hfKey]: true,
+  [CONNECTION_STORAGE_KEYS.lmstudioConnected]: true,
+  [CONNECTION_STORAGE_KEYS.lmstudioUrl]: true,
+  [CONNECTION_STORAGE_KEYS.nvidiaKey]: true,
+  [CONNECTION_STORAGE_KEYS.zenKey]: true,
+  [CONNECTION_STORAGE_KEYS.gameConnectionModel]: true,
+};
+
 export function setConnectionItem(key: string, value: string) {
   const stores = getStores();
   if (!stores) return;
 
-  for (const store of stores) {
-    store.setItem(key, value);
+  // Empty string means "clear" — don't leave a blank value that shadows localStorage.
+  if (!value) {
+    removeConnectionItem(key);
+    return;
+  }
+
+  const useLocal = PERSIST_KEYS[key] === true;
+  if (useLocal) {
+    window.localStorage.setItem(key, value);
+    window.sessionStorage.removeItem(key);
+  } else {
+    window.sessionStorage.setItem(key, value);
+    window.localStorage.removeItem(key);
   }
 }
 
 export function removeConnectionItem(key: string) {
-  const stores = getStores();
-  if (!stores) return;
-
-  for (const store of stores) {
-    store.removeItem(key);
-  }
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(key);
+  window.sessionStorage.removeItem(key);
 }

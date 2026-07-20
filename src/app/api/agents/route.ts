@@ -13,7 +13,6 @@ import {
 } from "@/lib/agents";
 
 export const runtime = "nodejs";
-export const dynamic = "force-static";
 
 const AGENT_MARKDOWN_DIR = path.join(process.cwd(), "agents");
 
@@ -96,6 +95,7 @@ async function streamOpenAiCompatibleResponse(response: Response) {
               const parsed = JSON.parse(data);
               const delta =
                 parsed?.choices?.[0]?.delta?.content ??
+                parsed?.choices?.[0]?.delta?.reasoning_content ??
                 parsed?.choices?.[0]?.message?.content ??
                 "";
 
@@ -177,9 +177,11 @@ export async function POST(req: NextRequest) {
     agents: agentsOverride,
     story,
     steer,
-    coordinatorAgent,
+    player,
     history,
-    coordinatorMode = "tell",
+    playerMode = "say",
+    npcKnowsPlayer,
+    currentTurnNpcKnewPlayer,
     orchestration = "auto",
     interactionMode = "neutral",
     stateless = false,
@@ -257,14 +259,70 @@ export async function POST(req: NextRequest) {
   const agentsToRun = isLmstudio ? agents.slice(0, 1) : agents;
   const debugRuns: NonNullable<AgentsResponse["debug"]>["runs"] = [];
 
+  // LM Studio lives on the user's LAN. Vercel (and other cloud hosts) cannot
+  // reach it, so prepare the OpenAI-compatible payload and let the browser call
+  // LM Studio directly (CORS is enabled on LM Studio's local server).
+  if (isLmstudio && agentsToRun.length === 1) {
+    try {
+      const requestDebug = buildProviderRequest(prompt, agentsToRun[0], {
+        model: providerConfig.model,
+        story,
+        steer,
+        player,
+        playerMode,
+        npcKnowsPlayer,
+        currentTurnNpcKnewPlayer,
+        interactionMode,
+        history: stateless ? undefined : history,
+        temperature: 0.7,
+      });
+
+      return Response.json({
+        clientProxy: true,
+        provider: "lmstudio",
+        url: providerConfig.url,
+        payload: {
+          ...requestDebug.providerPayload,
+          stream: Boolean(stream),
+        },
+        debug: {
+          provider: "lmstudio",
+          model: providerConfig.model,
+          runs: [
+            {
+              agentId: agentsToRun[0].id,
+              agentName: agentsToRun[0].name,
+              prompt,
+              systemPrompt: requestDebug.systemPrompt,
+              messages: requestDebug.apiMessages.map((message) => ({
+                role: message.role,
+                content:
+                  typeof message.content === "string"
+                    ? message.content
+                    : JSON.stringify(message.content),
+              })),
+            },
+          ],
+        },
+      });
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : "Failed to prepare LM Studio request" },
+        { status: 500 },
+      );
+    }
+  }
+
   if (stream && agentsToRun.length === 1) {
     try {
       const requestDebug = buildProviderRequest(prompt, agentsToRun[0], {
         model: providerConfig.model,
         story,
         steer,
-        coordinatorAgent,
-        coordinatorMode,
+        player,
+        playerMode,
+        npcKnowsPlayer,
+        currentTurnNpcKnewPlayer,
         interactionMode,
         history: stateless ? undefined : history,
         temperature: 0.7,
@@ -283,7 +341,7 @@ export async function POST(req: NextRequest) {
       });
 
       const providerController = new AbortController();
-      const timeoutMs = isLmstudio ? 90000 : 60000;
+      const timeoutMs = isLmstudio ? 180000 : 60000;
       const timeout = setTimeout(() => providerController.abort(), timeoutMs);
 
       const providerResponse = await fetch(providerConfig.url, {
@@ -332,8 +390,8 @@ export async function POST(req: NextRequest) {
       orchestration: orchestrationMode,
       stateless,
       story,
-      coordinatorAgent,
-      coordinatorMode,
+      player,
+      playerMode,
       interactionMode,
       history,
       callProvider: async (promptForAgent, agent, options) => {

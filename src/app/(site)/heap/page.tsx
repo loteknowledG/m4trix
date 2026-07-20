@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToastProvider, useToast } from '@/components/ui/toast';
 import { isEphemeralMomentSrc, materializeMomentSrc } from '@/lib/moments';
+import { createEmptyStory, storyEditorHref } from '@/lib/stories';
 
 // Local TextScramble removed (unused)
 
@@ -612,8 +613,10 @@ function HeapInner() {
                     setStorySheetOpen(false);
                     try {
                       const selected = moments.filter(g => (selectedIds || []).includes(g.id));
+                      // Same as stories FAB / New story with no moments selected yet.
                       if (selected.length === 0) {
-                        router.push('/stories');
+                        const meta = await createEmptyStory();
+                        router.push(storyEditorHref(meta.id));
                         return;
                       }
                       const id = `${Date.now()}-${Math.random()}`;
@@ -635,7 +638,7 @@ function HeapInner() {
                         /* ignore */
                       }
                       setMoments(prev => prev.filter(g => !(selectedIds || []).includes(g.id)));
-                      router.push(`/stories/${id}`);
+                      router.push(storyEditorHref(id));
                     } catch (err) {
                       logger.error('Failed to create story', err);
                       router.push('/stories');
@@ -662,7 +665,7 @@ function HeapInner() {
                           const selected = moments.filter(g => (selectedIds || []).includes(g.id));
                           if (selected.length === 0) {
                             // nothing to move, just navigate
-                            router.push(`/stories/${s.id}`);
+                            router.push(`/stories/new?story=${encodeURIComponent(s.id)}`);
                             return;
                           }
 
@@ -706,10 +709,10 @@ function HeapInner() {
                           }
                           // remove moved moments from heap
                           setMoments(prev => prev.filter(g => !(selectedIds || []).includes(g.id)));
-                          router.push(`/stories/${s.id}`);
+                          router.push(`/stories/new?story=${encodeURIComponent(s.id)}`);
                         } catch (err) {
                           logger.error('Failed to add to story', err);
-                          router.push(`/stories/${s.id}`);
+                          router.push(`/stories/new?story=${encodeURIComponent(s.id)}`);
                         }
                       }}
                       className="flex items-center gap-3 w-full p-3 rounded hover:bg-accent"

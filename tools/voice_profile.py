@@ -1,25 +1,18 @@
 #!/usr/bin/env python
-"""Voice profile helper for m4trix.
-
-This is the Samus-Manus voice-profile pattern, trimmed to the pieces we need
-here: a stable `jenny-neural` profile and a small CLI that can speak text.
-"""
+"""Voice-profile helper for m4trix."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
-
-import pyttsx3
-
 
 ROOT = Path(__file__).resolve().parents[1]
 VOICE_PROFILE_TIMEOUT_SEC = float(os.environ.get("VOICE_PROFILE_TIMEOUT_SEC", "120"))
@@ -50,7 +43,6 @@ PROFILES = {
         "label": "MUTHUR",
         "bootup_ai_name": "MUTHUR 6000",
         "bootup_voice": "en-US-AriaNeural",
-        # Base voice: calm Aria, slightly slowed + a touch lower (ship computer, not robot).
         "bootup_tts_rate": "-12%",
         "bootup_tts_pitch": "-5Hz",
         "bootup_tts_volume": "+0%",
@@ -70,254 +62,112 @@ ALIASES = {
     "mu-thur": "muthur",
     "muthur-6000": "muthur",
     "neural": "jenny-neural",
-    "muthur": "muthur",
 }
+
+_DEFAULT_MUTHUR_REVERB_AF = (
+    "highpass=f=120,equalizer=f=4200:width_type=h:width=2000:g=2,"
+    "lowpass=f=10000,aecho=0.92:0.88:34|58|82:0.1|0.07|0.05,"
+    "aecho=0.97:0.9:115:0.14,extrastereo=m=0.35,volume=0.95"
+)
 
 
 def resolve_profile(name: str) -> dict:
-    key = (name or "").strip().lower()
-    key = ALIASES.get(key, key)
+    key = ALIASES.get((name or "").strip().lower(), (name or "").strip().lower())
     if key not in PROFILES:
         raise KeyError(f"Unknown voice profile: {name}")
     return PROFILES[key]
 
 
-# MUTHUR "tuner" chain (ffmpeg -af): EQ + light metal-room taps + subtle relay delay.
-# Override with VOICE_PROFILE_REVERB_AF; set VOICE_PROFILE_REVERB=0 to disable.
-_DEFAULT_MUTHUR_REVERB_AF = (
-    "highpass=f=120,"
-    "equalizer=f=4200:width_type=h:width=2000:g=2,"
-    "lowpass=f=10000,"
-    "aecho=0.92:0.88:34|58|82:0.1|0.07|0.05,"
-    "aecho=0.97:0.9:115:0.14,"
-    "extrastereo=m=0.35,"
-    "volume=0.95"
-)
+def profile_env(profile: dict, rate: str | None = None, pitch: str | None = None,
+                volume: str | None = None) -> dict[str, str]:
+    return {
+        "BOOTUP_AI_NAME": profile["bootup_ai_name"],
+        "BOOTUP_VOICE": profile["bootup_voice"],
+        "BOOTUP_TTS_RATE": rate if rate not in (None, "") else profile["bootup_tts_rate"],
+        "BOOTUP_TTS_PITCH": pitch if pitch not in (None, "") else profile["bootup_tts_pitch"],
+        "BOOTUP_TTS_VOLUME": volume if volume not in (None, "") else profile["bootup_tts_volume"],
+    }
 
 
 def _wet_mp3_with_reverb(src_path: str) -> str | None:
-    """Return path to a new temp mp3 with reverb, or None if ffmpeg is missing or fails."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        return None
-    filt = os.environ.get("VOICE_PROFILE_REVERB_AF", _DEFAULT_MUTHUR_REVERB_AF).strip()
-    if not filt:
         return None
     fd, wet_path = tempfile.mkstemp(suffix=".mp3")
     os.close(fd)
     try:
-        r = subprocess.run(
-            [
-                ffmpeg,
-                "-nostdin",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                src_path,
-                "-af",
-                filt,
-                "-acodec",
-                "libmp3lame",
-                "-q:a",
-                "3",
-                wet_path,
-            ],
+        result = subprocess.run(
+            [ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src_path,
+             "-af", os.environ.get("VOICE_PROFILE_REVERB_AF", _DEFAULT_MUTHUR_REVERB_AF),
+             "-acodec", "libmp3lame", "-q:a", "3", wet_path],
             capture_output=True,
             timeout=int(VOICE_PROFILE_TIMEOUT_SEC),
         )
-        if r.returncode != 0:
-            try:
-                os.remove(wet_path)
-            except OSError:
-                pass
-            return None
-        return wet_path
+        if result.returncode == 0:
+            return wet_path
     except (OSError, subprocess.SubprocessError, ValueError):
-        try:
-            os.remove(wet_path)
-        except OSError:
-            pass
-        return None
+        pass
+    try:
+        os.remove(wet_path)
+    except OSError:
+        pass
+    return None
 
 
-def profile_env(
-    profile: dict,
-    rate: str | None = None,
-    pitch: str | None = None,
-    volume: str | None = None,
-) -> dict[str, str]:
-    env = {
-        "BOOTUP_AI_NAME": profile["bootup_ai_name"],
-        "BOOTUP_VOICE": profile["bootup_voice"],
-    }
-    default_rate = profile.get("bootup_tts_rate")
-    default_pitch = profile.get("bootup_tts_pitch")
-    default_volume = profile.get("bootup_tts_volume")
-
-    env["BOOTUP_TTS_RATE"] = rate if rate not in (None, "") else default_rate
-    env["BOOTUP_TTS_PITCH"] = pitch if pitch not in (None, "") else default_pitch
-    env["BOOTUP_TTS_VOLUME"] = volume if volume not in (None, "") else default_volume
-    return env
-
-
-async def _speak_cloud(
-    text: str,
-    voice: str,
-    rate: str | None,
-    pitch: str | None,
-    volume: str | None,
-    profile_key: str | None = None,
-) -> bool:
-    print("[VOICE] Loading TTS libraries...", flush=True)
+async def _render(text: str, voice: str, rate: str | None, pitch: str | None,
+                  volume: str | None, profile_key: str | None = None) -> bytes | None:
     try:
         import edge_tts
-        import pygame
     except Exception as exc:
         print(f"[VOICE] Missing audio dependency: {exc}", file=sys.stderr)
-        return False
-    print("[VOICE] TTS libraries loaded.", flush=True)
+        return None
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         out_path = tmp.name
-
     wet_path: str | None = None
     try:
         communicate = edge_tts.Communicate(
-            text,
-            voice,
-            rate=rate or "",
-            pitch=pitch or "",
-            volume=volume or "",
+            text, voice, rate=rate or "", pitch=pitch or "", volume=volume or ""
         )
-        print("[VOICE] Synthesizing speech...", flush=True)
         await asyncio.wait_for(communicate.save(out_path), timeout=VOICE_PROFILE_TIMEOUT_SEC)
-
-        try:
-            if sys.platform.startswith("win"):
-                ffmpeg = shutil.which("ffmpeg")
-                if ffmpeg:
-                    print("[VOICE] Playing via Windows sound API...", flush=True)
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as wav_tmp:
-                        wav_path = wav_tmp.name
-                    subprocess.run(
-                        [ffmpeg, "-y", "-loglevel", "quiet", "-i", out_path, wav_path],
-                        check=True,
-                    )
-                    import winsound
-
-                    winsound.PlaySound(wav_path, winsound.SND_FILENAME)
-                    try:
-                        os.remove(wav_path)
-                    except Exception:
-                        pass
-                else:
-                    print("[VOICE] Playing via pygame...", flush=True)
-                    pygame.mixer.init()
-                    pygame.mixer.music.load(out_path)
-                    pygame.mixer.music.play()
-                    started = time.monotonic()
-                    while pygame.mixer.music.get_busy():
-                        if time.monotonic() - started > VOICE_PROFILE_TIMEOUT_SEC:
-                            pygame.mixer.music.stop()
-                            raise TimeoutError("Playback timed out")
-                        pygame.time.Clock().tick(10)
-            else:
-                ffplay = shutil.which("ffplay")
-                if ffplay:
-                    print("[VOICE] Playing via ffplay...", flush=True)
-                    subprocess.run(
-                        [
-                            ffplay,
-                            "-nodisp",
-                            "-autoexit",
-                            "-loglevel",
-                            "quiet",
-                            out_path,
-                        ],
-                        check=True,
-                    )
-                else:
-                    print("[VOICE] Playing via pygame...", flush=True)
-                    pygame.mixer.init()
-                    pygame.mixer.music.load(out_path)
-                    pygame.mixer.music.play()
-                    started = time.monotonic()
-                    while pygame.mixer.music.get_busy():
-                        if time.monotonic() - started > VOICE_PROFILE_TIMEOUT_SEC:
-                            pygame.mixer.music.stop()
-                            raise TimeoutError("Playback timed out")
-                        pygame.time.Clock().tick(10)
-        except Exception as exc:
-            print(f"[VOICE] playback failed: {exc}; falling back to OS player", file=sys.stderr)
-            if sys.platform.startswith("win"):
-                os.startfile(out_path)  # type: ignore[attr-defined]
-            elif sys.platform.startswith("darwin"):
-                subprocess.Popen(["open", out_path])
-            else:
-                subprocess.Popen(["xdg-open", out_path])
-            time.sleep(2)
-        return True
-    finally:
-        try:
-            pygame.mixer.quit()  # type: ignore[name-defined]
-        except Exception:
-            pass
-        try:
-            os.remove(out_path)
-        except Exception:
-            pass
-        if wet_path:
-            try:
-                os.remove(wet_path)
-            except Exception:
-                pass
-
-
-def _speak_native(
-    text: str,
-    voice_name: str | None = None,
-    rate: str | None = None,
-    pitch: str | None = None,
-    volume: str | None = None,
-) -> bool:
-    try:
-        engine = pyttsx3.init()
+        play_path = out_path
+        reverb_enabled = os.environ.get("VOICE_PROFILE_REVERB", "1").lower() not in {
+            "0", "false", "no", "off"
+        }
+        if profile_key == "muthur" and reverb_enabled:
+            wet_path = _wet_mp3_with_reverb(out_path)
+            if wet_path:
+                play_path = wet_path
+        with open(play_path, "rb") as audio_file:
+            return audio_file.read()
     except Exception as exc:
-        print(f"[VOICE] Native speech init failed: {exc}", file=sys.stderr)
-        return False
+        print(f"[VOICE] Rendering failed: {exc}", file=sys.stderr)
+        return None
+    finally:
+        for candidate in (out_path, wet_path):
+            if candidate:
+                try:
+                    os.remove(candidate)
+                except OSError:
+                    pass
 
+
+def _speak_native(text: str, voice_name: str | None = None) -> bool:
     try:
-        if rate not in (None, ""):
-            try:
-                engine.setProperty("rate", int(str(rate).replace("%", "")))
-            except Exception:
-                pass
-        if volume not in (None, ""):
-            try:
-                engine.setProperty("volume", max(0.0, min(1.0, float(str(volume).replace("%", "")))))
-            except Exception:
-                pass
-
+        import pyttsx3
+        engine = pyttsx3.init()
         if voice_name:
             for voice in engine.getProperty("voices"):
-                voice_haystack = f"{voice.id} {getattr(voice, 'name', '')}".lower()
-                if voice_name.lower() in voice_haystack:
+                if voice_name.lower() in f"{voice.id} {getattr(voice, 'name', '')}".lower():
                     engine.setProperty("voice", voice.id)
                     break
-
         engine.say(text)
         engine.runAndWait()
+        engine.stop()
         return True
     except Exception as exc:
         print(f"[VOICE] Native speech failed: {exc}", file=sys.stderr)
         return False
-    finally:
-        try:
-            engine.stop()
-        except Exception:
-            pass
 
 
 def list_profiles() -> int:
@@ -328,150 +178,75 @@ def list_profiles() -> int:
 
 
 def show_profile(profile_name: str) -> int:
-    profile = resolve_profile(profile_name)
-    print(json.dumps(profile, indent=2))
+    print(json.dumps(resolve_profile(profile_name), indent=2))
     return 0
 
 
-def emit_profile(
-    profile_name: str,
-    shell: str,
-    rate: str | None = None,
-    pitch: str | None = None,
-    volume: str | None = None,
-) -> int:
-    profile = resolve_profile(profile_name)
-    env = profile_env(profile, rate=rate, pitch=pitch, volume=volume)
-
-    shell = (shell or "powershell").strip().lower()
-    if shell in ("ps1", "powershell", "pwsh"):
+def emit_profile(profile_name: str, shell: str, rate: str | None = None,
+                 pitch: str | None = None, volume: str | None = None) -> int:
+    env = profile_env(resolve_profile(profile_name), rate, pitch, volume)
+    if shell.lower() in ("ps1", "powershell", "pwsh"):
         for key, value in env.items():
             print(f"$Env:{key} = '{value}'")
-        return 0
-
-    if shell in ("bash", "sh"):
+    elif shell.lower() in ("bash", "sh"):
         for key, value in env.items():
             print(f"export {key}='{value}'")
-        return 0
-
-    if shell == "json":
+    elif shell.lower() == "json":
         print(json.dumps(env, indent=2))
-        return 0
-
-    raise SystemExit(f"Unsupported shell: {shell}")
-
-
-def speak_profile(
-    profile_name: str,
-    text: str,
-    rate: str | None = None,
-    pitch: str | None = None,
-    volume: str | None = None,
-) -> int:
-    profile = resolve_profile(profile_name)
-    env = profile_env(profile, rate=rate, pitch=pitch, volume=volume)
-    print(
-        f"[VOICE] Speaking with profile '{profile['profile']}' "
-        f"({profile['bootup_voice']}): {text}",
-        flush=True,
-    )
-    ok = _speak_native(
-        text,
-        voice_name="zira" if sys.platform.startswith("win") else None,
-        rate=env.get("BOOTUP_TTS_RATE"),
-        pitch=env.get("BOOTUP_TTS_PITCH"),
-        volume=env.get("BOOTUP_TTS_VOLUME"),
-    )
-    return 0 if ok else 1
-
-
-def cloud_worker_profile(
-    profile_name: str,
-    text: str,
-    rate: str | None = None,
-    pitch: str | None = None,
-    volume: str | None = None,
-) -> int:
-    profile = resolve_profile(profile_name)
-    env = profile_env(profile, rate=rate, pitch=pitch, volume=volume)
-    ok = asyncio.run(
-        _speak_cloud(
-            text,
-            env["BOOTUP_VOICE"],
-            env.get("BOOTUP_TTS_RATE"),
-            env.get("BOOTUP_TTS_PITCH"),
-            env.get("BOOTUP_TTS_VOLUME"),
-            profile_key=profile["profile"],
-        )
-    )
-    return 0 if ok else 1
-
-
-def current_profile() -> int:
-    env = {
-        "BOOTUP_AI_NAME": os.getenv("BOOTUP_AI_NAME", ""),
-        "BOOTUP_VOICE": os.getenv("BOOTUP_VOICE", ""),
-        "BOOTUP_TTS_RATE": os.getenv("BOOTUP_TTS_RATE", ""),
-        "BOOTUP_TTS_PITCH": os.getenv("BOOTUP_TTS_PITCH", ""),
-        "BOOTUP_TTS_VOLUME": os.getenv("BOOTUP_TTS_VOLUME", ""),
-    }
-    print(json.dumps(env, indent=2))
+    else:
+        raise ValueError(f"Unsupported shell: {shell}")
     return 0
+
+
+def render_profile(profile_name: str, text: str, rate: str | None = None,
+                   pitch: str | None = None, volume: str | None = None) -> int:
+    profile = resolve_profile(profile_name)
+    env = profile_env(profile, rate, pitch, volume)
+    audio = asyncio.run(_render(
+        text, env["BOOTUP_VOICE"], env["BOOTUP_TTS_RATE"], env["BOOTUP_TTS_PITCH"],
+        env["BOOTUP_TTS_VOLUME"], profile["profile"]
+    ))
+    if not audio:
+        return 1
+    print(base64.b64encode(audio).decode("ascii"))
+    return 0
+
+
+def speak_profile(profile_name: str, text: str, **_kwargs: str | None) -> int:
+    profile = resolve_profile(profile_name)
+    return 0 if _speak_native(text, "zira" if sys.platform.startswith("win") else None) else 1
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Voice profile helper for m4trix")
     sub = parser.add_subparsers(dest="cmd", required=True)
-
-    p = sub.add_parser("list", help="List known profiles")
-    p.set_defaults(func=lambda args: list_profiles())
-
-    p = sub.add_parser("show", help="Show a single profile as JSON")
-    p.add_argument("profile", help="Profile name or alias")
+    sub.add_parser("list").set_defaults(func=lambda args: list_profiles())
+    p = sub.add_parser("show")
+    p.add_argument("profile")
     p.set_defaults(func=lambda args: show_profile(args.profile))
-
-    p = sub.add_parser("emit", help="Emit env commands for a profile")
-    p.add_argument("profile", help="Profile name or alias")
-    p.add_argument("--shell", default="powershell", help="powershell, bash, or json")
-    p.add_argument("--rate", help="Optional TTS rate override")
-    p.add_argument("--pitch", help="Optional TTS pitch override")
-    p.add_argument("--volume", help="Optional TTS volume override")
-    p.set_defaults(
-        func=lambda args: emit_profile(args.profile, args.shell, args.rate, args.pitch, args.volume)
-    )
-
-    p = sub.add_parser("speak", help="Speak text using a profile")
-    p.add_argument("profile", help="Profile name or alias")
-    p.add_argument("--rate", help="Optional TTS rate override")
-    p.add_argument("--pitch", help="Optional TTS pitch override")
-    p.add_argument("--volume", help="Optional TTS volume override")
-    p.add_argument("text", nargs="+", help="Text to speak")
-    p.set_defaults(
-        func=lambda args: speak_profile(
-            args.profile, " ".join(args.text), args.rate, args.pitch, args.volume
-        )
-    )
-
-    p = sub.add_parser("current", help="Show the currently active env values")
-    p.set_defaults(func=lambda args: current_profile())
-
-    p = sub.add_parser("_cloud", help=argparse.SUPPRESS)
-    p.add_argument("profile", nargs="+", help=argparse.SUPPRESS)
-    p.add_argument("--rate", help=argparse.SUPPRESS)
-    p.add_argument("--pitch", help=argparse.SUPPRESS)
-    p.add_argument("--volume", help=argparse.SUPPRESS)
-    p.add_argument("text", nargs="+", help=argparse.SUPPRESS)
-    p.set_defaults(
-        func=lambda args: cloud_worker_profile(
-            " ".join(args.profile), " ".join(args.text), args.rate, args.pitch, args.volume
-        )
-    )
-
+    p = sub.add_parser("emit")
+    p.add_argument("profile")
+    p.add_argument("--shell", default="powershell")
+    p.add_argument("--rate")
+    p.add_argument("--pitch")
+    p.add_argument("--volume")
+    p.set_defaults(func=lambda args: emit_profile(args.profile, args.shell, args.rate, args.pitch, args.volume))
+    for command, handler in (("render", render_profile), ("speak", speak_profile)):
+        p = sub.add_parser(command)
+        p.add_argument("profile")
+        p.add_argument("--rate")
+        p.add_argument("--pitch")
+        p.add_argument("--volume")
+        p.add_argument("--text")
+        p.set_defaults(func=lambda args, h=handler: h(
+            args.profile, (args.text or "").strip() or sys.stdin.read().strip(),
+            rate=args.rate, pitch=args.pitch, volume=args.volume
+        ))
     args = parser.parse_args()
     try:
         return int(args.func(args))
-    except KeyError as e:
-        print(str(e), file=sys.stderr)
+    except (KeyError, ValueError) as error:
+        print(str(error), file=sys.stderr)
         return 1
 
 

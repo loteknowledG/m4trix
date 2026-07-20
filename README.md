@@ -163,6 +163,16 @@ This repository includes an Electron desktop wrapper (`electron/`).
 
 The packaged app starts its own local Next server (API routes included) on `127.0.0.1:3210`.
 
+### Desktop installer + auto-update
+
+Packaged builds embed the Next.js standalone server and use `electron-updater` against GitHub Releases.
+
+- `pnpm desktop:dist` (or `pnpm electron:dist`) — build a Windows NSIS installer to `release/m4trix-Setup-<version>.exe` (no upload)
+- `pnpm desktop:pack` (or `pnpm electron:pack`) — create an unpacked app for local testing
+- `pnpm electron:publish` — build and publish to GitHub Releases (requires `GH_TOKEN`)
+
+Bump `version` in `package.json` before each release. Installed apps check GitHub Releases on launch and can apply updates without a manual reinstall.
+
 ## Demo & Source
 
 - **Live Demo:** [m4trix on Vercel](https://m4trix.vercel.app/stories)

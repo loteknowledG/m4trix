@@ -31,6 +31,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 import { useAvatarCropper } from './use-avatar-cropper';
 import { useCharacterChat } from './use-character-chat';
 import { useCharacterConnections, type Provider } from './use-character-connections';
@@ -87,8 +88,8 @@ export default function CharactersPage() {
   const [showBackstory, setShowBackstory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [prompterAgent, setPrompterAgent] = useState<Agent | null>(null);
-  // Prompter mode controls how the prompter should frame user input for agents
-  const [prompterMode, setPrompterMode] = useState<'tell' | 'do' | 'think'>('tell');
+  // Player mode controls how the user input should be interpreted
+  const [playerMode, setPlayerMode] = useState<PlayerMode>('say');
   const [useCustomModel] = useState(false);
   const [customModelId, setCustomModelId] = useState('');
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -146,7 +147,7 @@ export default function CharactersPage() {
     modelOptions,
     nvidiaApiKey,
     prompterAgent,
-    prompterMode,
+    playerMode,
     setAgents,
     story,
     zenApiKey,
@@ -181,9 +182,11 @@ export default function CharactersPage() {
       }
       if (prompterVal) setPrompterAgent(prompterVal);
 
-      // restore persisted prompter mode (tell | do | think)
-      const prompterModeVal = await idbGet('PLAYGROUND_PROMPTER_MODE');
-      if (prompterModeVal) setPrompterMode(prompterModeVal as 'tell' | 'do' | 'think');
+      // restore persisted player mode (say | do | think)
+      const playerModeVal = await idbGet('PLAYGROUND_PLAYER_MODE');
+      if (playerModeVal) {
+        setPlayerMode(normalizePlayerMode(String(playerModeVal)) as PlayerMode);
+      }
 
       let storyVal = await idbGet('PLAYGROUND_STORY');
       if (!storyVal && typeof window !== 'undefined') {
@@ -224,10 +227,10 @@ export default function CharactersPage() {
         await idbSet('PLAYGROUND_PROMPTER', null);
       }
       await idbSet('PLAYGROUND_STORY', story);
-      // persist prompter UI mode
-      await idbSet('PLAYGROUND_PROMPTER_MODE', prompterMode);
+      // persist player UI mode
+      await idbSet('PLAYGROUND_PLAYER_MODE', playerMode);
     })();
-  }, [agents, prompterAgent, story, prompterMode]);
+  }, [agents, prompterAgent, story, playerMode]);
 
   const agentsById = useMemo(() => {
     return agents.reduce<Record<AgentId, Agent>>((acc, agent) => {
@@ -795,8 +798,8 @@ export default function CharactersPage() {
                 onSend={() => runDemo(prompt)}
                 disabled={isRunning}
                 sendIcon={<Send className="h-4 w-4" />}
-                prompterMode={prompterMode}
-                onPrompterModeChange={v => setPrompterMode(v)}
+                playerMode={playerMode}
+                onPlayerModeChange={v => setPlayerMode(v)}
                 ttsProfile="muthur"
               />
             </div>

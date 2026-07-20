@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { FaCompass } from 'react-icons/fa';
 import { FaArrowRight } from 'react-icons/fa6';
 import { FiVolume2, FiVolumeX } from 'react-icons/fi';
+import { GiThink, GiWeightLiftingUp, GiNothingToSay } from 'react-icons/gi';
 import { MdOutlineEditNote } from 'react-icons/md';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,15 +12,10 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { ConnectionSheet } from '@/components/connection-sheet';
 import { speakWithJennyVoice } from '@/lib/tts';
 import { cn } from '@/lib/utils';
+import { normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 
 /** Identical square footprint for chat footer voice + send (border-box). */
 const CHAT_FOOTER_ICON_BOX: React.CSSProperties = {
@@ -49,6 +45,7 @@ interface CustomChatWindowProps {
   input: string;
   onInputChange: (v: string) => void;
   onSend: () => void;
+  onStartNewGame?: () => void;
   onEditMessage?: (messageId: string, nextText: string) => void;
   onMessageEdited?: (messageId: string, nextText: string) => void;
   onSteerMessage?: (messageId: string, nextText: string) => void;
@@ -61,12 +58,15 @@ interface CustomChatWindowProps {
   // When provided, renders a connection icon + model label on the left side of the send row.
   connected?: boolean;
   connectionModel?: string | null;
-  // Optional compact prompter-mode selector (no visible label) rendered above the send control
-  prompterMode?: 'tell' | 'do' | 'think';
-  onPrompterModeChange?: (v: 'tell' | 'do' | 'think') => void;
+  // Optional compact player-mode selector (no visible label) rendered above the send control
+  playerMode?: PlayerMode;
+  onPlayerModeChange?: (v: PlayerMode) => void;
+  playerIdentityHint?: string;
   ttsProfile?: string;
   /** Visual-novel overlay: dialogue sits on the scene instead of a side panel. */
   variant?: 'default' | 'visualNovel';
+  prompterMode?: boolean;
+  onPrompterModeChange?: (enabled: boolean) => void;
 }
 
 export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
@@ -74,6 +74,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   input,
   onInputChange,
   onSend,
+  onStartNewGame,
   onEditMessage,
   onMessageEdited,
   onSteerMessage,
@@ -84,16 +85,13 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   sendIconAriaLabel,
   connected,
   connectionModel,
-  prompterMode,
-  onPrompterModeChange,
-  ttsProfile: _ttsProfile,
+  playerMode,
+  onPlayerModeChange,
+  playerIdentityHint,
+  ttsProfile,
   variant = 'default',
 }) => {
   const isVn = variant === 'visualNovel';
-  const speakText = async (text: string) => {
-    await speakWithJennyVoice(text);
-  };
-
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
@@ -103,20 +101,20 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const steerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [voiceEnabled, setVoiceEnabled] = React.useState(true);
-  const [storyDetailsOpen, setStoryDetailsOpen] = React.useState(false);
 
   const lastSpokenIdRef = useRef<string | null>(null);
   const speakTimerRef = useRef<number | null>(null);
   const speakSequenceRef = useRef(0);
   const wasInputDisabledRef = useRef(false);
-  const storyOpeningMessage = messages.find((msg) => msg.id === 'story-opening');
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
   const [editingText, setEditingText] = React.useState('');
   const [editingBubbleHeight, setEditingBubbleHeight] = React.useState<number | null>(null);
   const [steeringMessageId, setSteeringMessageId] = React.useState<string | null>(null);
   const [steeringText, setSteeringText] = React.useState('');
   const isPendingAgentMessage = (msg: CustomChatMessage) =>
-    msg.id.startsWith('pending-') || /^Working on that request\b/i.test(msg.text.trim());
+    msg.id.startsWith('pending-') ||
+    /^Working on that request\b/i.test(msg.text.trim()) ||
+    /^Waiting for LM Studio\b/i.test(msg.text.trim());
   const latestAgentMessage = [...messages]
     .reverse()
     .find((msg) => msg.from === 'agent' && msg.id !== 'story-opening' && !isPendingAgentMessage(msg));
@@ -130,6 +128,36 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     const container = document.createElement('div');
     container.innerHTML = raw;
     return (container.textContent || '').replace(/\u00a0/g, ' ').trim();
+  };
+
+  const speakMuthurInBrowser = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+    if (!text.trim()) return false;
+
+    try {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = synth.getVoices();
+
+      const preferredVoice = voices.find(v => {
+        const name = v.name.toLowerCase();
+        return name.includes('aria');
+      });
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+      // Align with server MUTHUR profile: slightly slower, slightly lower (not heavy robot).
+      utterance.rate = 0.88;
+      utterance.pitch = 0.88;
+      utterance.volume = 1;
+
+      synth.cancel();
+      synth.speak(utterance);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   // keep list scrolled to bottom when messages change
@@ -151,8 +179,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     const latest = latestAgentMessage;
     if (!latest) return;
     if (latest.id === lastSpokenIdRef.current) return;
+    if (latest.id === 'story-opening') return;
     if (latest.id.startsWith('pending-') || latest.id.startsWith('streaming-')) return;
     if (/^Working on that request\b/i.test(latest.text.trim())) return;
+    if (/^Waiting for LM Studio\b/i.test(latest.text.trim())) return;
 
     const sequence = ++speakSequenceRef.current;
     speakTimerRef.current = window.setTimeout(() => {
@@ -167,7 +197,10 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
       if (!speechText) return;
 
       lastSpokenIdRef.current = currentLatest.id;
-      void speakText(speechText);
+      if ((ttsProfile || '').toLowerCase() === 'muthur' && speakMuthurInBrowser(speechText)) {
+        return;
+      }
+      void speakWithJennyVoice(speechText);
     }, 350);
 
     return () => {
@@ -176,7 +209,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
         speakTimerRef.current = null;
       }
     };
-  }, [latestAgentMessage?.id, latestAgentMessage?.text, messages, voiceEnabled]);
+  }, [latestAgentMessage?.id, latestAgentMessage?.text, messages, ttsProfile, voiceEnabled]);
 
   useEffect(() => {
     if (voiceEnabled || typeof window === 'undefined') return;
@@ -377,15 +410,17 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                         style={isVn ? { textShadow: '0 1px 2px rgba(0,0,0,0.75)' } : undefined}
                         dangerouslySetInnerHTML={{ __html: msg.text }}
                       />
-                      {msg.details?.length ? (
-                        <button
-                          type="button"
-                          onClick={() => setStoryDetailsOpen(true)}
-                          className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-100 transition-colors hover:bg-amber-400/20"
-                        >
-                          Story details
-                        </button>
-                      ) : null}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {onStartNewGame ? (
+                          <button
+                            type="button"
+                            onClick={onStartNewGame}
+                            className="inline-flex items-center rounded-full border border-fuchsia-400/40 bg-fuchsia-500/15 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-fuchsia-100 transition-colors hover:bg-fuchsia-500/25"
+                          >
+                            Start New
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : isPendingAgentMessage(msg) ? (
                     <div className="flex items-center gap-3">
@@ -548,24 +583,6 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
         </div>
       </div>
 
-      <Dialog open={storyDetailsOpen} onOpenChange={setStoryDetailsOpen}>
-        <DialogContent className="max-w-xl border-amber-500/30 bg-zinc-950 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_30px_80px_rgba(0,0,0,0.7)]">
-          <DialogHeader className="text-left">
-            <DialogTitle className="flex items-center gap-2 text-amber-100">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
-              Story details
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 rounded-2xl border border-amber-500/15 bg-black/20 p-4 text-sm text-amber-100/90">
-            {storyOpeningMessage?.details?.map(detail => (
-              <div key={detail} className="leading-6">
-                {detail}
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <div
         ref={footerRef}
         className={cn(
@@ -634,24 +651,35 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                   </span>
                 ) : null}
 
-                {prompterMode !== undefined && onPrompterModeChange && (
-                  <div>
-                    <Select
-                      value={prompterMode}
-                      onValueChange={(v: string) =>
-                        onPrompterModeChange(v as 'tell' | 'do' | 'think')
-                      }
-                    >
-                      <SelectTrigger aria-label="Prompter mode" className="h-7 w-20 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tell">Tell</SelectItem>
-                        <SelectItem value="do">Do</SelectItem>
-                        <SelectItem value="think">Think</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {playerIdentityHint ? (
+                  <span
+                    className="rounded-full border border-zinc-700/80 bg-zinc-900/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-zinc-400"
+                    title="How the NPC labels you in memory"
+                  >
+                    {playerIdentityHint}
+                  </span>
+                ) : null}
+
+                {playerMode !== undefined && onPlayerModeChange && (
+                  <button
+                    onClick={() => {
+                      const currentMode = normalizePlayerMode(playerMode);
+                      const modes: PlayerMode[] = ['say', 'do', 'think'];
+                      const next = modes[(modes.indexOf(currentMode) + 1) % modes.length];
+                      onPlayerModeChange(next);
+                    }}
+                    aria-label={`Player mode: ${normalizePlayerMode(playerMode)}`}
+                    title={`Player mode: ${normalizePlayerMode(playerMode)}`}
+                    className={isVn ? 'text-white/80 hover:text-white' : undefined}
+                  >
+                    {normalizePlayerMode(playerMode) === 'say' ? (
+                      <GiNothingToSay className="h-4 w-4" />
+                    ) : normalizePlayerMode(playerMode) === 'do' ? (
+                      <GiWeightLiftingUp className="h-4 w-4" />
+                    ) : (
+                      <GiThink className="h-4 w-4" />
+                    )}
+                  </button>
                 )}
                 </div>
 

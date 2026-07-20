@@ -1,3 +1,5 @@
+import { spawn } from 'child_process';
+import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 
 const DEFAULT_CODEROBO_API_URL = 'https://tts-api.coderobo.org';
@@ -8,7 +10,12 @@ const DEFAULT_VOICE = 'JennyNeural';
 const REQUEST_TIMEOUT_MS = 120_000;
 
 function getCoderoboApiUrl() {
-  return (process.env.CODEROBO_TTS_API_URL || DEFAULT_CODEROBO_API_URL).replace(/\/$/, '');
+  const raw = (process.env.CODEROBO_TTS_API_URL || DEFAULT_CODEROBO_API_URL).trim();
+  try {
+    return new URL(raw).origin.replace(/\/$/, '');
+  } catch {
+    return raw.replace(/\/$/, '');
+  }
 }
 
 function getCoderoboJwt() {
@@ -18,14 +25,13 @@ function getCoderoboJwt() {
 function getClientIp(request: NextRequest) {
   const forwardedFor = request.headers.get('x-forwarded-for') || '';
   const realIp = request.headers.get('x-real-ip') || '';
-  const ip = forwardedFor.split(',')[0]?.trim() || realIp.trim();
-  return ip || 'unknown';
+  return forwardedFor.split(',')[0]?.trim() || realIp.trim() || 'unknown';
 }
 
 async function readJson(response: Response) {
   const text = await response.text();
   try {
-    return JSON.parse(text) as any;
+    return JSON.parse(text) as Record<string, unknown>;
   } catch {
     return { detail: text || 'Invalid JSON response' };
   }
@@ -39,136 +45,132 @@ function normalizeAudioUrl(apiUrl: string, audioUrl: string) {
 
 async function pollCoderoboAudioUrl(apiUrl: string, taskId: string, jwtToken: string) {
   const startedAt = Date.now();
-  let status: string | null = null;
-
   while (Date.now() - startedAt < REQUEST_TIMEOUT_MS) {
     const taskResponse = await fetch(`${apiUrl}/task-status/${taskId}`, {
-      headers: {
-        Authorization: `Bearer ${jwtToken}`,
-      },
+      headers: { Authorization: `Bearer ${jwtToken}` },
       cache: 'no-store',
     });
-
     if (!taskResponse.ok) {
       if (taskResponse.status === 429) {
         await new Promise((resolve) => setTimeout(resolve, 4000));
         continue;
       }
-      const taskError = await readJson(taskResponse);
-      throw new Error(taskError.detail || `Task status request failed with status ${taskResponse.status}`);
+      const error = await readJson(taskResponse);
+      throw new Error(String(error.detail || `Task status request failed with status ${taskResponse.status}`));
     }
-
-    const taskData = await readJson(taskResponse);
-    status = taskData.status ?? null;
-
+    const task = await readJson(taskResponse);
+    const status = typeof task.status === 'string' ? task.status : null;
     if (status === 'completed') {
       const statusResponse = await fetch(`${apiUrl}/status/${taskId}`, {
-        headers: {
-          Authorization: `Bearer ${jwtToken}`,
-        },
+        headers: { Authorization: `Bearer ${jwtToken}` },
         cache: 'no-store',
       });
-
       if (!statusResponse.ok) {
-        const statusError = await readJson(statusResponse);
-        throw new Error(
-          statusError.detail || `Status request failed with status ${statusResponse.status}`,
-        );
+        const error = await readJson(statusResponse);
+        throw new Error(String(error.detail || `Status request failed with status ${statusResponse.status}`));
       }
-
-      const statusData = await readJson(statusResponse);
-      const audioUrl = normalizeAudioUrl(apiUrl, statusData.audio_url || '');
-      if (!audioUrl) {
-        throw new Error('Task completed but no audio URL was returned');
-      }
+      const data = await readJson(statusResponse);
+      const audioUrl = normalizeAudioUrl(apiUrl, String(data.audio_url || ''));
+      if (!audioUrl) throw new Error('Task completed but no audio URL was returned');
       return audioUrl;
     }
-
     if (status === 'failed' || status === 'cancelled' || status === 'expired') {
-      const statusResponse = await fetch(`${apiUrl}/status/${taskId}`, {
-        headers: {
-          Authorization: `Bearer ${jwtToken}`,
-        },
-        cache: 'no-store',
-      });
-
-      if (statusResponse.ok) {
-        const statusData = await readJson(statusResponse);
-        throw new Error(statusData.message || `Task ${status}`);
-      }
-
       throw new Error(`Task ${status}`);
     }
-
-    const delay = status === 'queued' ? 4000 : 2000;
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await new Promise((resolve) => setTimeout(resolve, status === 'queued' ? 4000 : 2000));
   }
-
   throw new Error(`Timed out waiting for Coderobo TTS task ${taskId}`);
 }
 
-const DEFAULT_VOICE_PROFILE = 'jeeny-neural';
-
-export const dynamic = 'force-static';
+function spawnVoiceProfileRender(profile: string, text: string) {
+  const runner = process.platform === 'win32' ? 'py' : 'python3';
+  const scriptPath = path.join(process.cwd(), 'tools', 'voice_profile.py');
+  return new Promise<{ ok: boolean; audioBase64?: string; error?: string }>((resolve) => {
+    const child = spawn(runner, [scriptPath, 'render', profile], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => resolve({ ok: false, error: error.message }));
+    child.on('close', (code) => {
+      const audioBase64 = stdout.trim();
+      resolve(
+        code === 0 && audioBase64
+          ? { ok: true, audioBase64 }
+          : { ok: false, error: stderr.trim() || `exit ${code ?? 'unknown'}` },
+      );
+    });
+    child.stdin.write(text);
+    child.stdin.end();
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const text = (body?.text || '').toString().trim();
-    const voiceProfile = (body?.profile || DEFAULT_VOICE_PROFILE).toString().trim();
+    const text = String(body?.text || '').trim();
+    const profile = String(body?.profile || '').trim().toLowerCase();
+    if (!text) return NextResponse.json({ error: 'Missing text' }, { status: 400 });
 
-    if (!text) {
-      return NextResponse.json({ error: 'Missing text' }, { status: 400 });
+    if (profile === 'muthur' || profile === 'jenny-neural' || profile === 'jenny') {
+      const voiceProfile = profile === 'jenny' ? 'jenny-neural' : profile;
+      const result = await spawnVoiceProfileRender(voiceProfile, text);
+      if (!result.ok || !result.audioBase64) {
+        return NextResponse.json(
+          { ok: false, error: 'VOICE_PROFILE_FAILED', detail: result.error || 'No audio returned' },
+          { status: 200 },
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        provider: 'voice-profile',
+        profile: voiceProfile,
+        audioBase64: result.audioBase64,
+        contentType: 'audio/mpeg',
+      });
     }
 
     const apiUrl = getCoderoboApiUrl();
     const jwtToken = getCoderoboJwt();
-    const language = (body?.language || DEFAULT_LANGUAGE).toString().trim() || DEFAULT_LANGUAGE;
-    const voice = (body?.voice || DEFAULT_VOICE).toString().trim() || DEFAULT_VOICE;
-    const rate = (body?.rate ?? '0').toString();
-    const pitch = (body?.pitch ?? '0').toString();
-    const userIp = (body?.user_ip || getClientIp(request)).toString().trim() || 'unknown';
-
     const formData = new FormData();
     formData.append('text', text);
-    formData.append('language', language);
-    formData.append('voice', voice);
-    formData.append('rate', rate);
-    formData.append('pitch', pitch);
-    formData.append('user_ip', userIp);
+    formData.append('language', String(body?.language || DEFAULT_LANGUAGE).trim() || DEFAULT_LANGUAGE);
+    formData.append('voice', String(body?.voice || DEFAULT_VOICE).trim() || DEFAULT_VOICE);
+    formData.append('rate', String(body?.rate ?? '0'));
+    formData.append('pitch', String(body?.pitch ?? '0'));
+    formData.append('user_ip', String(body?.user_ip || getClientIp(request)).trim() || 'unknown');
 
-    const submitResponse = await fetch(`${apiUrl}/tts`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwtToken}`,
-      },
-      body: formData,
-      cache: 'no-store',
-    });
-
-    if (!submitResponse.ok) {
-      const submitError = await readJson(submitResponse);
-      throw new Error(submitError.detail || `TTS request failed with status ${submitResponse.status}`);
+    const candidateApiUrls = Array.from(new Set([apiUrl, DEFAULT_CODEROBO_API_URL]));
+    let submitData: Record<string, unknown> | null = null;
+    let submitErrorMessage = '';
+    let selectedApiUrl = apiUrl;
+    for (const candidateApiUrl of candidateApiUrls) {
+      const response = await fetch(`${candidateApiUrl}/tts`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${jwtToken}` },
+        body: formData,
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        submitData = await readJson(response);
+        selectedApiUrl = candidateApiUrl;
+        break;
+      }
+      const error = await readJson(response);
+      submitErrorMessage = String(error.detail || error.error || `TTS request failed with status ${response.status}`);
     }
-
-    const submitData = await readJson(submitResponse);
-    const taskId = submitData.task_id;
-    if (!taskId) {
-      throw new Error('TTS API did not return a task_id');
-    }
-
-    const audioUrl = await pollCoderoboAudioUrl(apiUrl, taskId, jwtToken);
-    return NextResponse.json({
-      ok: true,
-      audioUrl,
-      taskId,
-      provider: 'coderobo',
-    });
+    if (!submitData) throw new Error(submitErrorMessage || 'TTS request failed on all configured endpoints');
+    const taskId = typeof submitData.task_id === 'string' ? submitData.task_id : '';
+    if (!taskId) throw new Error('TTS API did not return a task_id');
+    const audioUrl = await pollCoderoboAudioUrl(selectedApiUrl, taskId, jwtToken);
+    return NextResponse.json({ ok: true, audioUrl, taskId, provider: 'coderobo' });
   } catch (error) {
     console.error('[tts] failed', error);
-    return NextResponse.json(
-      { error: (error as Error).message || 'Unknown error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }

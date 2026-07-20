@@ -1,8 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
+import { normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import type { OrchestratedMessage } from "@/lib/agents/types";
+import { stripHistoryMessageText } from "@/lib/agents/providers";
 import type { GameCharacterContext } from "@/lib/game/game-context";
+import { fetchAgentsWithLmstudioBrowserProxy } from "@/lib/lmstudio";
 
 export type GameAgentRequestBody = Record<string, unknown>;
 
@@ -24,6 +27,7 @@ type StreamAgentReplyArgs = {
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
   }) => void | Promise<void>;
 };
 
@@ -43,6 +47,7 @@ type DemoReplyArgs = {
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
   }) => void | Promise<void>;
   buildSceneSummary: (npc: GameCharacterContext, player: GameCharacterContext) => string;
 };
@@ -74,6 +79,7 @@ type ConnectedTurnArgs = {
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
   }) => void | Promise<void>;
 };
 
@@ -119,6 +125,9 @@ export function buildGameAgentRequest(params: {
   storyHistory: OrchestratedMessage[];
   currentNpc: GameCharacterContext;
   currentPlayer: GameCharacterContext;
+  playerMode?: PlayerMode;
+  npcKnowsPlayer?: boolean;
+  currentTurnNpcKnewPlayer?: boolean;
 }) {
   const {
     trimmed,
@@ -134,7 +143,26 @@ export function buildGameAgentRequest(params: {
     storyHistory,
     currentNpc,
     currentPlayer,
+    playerMode,
+    npcKnowsPlayer,
+    currentTurnNpcKnewPlayer,
   } = params;
+
+  const MAX_STORY_CONTEXT_CHARS = 6000;
+  const MAX_HISTORY_MESSAGES = 10;
+  const MAX_HISTORY_TEXT_CHARS = 3000;
+  const clampText = (value: string, maxChars: number) => {
+    const text = (value || "").trim();
+    if (text.length <= maxChars) return text;
+    return text.slice(0, maxChars);
+  };
+
+  const compactHistory = (storyHistory || [])
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((entry) => ({
+      ...entry,
+      text: clampText(String(entry.text || ""), MAX_HISTORY_TEXT_CHARS),
+    }));
 
   const requestBody: GameAgentRequestBody = {
     prompt: trimmed,
@@ -147,9 +175,9 @@ export function buildGameAgentRequest(params: {
     stream: true,
   };
 
-  if (storyContext) requestBody.story = storyContext;
+  if (storyContext) requestBody.story = clampText(storyContext, MAX_STORY_CONTEXT_CHARS);
   if (steer?.trim()) requestBody.steer = steer.trim();
-  if (storyHistory.length > 0) requestBody.history = storyHistory;
+  if (compactHistory.length > 0) requestBody.history = compactHistory;
   if (activeProvider === "lmstudio") requestBody.lmstudioUrl = lmstudioUrl;
   if (currentNpc) {
     requestBody.character = {
@@ -160,12 +188,17 @@ export function buildGameAgentRequest(params: {
     };
   }
   if (currentPlayer) {
-    requestBody.coordinatorAgent = {
+    requestBody.player = {
       id: currentPlayer.id,
       name: currentPlayer.name,
       description: currentPlayer.description,
       appearance: currentPlayer.appearance ?? "",
     };
+  }
+  if (playerMode) requestBody.playerMode = playerMode;
+  if (typeof npcKnowsPlayer === 'boolean') requestBody.npcKnowsPlayer = npcKnowsPlayer;
+  if (typeof currentTurnNpcKnewPlayer === 'boolean') {
+    requestBody.currentTurnNpcKnewPlayer = currentTurnNpcKnewPlayer;
   }
 
   return requestBody;
@@ -186,19 +219,83 @@ async function streamAgentReply({
   onMomentReset,
   refreshStorySummary,
 }: StreamAgentReplyArgs) {
-  const readStreamedText = async () => {
-    const res = await fetch("/api/agents", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => "");
-      throw new Error(errorText || "Failed to get response from LLM");
+  const extractAssistantText = (raw: string) => {
+    const text = (raw || "").trim();
+    if (!text) return "";
+    try {
+      const parsed = JSON.parse(text) as any;
+      if (typeof parsed?.text === "string" && parsed.text.trim()) return parsed.text.trim();
+      if (Array.isArray(parsed?.messages) && typeof parsed.messages[0]?.text === "string") {
+        return parsed.messages[0].text.trim();
+      }
+      if (typeof parsed?.response?.text === "string" && parsed.response.text.trim()) {
+        return parsed.response.text.trim();
+      }
+      const choiceContent = parsed?.choices?.[0]?.message?.content;
+      if (typeof choiceContent === "string" && choiceContent.trim()) {
+        return choiceContent.trim();
+      }
+      if (Array.isArray(choiceContent)) {
+        const joined = choiceContent
+          .map((part: unknown) => {
+            if (!part) return "";
+            if (typeof part === "string") return part;
+            if (typeof part === "object" && part && "text" in part) {
+              const maybeText = (part as { text?: unknown }).text;
+              return typeof maybeText === "string" ? maybeText : "";
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        if (joined) return joined;
+      }
+      return text;
+    } catch {
+      return text;
     }
+  };
+
+  const throwHttpError = async (res: Response, fallback: string) => {
+    const errorText = await res.text().catch(() => "");
+    try {
+      const parsed = JSON.parse(errorText) as { error?: string };
+      if (typeof parsed.error === "string" && parsed.error.trim()) {
+        throw new Error(parsed.error.trim());
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message && err.message !== errorText) throw err;
+    }
+    throw new Error(errorText || fallback);
+  };
+
+  const readNonStreamText = async () => {
+    const res = await fetchAgentsWithLmstudioBrowserProxy({ ...requestBody, stream: false });
+    if (!res.ok) await throwHttpError(res, "Failed to get non-stream response from LLM");
+    const raw = await res.text().catch(() => "");
+    return extractAssistantText(raw);
+  };
+
+  const npcName =
+    requestBody.character &&
+    typeof requestBody.character === "object" &&
+    typeof (requestBody.character as { name?: string }).name === "string"
+      ? (requestBody.character as { name: string }).name
+      : "NPC";
+  const playerInfo =
+    requestBody.player && typeof requestBody.player === "object"
+      ? (requestBody.player as { name?: string })
+      : undefined;
+  const knowsPlayerForStrip =
+    typeof requestBody.currentTurnNpcKnewPlayer === "boolean"
+      ? requestBody.currentTurnNpcKnewPlayer
+      : requestBody.npcKnowsPlayer !== false;
+
+  const readStreamedText = async () => {
+    const res = await fetchAgentsWithLmstudioBrowserProxy(requestBody);
+
+    if (!res.ok) await throwHttpError(res, "Failed to get response from LLM");
 
     const reader = res.body?.getReader();
     const decoder = new TextDecoder();
@@ -211,7 +308,10 @@ async function streamAgentReply({
         const decoded = decoder.decode(value, { stream: true });
         if (!decoded) continue;
         streamedText += decoded;
-        onChunk(pendingId, streamedText);
+        onChunk(
+          pendingId,
+          stripHistoryMessageText(streamedText, npcName, playerInfo, knowsPlayerForStrip),
+        );
       }
     }
 
@@ -219,16 +319,19 @@ async function streamAgentReply({
   };
 
   let streamedText = await readStreamedText();
-  if (!appendBaseText && !streamedText.trim()) {
-    streamedText = await readStreamedText();
+  let assistantText = extractAssistantText(streamedText);
+  if (!appendBaseText && !assistantText) {
+    assistantText = await readNonStreamText();
   }
 
-  const assistantText = streamedText.trim();
+  assistantText = stripHistoryMessageText(assistantText, npcName, playerInfo, knowsPlayerForStrip);
+
   const finalMessageId = `agent-${Date.now()}`;
   const finalMessage: CustomChatMessage = {
     id: finalMessageId,
     from: "agent",
     text: assistantText,
+    name: npcName,
   };
 
   const finalText = appendBaseText
@@ -268,6 +371,7 @@ async function streamAgentReply({
     userText: trimmed,
     assistantText: finalText,
     history: nextHistorySnapshot,
+    playerMode: userHistoryEntry?.playerMode ?? normalizePlayerMode(requestBody.playerMode as string | null | undefined),
   });
 }
 
@@ -286,15 +390,18 @@ export function queueDemoReply({
   buildSceneSummary,
 }: DemoReplyArgs) {
   setTimeout(() => {
+    const npcName = assignedNpc?.name?.trim() || "NPC";
+    const demoText = appendBaseText
+      ? joinContinuationText(
+          appendBaseText,
+          "(Connect an AI provider in Connections to continue this scene.)",
+        )
+      : `(${npcName} is offline — connect an AI provider in Connections to get in-character replies.)`;
     const botMessage: CustomChatMessage = {
       id: appendToMessageId || `bot-${Date.now()}`,
       from: "agent",
-      text: appendBaseText
-        ? joinContinuationText(
-            appendBaseText,
-            `You said: "${trimmed}". This is a demo response.`,
-          )
-        : `You said: "${trimmed}". This is a demo response.`,
+      text: demoText,
+      name: npcName,
     };
     setChatMessages((messages) =>
       appendToMessageId
@@ -329,6 +436,7 @@ export function queueDemoReply({
       userText: trimmed,
       assistantText: botMessage.text,
       history: nextHistorySnapshot,
+      playerMode: userHistoryEntry?.playerMode,
     });
   }, 450);
 }
@@ -348,57 +456,100 @@ export async function runConnectedChatTurn({
   setDebugData,
   refreshStorySummary,
 }: ConnectedTurnArgs) {
+  const isLmstudio = String(requestBody.provider || "").toLowerCase() === "lmstudio";
+  const waitingLabel = isLmstudio
+    ? "Waiting for LM Studio… (large local models can take 30–90s)"
+    : "Working on that request...";
+
   if (!appendToMessageId) {
+    const pendingNpcName =
+      requestBody.character &&
+      typeof requestBody.character === "object" &&
+      typeof (requestBody.character as { name?: string }).name === "string"
+        ? (requestBody.character as { name: string }).name
+        : "NPC";
     setChatMessages((messages) => [
       ...messages,
       {
         id: pendingId,
         from: "agent",
-        text: "Working on that request...",
+        text: waitingLabel,
+        name: pendingNpcName,
       },
     ]);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  setDebugData({ request: requestBody, response: null, prompt: trimmed });
-  await streamAgentReply({
-    requestBody,
-    pendingId,
-    storyHistory,
-    userHistoryEntry,
-    trimmed,
-    currentSceneSummary,
-    appendBaseText,
-    onChunk: (messageId, text) =>
+  let waitTimer: number | null = null;
+  if (isLmstudio && typeof window !== "undefined" && !appendToMessageId) {
+    const startedAt = Date.now();
+    waitTimer = window.setInterval(() => {
+      const secs = Math.floor((Date.now() - startedAt) / 1000);
       setChatMessages((messages) =>
-        updateStreamingMessage(
-          messages,
-          appendToMessageId || messageId,
-          appendBaseText ? joinContinuationText(appendBaseText, text) : text,
+        messages.map((message) =>
+          message.id === pendingId &&
+          (message.text.startsWith("Waiting for LM Studio") ||
+            message.text.startsWith("Working on that request"))
+            ? {
+                ...message,
+                text: `Waiting for LM Studio… ${secs}s (large local models can take 30–90s)`,
+              }
+            : message,
         ),
-      ),
-    onFinalize: (messageId, finalId, text) =>
-      setChatMessages((messages) =>
-        appendToMessageId
-          ? messages.map((message) =>
-              message.id === appendToMessageId ? { ...message, text } : message,
-            )
-          : finalizeStreamingMessage(messages, messageId, finalId, text),
-      ),
-    onDebugResponse: (finalMessage) =>
-      setDebugData((prev) =>
-        prev
-          ? {
-              ...prev,
-              response: {
-                streamed: true,
-                messages: [finalMessage],
-              },
-            }
-          : null,
-      ),
-    onHistoryUpdate: (nextHistorySnapshot) => setStoryHistory(nextHistorySnapshot),
-    onMomentReset: () => setMomentSelectionMode("auto"),
-    refreshStorySummary,
-  });
+      );
+    }, 1000);
+  }
+
+  setDebugData({ request: requestBody, response: null, prompt: trimmed });
+  try {
+    await streamAgentReply({
+      requestBody,
+      pendingId,
+      storyHistory,
+      userHistoryEntry,
+      trimmed,
+      currentSceneSummary,
+      appendBaseText,
+      onChunk: (messageId, text) => {
+        if (waitTimer != null) {
+          window.clearInterval(waitTimer);
+          waitTimer = null;
+        }
+        setChatMessages((messages) =>
+          updateStreamingMessage(
+            messages,
+            appendToMessageId || messageId,
+            appendBaseText ? joinContinuationText(appendBaseText, text) : text,
+          ),
+        );
+      },
+      onFinalize: (messageId, finalId, text) =>
+        setChatMessages((messages) =>
+          appendToMessageId
+            ? messages.map((message) =>
+                message.id === appendToMessageId ? { ...message, text } : message,
+              )
+            : finalizeStreamingMessage(messages, messageId, finalId, text),
+        ),
+      onDebugResponse: (finalMessage) =>
+        setDebugData((prev) =>
+          prev
+            ? {
+                ...prev,
+                response: {
+                  streamed: true,
+                  messages: [finalMessage],
+                },
+              }
+            : null,
+        ),
+      onHistoryUpdate: (nextHistorySnapshot) => setStoryHistory(nextHistorySnapshot),
+      onMomentReset: () => setMomentSelectionMode("auto"),
+      refreshStorySummary,
+    });
+  } finally {
+    if (waitTimer != null && typeof window !== "undefined") {
+      window.clearInterval(waitTimer);
+    }
+  }
 }

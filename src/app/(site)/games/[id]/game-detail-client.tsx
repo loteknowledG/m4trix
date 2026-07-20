@@ -1,15 +1,15 @@
 "use client";
 
-import { get, set } from "idb-keyval";
-import { useParams, useRouter } from "next/navigation";
+import { del, get, keys, set } from "idb-keyval";
+import dynamic from "next/dynamic";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { FaBug } from "react-icons/fa";
-import { FaTags } from "react-icons/fa";
+import { FaBrain, FaBug, FaDesktop, FaTags } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
-import { ChevronLeft, ChevronRight } from "@/components/icons";
+import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
-import { type CustomChatMessage, CustomChatWindow } from "@/components/ai/custom-chat-window";
+import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
@@ -24,11 +24,26 @@ import { FullscreenDialog } from "@/components/ui/full-screen-dialog";
 import { Pressable } from "@/components/ui/pressable";
 import { CarouselNavButton } from "@/components/ui/carousel";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   CONNECTION_STORAGE_KEYS,
   getConnectionItem,
   setConnectionItem,
 } from "@/lib/connection-storage";
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from "@/lib/lmstudio";
+import { getDesktopBridge } from "@/lib/app-update-client";
+import { openDesktopInstallerDownload } from "@/lib/desktop-release";
+import {
+  DEFAULT_LMSTUDIO_URL,
+  normalizeLmstudioUrl,
+  probeLmstudioHealth,
+} from "@/lib/lmstudio";
+import { stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
+import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
+import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import {
   buildSceneSummary,
@@ -45,13 +60,22 @@ import {
   getGameHistoryKey,
   getGameMomentKey,
   getGameSummaryKey,
+  getGameSessionKey,
   loadGameMoment,
   loadGameHistory,
   loadGameSummary,
+  loadGameSession,
   saveGameMoment,
   saveGameHistory,
   saveGameSummary,
+  saveGameSession,
 } from "@/lib/game/game-storage";
+import {
+  backfillNpcKnewPlayerOnHistory,
+  historyRevealedPlayerIdentity,
+  playerIntroducedIdentity,
+  resolveNpcKnowsPlayerForSession,
+} from "@/lib/game/player-identity";
 import { refreshStorySummary as refreshGameStorySummary } from "@/lib/game/story-memory";
 import { normalizeMomentSrc } from "@/lib/moments";
 
@@ -69,13 +93,49 @@ import {
   storyTextForPrompt,
 } from "@/lib/game/story-moments";
 
+type CharacterTurnMemory = {
+  id: string;
+  sourceMessageId: string;
+  storyId: string;
+  storyTitle: string;
+  characterId: string;
+  characterName: string;
+  role: "npc" | "player";
+  speaker: "user" | "agent";
+  playerMode?: PlayerMode;
+  npcKnewPlayerAtTurn?: boolean;
+  text: string;
+  sceneContext: string;
+  createdAt: number;
+};
+
+const CHARACTER_MEMORY_INJECTION_LIMIT = 2;
+
+const CustomChatWindow = dynamic(
+  () =>
+    import("@/components/ai/custom-chat-window").then((mod) => ({
+      default: mod.CustomChatWindow,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Loading chat…
+      </div>
+    ),
+  },
+);
+
 export default function GamePage() {
   const params = useParams();
-  const id = params?.id as string | undefined;
+  const searchParams = useSearchParams();
+  const routeId = params?.id as string | undefined;
+  const id = routeId === "new" ? searchParams?.get("game") || undefined : routeId;
   const router = useRouter();
   const [gameData, setGameData] = useState<any>(null);
   const [previewSrc, setPreviewSrc] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [gameShellReady, setGameShellReady] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(true);
   /** Radix may call onOpenChange(false) during focus/portal churn; shell only closes via Quit. */
   const handleGameShellOpenChange = useCallback((next: boolean) => {
@@ -90,31 +150,27 @@ export default function GamePage() {
   const [storyDescription, setStoryDescription] = useState("");
   const [storyArc, setStoryArc] = useState<any>(null);
   const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
+  const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
+  const [playerRevealedInGame, setPlayerRevealedInGame] = useState(false);
+  const [directorNotes, setDirectorNotes] = useState("");
   const [storyHistory, setStoryHistory] = useState<OrchestratedMessage[]>([]);
   const [storySummary, setStorySummary] = useState("");
+  const [externalMemorySummary, setExternalMemorySummary] = useState("");
+  const [lastInjectedCharacterMemory, setLastInjectedCharacterMemory] = useState("");
+  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryDebugInfo, setMemoryDebugInfo] = useState("Samus-Manus memory loading disabled.");
+  const memoryFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [desktopInstallBusy, setDesktopInstallBusy] = useState(false);
+  const [showDesktopInstall, setShowDesktopInstall] = useState(false);
   const [storyMetaLoaded, setStoryMetaLoaded] = useState(false);
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
   const momentStateReadyRef = useRef(false);
-  const buildOpeningDetails = (
-    description: string,
-    npc: typeof assignedNpc,
-    player: typeof assignedPlayer,
-  ) => {
-    const details = [
-      npc ? `NPC: ${npc.name}` : "",
-      npc?.appearance ? `NPC appearance: ${npc.appearance}` : "",
-      player ? `Player: ${player.name}` : "",
-      player?.appearance ? `Player appearance: ${player.appearance}` : "",
-    ].filter(Boolean);
-    return {
-      text: description.trim(),
-      details,
-    };
-  };
   const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [connected, setConnected] = useState(false);
+  console.debug('[game] connected state:', connected);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       return getConnectionItem(CONNECTION_STORAGE_KEYS.gameConnectionModel);
@@ -151,6 +207,7 @@ export default function GamePage() {
   const chatHeightPctRef = useRef(VN_CHAT_HEIGHT_DEFAULT);
   const chatResizeRef = useRef<{ startY: number; startPct: number } | null>(null);
   const [chatHeightPct, setChatHeightPct] = useState(VN_CHAT_HEIGHT_DEFAULT);
+  const [playerMode, setPlayerMode] = useState<PlayerMode>("say");
   const [debugData, setDebugData] = useState<{
     request: any;
     response: any;
@@ -170,6 +227,17 @@ export default function GamePage() {
   });
   const currentMoment = storyMoments[currentMomentIndex] ?? null;
   const hasMoments = storyMoments.length > 0;
+  const npcKnowsPlayerEffective = useMemo(
+    () => resolveNpcKnowsPlayerForSession(npcKnowsPlayer, playerRevealedInGame),
+    [npcKnowsPlayer, playerRevealedInGame],
+  );
+  const playerIdentityHint = useMemo(() => {
+    if (!assignedPlayer) return undefined;
+    if (npcKnowsPlayerEffective) {
+      return assignedPlayer.name?.trim() || "Player";
+    }
+    return "Stranger";
+  }, [assignedPlayer, npcKnowsPlayerEffective]);
   const storyArcStages = Array.isArray(storyArc?.stages) ? storyArc.stages : [];
   const resolvedArcStageNumber =
     typeof storyArcCurrentStage === "number" && Number.isFinite(storyArcCurrentStage)
@@ -203,18 +271,183 @@ export default function GamePage() {
         currentMomentName: currentMoment?.name ?? "",
         npc: assignedNpc,
         player: assignedPlayer,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
       }),
-    [title, currentMoment?.name, assignedNpc, assignedPlayer],
+    [title, currentMoment?.name, assignedNpc, assignedPlayer, npcKnowsPlayerEffective],
   );
+
+  const gameContextText = useMemo(() => {
+    const characterSections = [
+      assignedNpc
+        ? `NPC (you are ${assignedNpc.name}): ${stripHtmlImages(assignedNpc.description || "No description")}`
+        : "",
+      assignedNpc?.appearance ? `${assignedNpc.name} appearance: ${assignedNpc.appearance}` : "",
+      assignedPlayer && npcKnowsPlayerEffective
+        ? `Player character (user controls ${assignedPlayer.name}): ${stripHtmlImages(assignedPlayer.description || "No description")}`
+        : assignedPlayer
+          ? "Player character: a stranger you have never met before"
+          : "",
+      assignedPlayer && npcKnowsPlayerEffective && assignedPlayer.appearance
+        ? `${assignedPlayer.name} appearance: ${assignedPlayer.appearance}`
+        : assignedPlayer && !npcKnowsPlayerEffective && assignedPlayer.appearance
+          ? `Stranger's observable appearance: ${assignedPlayer.appearance}`
+          : "",
+      assignedPlayer && assignedNpc && npcKnowsPlayerEffective
+        ? `When ${assignedPlayer.name} says "you", they mean ${assignedNpc.name}. When they say "I/me/my", they mean ${assignedPlayer.name}.`
+        : assignedPlayer && assignedNpc && !npcKnowsPlayerEffective
+          ? `You do not know this stranger's name yet. When they say "you", they mean ${assignedNpc.name}.`
+          : "",
+    ].filter(Boolean);
+
+    const staticSections = [
+      "Game mode context",
+      title ? `Title: ${title}` : "",
+      currentMoment?.name ? `Current moment: ${currentMoment.name}` : "",
+      storyDescription.trim() ? `Story premise:\n${storyTextForPrompt(storyDescription)}` : "",
+      directorNotes.trim()
+        ? `Director's notes (NPC-only — use for internal scene context, not player-facing narration):\n${directorNotes.trim()}`
+        : "",
+      storySummary.trim() ? `Story summary:\n${storySummary.trim()}` : "",
+      resolvedArcStage
+        ? `Story arc stage: ${resolvedArcStage.stageNumber} - ${resolvedArcStage.stageName}${
+            resolvedArcStage.shortDescription ? `\n${resolvedArcStage.shortDescription}` : ""
+          }`
+        : resolvedArcStageNumber != null
+          ? `Story arc stage: ${resolvedArcStageNumber}`
+          : "",
+    ].filter(Boolean);
+
+    const staticText = staticSections.join("\n\n");
+    return [staticText, characterSections.join("\n")].filter(Boolean).join("\n\n");
+  }, [
+    title,
+    currentMoment?.name,
+    storyDescription,
+    storySummary,
+    resolvedArcStage,
+    resolvedArcStageNumber,
+    assignedNpc,
+    assignedPlayer,
+    npcKnowsPlayerEffective,
+    directorNotes,
+  ]);
 
   const grokChatMapping = useMemo(
     () => mapGameChatForGrokImage(chatMessages, assignedNpc, assignedPlayer),
     [chatMessages, assignedNpc, assignedPlayer],
   );
+  const chatInFlight = useMemo(
+    () => chatMessages.some((message) => message.id.startsWith("pending-")),
+    [chatMessages],
+  );
   const gameHistoryKey = getGameHistoryKey(id);
   const gameSummaryKey = getGameSummaryKey(id);
   const gameMomentKey = getGameMomentKey(id);
+  const gameSessionKey = getGameSessionKey(id);
   const summarizeInFlightRef = useRef(false);
+  const hasSpokenOpeningRef = useRef<string | null>(null);
+  const characterMemoryKey = useCallback((characterId: string) => `game-character-memory:${characterId}`, []);
+
+  const persistMemoryForCharacter = useCallback(
+    async (
+      role: "npc" | "player",
+      character: { id: string; name: string } | null,
+      message: OrchestratedMessage,
+    ) => {
+      if (!id || !character?.id) return;
+      const text = (message.text || "").trim();
+      if (!text) return;
+      if (!message.id) return;
+
+      const key = characterMemoryKey(character.id);
+      const existing = (await get<CharacterTurnMemory[]>(key)) || [];
+      if (existing.some((item) => item.sourceMessageId === message.id)) {
+        return;
+      }
+
+      const entry: CharacterTurnMemory = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        sourceMessageId: message.id,
+        storyId: id,
+        storyTitle: title || "Game",
+        characterId: character.id,
+        characterName: character.name || (role === "npc" ? "NPC" : "Player"),
+        role,
+        speaker: message.from === "user" ? "user" : "agent",
+        playerMode:
+          message.from === "user" ? normalizePlayerMode(message.playerMode) : undefined,
+        npcKnewPlayerAtTurn:
+          message.from === "user"
+            ? message.npcKnewPlayer ??
+              resolveNpcKnowsPlayerForSession(npcKnowsPlayer, playerRevealedInGame)
+            : undefined,
+        text,
+        sceneContext: buildSceneSummary({
+          title,
+          currentMomentName: currentMoment?.name ?? "",
+          npc: assignedNpc,
+          player: assignedPlayer,
+          npcKnowsPlayer: npcKnowsPlayerEffective,
+        }),
+        createdAt: Date.now(),
+      };
+
+      await set(key, [...existing, entry].slice(-240));
+    },
+    [
+      id,
+      title,
+      currentMoment?.name,
+      assignedNpc,
+      assignedPlayer,
+      characterMemoryKey,
+      npcKnowsPlayer,
+      playerRevealedInGame,
+      npcKnowsPlayerEffective,
+    ],
+  );
+
+  const buildCharacterMemoryContext = useCallback(async () => {
+    const chunks: string[] = [];
+    const targets: Array<{ role: "npc" | "player"; character: { id: string; name: string } | null }> = [
+      {
+        role: "npc",
+        character: assignedNpc ? { id: assignedNpc.id, name: assignedNpc.name || "NPC" } : null,
+      },
+      {
+        role: "player",
+        character: assignedPlayer
+          ? { id: assignedPlayer.id, name: assignedPlayer.name || "Player" }
+          : null,
+      },
+    ];
+
+    for (const target of targets) {
+      if (!target.character?.id) continue;
+      const key = characterMemoryKey(target.character.id);
+      const existing = (await get<CharacterTurnMemory[]>(key)) || [];
+      const latest = existing.slice(-CHARACTER_MEMORY_INJECTION_LIMIT);
+      if (latest.length === 0) continue;
+
+      const section = [
+        `Character memory (${target.role}: ${target.character.name}, id: ${target.character.id})`,
+        ...latest.map((m) => {
+          const label =
+            m.role === "player"
+              ? formatPlayerMemoryLabel(
+                  { name: m.characterName },
+                  m.npcKnewPlayerAtTurn ?? npcKnowsPlayerEffective,
+                  m.playerMode,
+                )
+              : m.characterName || target.character?.name || "NPC";
+          return `- [${new Date(m.createdAt).toISOString()}] ${label}: ${m.text} | context: ${m.sceneContext}`;
+        }),
+      ].join("\n");
+      chunks.push(section);
+    }
+
+    return chunks.join("\n\n");
+  }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
 
   const goToPreviousMoment = () => {
     if (!hasMoments) return;
@@ -299,6 +532,20 @@ export default function GamePage() {
   }, [currentMoment]);
 
   useEffect(() => {
+    setShowDesktopInstall(!getDesktopBridge());
+  }, []);
+
+  const handleInstallDesktop = useCallback(async () => {
+    if (desktopInstallBusy) return;
+    setDesktopInstallBusy(true);
+    try {
+      await openDesktopInstallerDownload();
+    } finally {
+      setDesktopInstallBusy(false);
+    }
+  }, [desktopInstallBusy]);
+
+  useEffect(() => {
     if (!gameMomentKey) return;
     if (!momentStateReadyRef.current) return;
     void saveGameMoment(gameMomentKey, {
@@ -344,6 +591,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!gameHistoryKey) return;
+    console.warn('[game] saving storyHistory, count:', storyHistory.length, 'key:', gameHistoryKey);
     void saveGameHistory(gameHistoryKey, storyHistory);
   }, [gameHistoryKey, storyHistory]);
 
@@ -376,18 +624,234 @@ export default function GamePage() {
     void saveGameSummary(gameSummaryKey, storySummary);
   }, [gameSummaryKey, storySummary]);
 
+  useEffect(() => {
+    if (!gameSessionKey || npcKnowsPlayer) return;
+    void saveGameSession(gameSessionKey, { playerRevealedInGame });
+  }, [gameSessionKey, npcKnowsPlayer, playerRevealedInGame]);
+
+  useEffect(() => {
+    if (!id) return;
+    if (!Array.isArray(storyHistory)) return;
+    if (storyHistory.length === 0) return;
+
+    void Promise.all(
+      storyHistory.map(async (message) => {
+        if (message.from === "agent") {
+          await persistMemoryForCharacter(
+            "npc",
+            assignedNpc ? { id: assignedNpc.id, name: assignedNpc.name || "NPC" } : null,
+            message,
+          );
+          return;
+        }
+        if (message.from === "user") {
+          await persistMemoryForCharacter(
+            "player",
+            assignedPlayer ? { id: assignedPlayer.id, name: assignedPlayer.name || "Player" } : null,
+            message,
+          );
+        }
+      }),
+    );
+  }, [id, storyHistory, assignedNpc, assignedPlayer, persistMemoryForCharacter]);
+
+  const loadExternalMemory = useCallback(async () => {
+    setMemoryLoading(true);
+    try {
+      const npcEntries =
+        assignedNpc?.id ? ((await get<any[]>(characterMemoryKey(assignedNpc.id))) || []) : [];
+      const playerEntries =
+        assignedPlayer?.id ? ((await get<any[]>(characterMemoryKey(assignedPlayer.id))) || []) : [];
+      const npcCount = npcEntries.length;
+      const playerCount = playerEntries.length;
+      const npcRecent = npcEntries
+        .slice(-CHARACTER_MEMORY_INJECTION_LIMIT)
+        .map(
+          (entry: any) =>
+            `- [${entry?.characterName || assignedNpc?.name || "NPC"}] ${String(entry?.text || "").slice(0, 220)}${
+              String(entry?.text || "").length > 220 ? "..." : ""
+            }`,
+        )
+        .join("\n");
+      const playerRecent = playerEntries
+        .slice(-CHARACTER_MEMORY_INJECTION_LIMIT)
+        .map((entry: any) => {
+          const label = formatPlayerMemoryLabel(
+            { name: entry?.characterName || assignedPlayer?.name },
+            entry?.npcKnewPlayerAtTurn ?? npcKnowsPlayerEffective,
+            entry?.playerMode,
+          );
+          return `- [${label}] ${String(entry?.text || "").slice(0, 220)}${
+            String(entry?.text || "").length > 220 ? "..." : ""
+          }`;
+        })
+        .join("\n");
+      setExternalMemorySummary("");
+      setMemoryDebugInfo(
+        [
+          "Samus-Manus memory: disabled",
+          `Story: ${id || "none"}`,
+          `NPC memory entries: ${npcCount}`,
+          `Player memory entries: ${playerCount}`,
+          "",
+          `NPC recent entries (${Math.min(npcCount, CHARACTER_MEMORY_INJECTION_LIMIT)}):`,
+          npcRecent || "- none",
+          "",
+          `Player recent entries (${Math.min(playerCount, CHARACTER_MEMORY_INJECTION_LIMIT)}):`,
+          playerRecent || "- none",
+        ].join("\n"),
+      );
+      return true;
+    } catch {
+      setMemoryDebugInfo("Samus-Manus memory: disabled\nLocal memory stats unavailable.");
+      return false;
+    } finally {
+      setMemoryLoading(false);
+    }
+  }, [id, assignedNpc?.id, assignedNpc?.name, assignedPlayer?.id, assignedPlayer?.name, npcKnowsPlayerEffective, characterMemoryKey]);
+
+  useEffect(() => {
+    void loadExternalMemory();
+  }, [loadExternalMemory]);
+
+  const handleSaveMemory = useCallback(() => {
+    try {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        storyId: id || null,
+        storyTitle: title || "",
+        npcId: assignedNpc?.id || null,
+        npcName: assignedNpc?.name || "",
+        playerId: assignedPlayer?.id || null,
+        playerName: assignedPlayer?.name || "",
+        summary: externalMemorySummary || "",
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `game-memory-${id || "unknown"}-${Date.now()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // no-op
+    }
+  }, [id, title, assignedNpc?.id, assignedNpc?.name, assignedPlayer?.id, assignedPlayer?.name, externalMemorySummary]);
+
+  const handleLoadMemory = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result || "{}")) as
+          | { summary?: string; records?: Array<{ type?: string; text?: string }> }
+          | Array<{ type?: string; text?: string }>;
+        let nextSummary = "";
+        if (Array.isArray(parsed)) {
+          nextSummary = parsed
+            .filter((r) => r && typeof r.text === "string" && r.text.trim())
+            .map((r) => `- [${r.type || "memory"}] ${r.text}`)
+            .join("\n");
+        } else if (typeof parsed?.summary === "string" && parsed.summary.trim()) {
+          nextSummary = parsed.summary.trim();
+        } else if (Array.isArray(parsed?.records)) {
+          nextSummary = parsed.records
+            .filter((r) => r && typeof r.text === "string" && r.text.trim())
+            .map((r) => `- [${r.type || "memory"}] ${r.text}`)
+            .join("\n");
+        }
+        if (nextSummary) {
+          setExternalMemorySummary(nextSummary.slice(0, 6000));
+        }
+      } catch {
+        // no-op
+      } finally {
+        if (memoryFileInputRef.current) memoryFileInputRef.current.value = "";
+      }
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const handleDeleteMemory = useCallback(async () => {
+    try {
+      const allKeys = await keys();
+      const memoryKeys = (allKeys || [])
+        .map((key) => String(key))
+        .filter((key) => key.startsWith("game-character-memory:"));
+      if (memoryKeys.length === 0) return;
+      await Promise.all(memoryKeys.map((key) => del(key)));
+      setLastInjectedCharacterMemory("");
+      await loadExternalMemory();
+    } catch {
+      // no-op
+    }
+  }, [loadExternalMemory]);
+
+  useEffect(() => {
+    if (!id) return;
+    if (loading) return;
+    if (hasSpokenOpeningRef.current === id) return;
+
+    const spokenText = storyTextForPrompt(
+      storyDescription.trim() ||
+        (typeof gameData?.description === "string" ? gameData.description.trim() : "") ||
+        title.trim(),
+    );
+    if (!spokenText) return;
+
+    const trySpeak = async () => {
+      const ok = id ? await speakWithCachedStoryIntro(spokenText, id) : await speakWithJennyVoice(spokenText);
+      if (ok) {
+        hasSpokenOpeningRef.current = id;
+      }
+      return ok;
+    };
+
+    const onFirstInteraction = () => {
+      void trySpeak();
+      window.removeEventListener("pointerdown", onFirstInteraction);
+      window.removeEventListener("keydown", onFirstInteraction);
+    };
+
+    void trySpeak().then((ok) => {
+      if (!ok) {
+        window.addEventListener("pointerdown", onFirstInteraction, { once: true });
+        window.addEventListener("keydown", onFirstInteraction, { once: true });
+      }
+    });
+
+    return () => {
+      window.removeEventListener("pointerdown", onFirstInteraction);
+      window.removeEventListener("keydown", onFirstInteraction);
+    };
+  }, [id, loading, storyDescription, gameData?.description, title]);
+
   const refreshStorySummary = async (options: {
     sceneSummary: string;
     userText: string;
     assistantText: string;
     history: OrchestratedMessage[];
+    playerMode?: PlayerMode;
+    currentTurnNpcKnewPlayer?: boolean;
   }) =>
     refreshGameStorySummary({
       gameSummaryKey,
       storySummary,
       connected,
       connectionModel,
-      options,
+      options: {
+        ...options,
+        npcName: assignedNpc?.name,
+        playerName: assignedPlayer?.name,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
+        playerMode: options.playerMode ?? playerMode,
+      },
       summarizeInFlightRef,
       setStorySummary,
       setMomentSelectionMode,
@@ -402,17 +866,20 @@ export default function GamePage() {
       appendBaseText?: string;
     },
   ) => {
+    if (chatInFlight) return;
     const showUserMessage = options?.showUserMessage ?? true;
     const appendToMessageId = options?.appendToMessageId;
     const appendBaseText = options?.appendBaseText;
     const currentSteerInstruction = steerInstruction.trim();
     const pendingId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const knewBeforeSend = resolveNpcKnowsPlayerForSession(npcKnowsPlayer, playerRevealedInGame);
 
     const userMessage = showUserMessage
       ? {
           id: `user-${Date.now()}`,
           from: "user" as const,
           text: trimmed,
+          name: assignedPlayer?.name?.trim() || "You",
         }
       : null;
 
@@ -424,6 +891,8 @@ export default function GamePage() {
           id: userMessage.id,
           from: "user",
           text: trimmed,
+          playerMode,
+          npcKnewPlayer: knewBeforeSend,
         }
       : undefined;
     if (userHistoryEntry) {
@@ -431,6 +900,14 @@ export default function GamePage() {
         ...messages,
         userHistoryEntry,
       ].slice(-20));
+    }
+    if (
+      !npcKnowsPlayer &&
+      !playerRevealedInGame &&
+      assignedPlayer?.name &&
+      playerIntroducedIdentity(trimmed, assignedPlayer.name)
+    ) {
+      setPlayerRevealedInGame(true);
     }
     setChatInput("");
     if (currentSteerInstruction) {
@@ -456,6 +933,7 @@ export default function GamePage() {
             currentMomentName: currentMoment?.name ?? "",
             npc,
             player,
+            npcKnowsPlayer: npcKnowsPlayerEffective,
           }),
       });
       return;
@@ -475,6 +953,7 @@ export default function GamePage() {
               currentMomentName: currentMoment?.name ?? "",
               npc,
               player,
+              npcKnowsPlayer: npcKnowsPlayerEffective,
             }),
         });
 
@@ -489,7 +968,15 @@ export default function GamePage() {
       const lmstudioUrl = normalizeLmstudioUrl(
         getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
       );
-      const storyContext = [storySummary, currentSceneSummary, currentStoryDescription]
+      const characterMemoryContext = await buildCharacterMemoryContext();
+      setLastInjectedCharacterMemory(characterMemoryContext || "");
+      const storyContext = [
+        gameContextText,
+        storySummary,
+        currentSceneSummary,
+        currentStoryDescription,
+        characterMemoryContext ? `Character turn memory:\n${characterMemoryContext}` : "",
+      ]
         .filter(Boolean)
         .join("\n\n")
         .trim();
@@ -507,6 +994,9 @@ export default function GamePage() {
         storyHistory,
         currentNpc,
         currentPlayer,
+        playerMode,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
+        currentTurnNpcKnewPlayer: knewBeforeSend,
       });
 
       if (steerInstruction.trim()) {
@@ -575,10 +1065,13 @@ export default function GamePage() {
           currentMomentName: currentMoment?.name ?? "",
           npc: assignedNpc,
           player: assignedPlayer,
+          npcKnowsPlayer: npcKnowsPlayerEffective,
         }),
         userText: lastUserEntry?.text ?? "",
         assistantText: nextText,
         history: nextHistory,
+        playerMode: lastUserEntry?.playerMode,
+        currentTurnNpcKnewPlayer: lastUserEntry?.npcKnewPlayer,
       });
 
       return nextHistory;
@@ -593,13 +1086,7 @@ export default function GamePage() {
     const text = nextText.trim();
     if (!text) return;
 
-    fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    }).catch((err) => {
-      console.warn("[tts] failed to speak edited text", err);
-    });
+    void speakWithJennyVoice(text);
   };
 
   const handleSteerChatMessage = (messageId: string, nextText: string) => {
@@ -789,39 +1276,25 @@ export default function GamePage() {
     );
     setLmstudioHealth({ state: "checking" });
 
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 10000);
-
-    fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(lmstudioUrl)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        const payload = (await res.json().catch(() => null)) as {
-          ok?: boolean;
-          error?: string;
-          modelCount?: number;
-        } | null;
-        if (!res.ok || !payload?.ok) {
-          setLmstudioHealth({
-            state: "error",
-            message: payload?.error || "LM Studio is not reachable",
-          });
-          return;
-        }
-        setLmstudioHealth({
-          state: "healthy",
-          modelCount: payload.modelCount ?? 0,
-        });
-      })
-      .catch((err) => {
+    let cancelled = false;
+    void probeLmstudioHealth(lmstudioUrl).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
         setLmstudioHealth({
           state: "error",
-          message: err instanceof Error ? err.message : String(err),
+          message: result.error || "LM Studio is not reachable",
         });
-      })
-      .finally(() => {
-        window.clearTimeout(timeout);
+        return;
+      }
+      setLmstudioHealth({
+        state: "healthy",
+        modelCount: result.modelCount,
       });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [connected, connectionModel]);
 
   useEffect(() => {
@@ -889,6 +1362,7 @@ export default function GamePage() {
     let mounted = true;
     if (!id) {
       setLoading(false);
+      setGameShellReady(false);
       return () => {
         mounted = false;
       };
@@ -897,12 +1371,25 @@ export default function GamePage() {
     // Default title while we load data.
     setTitle(`Game ${id}`);
     setStoryMetaLoaded(false);
+    setGameShellReady(false);
     momentStateReadyRef.current = false;
     setChatMessages([]);
 
+    const historyKey = getGameHistoryKey(id);
+    const momentKey = getGameMomentKey(id);
+    const sessionKey = getGameSessionKey(id);
+
     (async () => {
       try {
-        const stored = (await get<any>(`story:${id}`)) || null;
+        const [stored, stories, characters, storedMomentState, storedHistory, storedSession] =
+          await Promise.all([
+          get<any>(`story:${id}`),
+          get<any[]>("stories"),
+          get<any[]>("PLAYGROUND_AGENTS"),
+          loadGameMoment(momentKey),
+          loadGameHistory(historyKey),
+          loadGameSession(sessionKey),
+        ]);
         if (!mounted) return;
 
         const storyObj = stored;
@@ -914,154 +1401,158 @@ export default function GamePage() {
         setStoryMoments(momentsArr);
         setGameData(storyObj);
 
-        // The story object in IndexedDB often doesn’t include a title,
-        // so fall back to the stories metadata list (used by the carousel).
-        let resolvedTitle = storyObj?.title ?? "";
-        try {
-          const stories = (await get<any[]>("stories")) || [];
-          const storyMeta = stories.find((s) => s.id === id);
-          if (!resolvedTitle) {
-            resolvedTitle = storyMeta?.title ?? "";
-          }
-          const resolvedDescription =
-            typeof storyMeta?.description === "string" && storyMeta.description.trim()
-              ? storyMeta.description
-              : typeof storyObj?.description === "string"
-                ? storyObj.description
-                : "";
-          setStoryDescription(resolvedDescription);
-          const resolvedArc = storyMeta?.storyArc ?? storyObj?.storyArc ?? null;
-          setStoryArc(resolvedArc);
+        const storyMeta = (stories || []).find((s) => s.id === id);
+        let resolvedTitle = storyObj?.title ?? storyMeta?.title ?? "";
+        const resolvedDescription =
+          typeof storyMeta?.description === "string" && storyMeta.description.trim()
+            ? storyMeta.description
+            : typeof storyObj?.description === "string"
+              ? storyObj.description
+              : "";
+        setStoryDescription(resolvedDescription);
+        const resolvedArc = storyMeta?.storyArc ?? storyObj?.storyArc ?? null;
+        setStoryArc(resolvedArc);
 
-          const resolveCurrentArcStage = () => {
-            const fromMeta = storyMeta?.storyArcCurrentStage;
-            if (typeof fromMeta === "number" && Number.isFinite(fromMeta)) return fromMeta;
-            const fromObj = storyObj?.storyArcCurrentStage;
-            if (typeof fromObj === "number" && Number.isFinite(fromObj)) return fromObj;
-            const arcState = storyMeta?.storyArcState ?? storyObj?.storyArcState;
-            if (arcState && typeof arcState === "object") {
-              const mainArcId =
-                typeof (arcState as any).mainArcId === "string" ? (arcState as any).mainArcId : null;
-              const map =
-                (arcState as any).currentStageByArcId &&
-                typeof (arcState as any).currentStageByArcId === "object"
-                  ? (arcState as any).currentStageByArcId
-                  : null;
-              if (mainArcId && map && typeof map[mainArcId] === "number") {
-                return Number(map[mainArcId]);
-              }
+        const resolveCurrentArcStage = () => {
+          const fromMeta = storyMeta?.storyArcCurrentStage;
+          if (typeof fromMeta === "number" && Number.isFinite(fromMeta)) return fromMeta;
+          const fromObj = storyObj?.storyArcCurrentStage;
+          if (typeof fromObj === "number" && Number.isFinite(fromObj)) return fromObj;
+          const arcState = storyMeta?.storyArcState ?? storyObj?.storyArcState;
+          if (arcState && typeof arcState === "object") {
+            const mainArcId =
+              typeof (arcState as any).mainArcId === "string" ? (arcState as any).mainArcId : null;
+            const map =
+              (arcState as any).currentStageByArcId &&
+              typeof (arcState as any).currentStageByArcId === "object"
+                ? (arcState as any).currentStageByArcId
+                : null;
+            if (mainArcId && map && typeof map[mainArcId] === "number") {
+              return Number(map[mainArcId]);
             }
-            return null;
-          };
+          }
+          return null;
+        };
 
           setStoryArcCurrentStage(resolveCurrentArcStage());
-          const characters = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
-          const npc = storyMeta?.npcId ? characters.find((c) => c.id === storyMeta.npcId) : null;
-          const player = storyMeta?.playerId
-            ? characters.find((c) => c.id === storyMeta.playerId)
-            : null;
-
-          setAssignedNpc(
-            npc
-              ? {
-                  id: npc.id,
-                  name: npc.name ?? "",
-                  description: npc.description ?? "",
-                  appearance: typeof storyMeta?.npcAppearance === "string" ? storyMeta.npcAppearance : "",
-                  avatarUrl: npc.avatarUrl,
-                }
-              : null,
+          setNpcKnowsPlayer(storyMeta?.npcKnowsPlayer === true);
+          setDirectorNotes(
+            typeof storyMeta?.directorNotes === "string" ? storyMeta.directorNotes : "",
           );
 
-          setAssignedPlayer(
-            player
-              ? {
-                  id: player.id,
-                  name: player.name ?? "",
-                  description: player.description ?? "",
-                  appearance:
-                    typeof storyMeta?.playerAppearance === "string" ? storyMeta.playerAppearance : "",
-                  avatarUrl: player.avatarUrl,
-                }
-              : null,
+          const npc = storyMeta?.npcId
+          ? (characters || []).find((c) => c.id === storyMeta.npcId)
+          : null;
+        const player = storyMeta?.playerId
+          ? (characters || []).find((c) => c.id === storyMeta.playerId)
+          : null;
+
+        setAssignedNpc(
+          npc
+            ? {
+                id: npc.id,
+                name: npc.name ?? "",
+                description: npc.description ?? "",
+                appearance: typeof storyMeta?.npcAppearance === "string" ? storyMeta.npcAppearance : "",
+                avatarUrl: npc.avatarUrl,
+              }
+            : null,
+        );
+
+        setAssignedPlayer(
+          player
+            ? {
+                id: player.id,
+                name: player.name ?? "",
+                description: player.description ?? "",
+                appearance:
+                  typeof storyMeta?.playerAppearance === "string" ? storyMeta.playerAppearance : "",
+                avatarUrl: player.avatarUrl,
+              }
+            : null,
+        );
+
+        const initialMomentIndex = (() => {
+          if (!momentsArr.length) return 0;
+          if (storedMomentState?.momentId) {
+            const savedMomentIndex = momentsArr.findIndex(
+              (m: any) => m.id === storedMomentState.momentId,
+            );
+            if (savedMomentIndex >= 0) return savedMomentIndex;
+          }
+          if (
+            typeof storedMomentState?.index === "number" &&
+            storedMomentState.index >= 0 &&
+            storedMomentState.index < momentsArr.length
+          ) {
+            return storedMomentState.index;
+          }
+          if (storyObj && storyObj.titleMomentId) {
+            const titleMomentIndex = momentsArr.findIndex(
+              (m: any) => m.id === storyObj.titleMomentId,
+            );
+            return titleMomentIndex >= 0 ? titleMomentIndex : 0;
+          }
+          return 0;
+        })();
+        setCurrentMomentIndex(initialMomentIndex);
+        setMomentSelectionMode(storedMomentState?.mode === "manual" ? "manual" : "auto");
+        setStoryMetaLoaded(true);
+        momentStateReadyRef.current = true;
+        setTitle(resolvedTitle || `Game ${id}`);
+        setGameShellReady(true);
+
+        const npcName = npc?.name ?? "NPC";
+        const storyKnowsPlayer = storyMeta?.npcKnowsPlayer === true;
+        const playerName = player?.name ?? "";
+        const sanitizeHistoryText = (entry: OrchestratedMessage) => {
+          if (entry.from !== "agent") return entry.text;
+          return stripHistoryMessageText(
+            entry.text,
+            npcName,
+            player ? { name: player.name ?? "" } : undefined,
+            storyKnowsPlayer,
           );
+        };
 
-          const storedMomentState = await loadGameMoment(gameMomentKey);
-          if (!mounted) return;
-          const initialMomentIndex = (() => {
-            if (!momentsArr.length) return 0;
-            if (storedMomentState?.momentId) {
-              const savedMomentIndex = momentsArr.findIndex(
-                (m: any) => m.id === storedMomentState.momentId,
-              );
-              if (savedMomentIndex >= 0) return savedMomentIndex;
-            }
-            if (
-              typeof storedMomentState?.index === "number" &&
-              storedMomentState.index >= 0 &&
-              storedMomentState.index < momentsArr.length
-            ) {
-              return storedMomentState.index;
-            }
-            if (storyObj && storyObj.titleMomentId) {
-              const titleMomentIndex = momentsArr.findIndex((m: any) => m.id === storyObj.titleMomentId);
-              return titleMomentIndex >= 0 ? titleMomentIndex : 0;
-            }
-            return 0;
-          })();
-          setCurrentMomentIndex(initialMomentIndex);
-          setMomentSelectionMode(storedMomentState?.mode === "manual" ? "manual" : "auto");
+        const backfilledHistory = backfillNpcKnewPlayerOnHistory(
+          storedHistory,
+          playerName,
+          storyKnowsPlayer,
+        );
+        const nextHistory = backfilledHistory.map((entry) => ({
+          ...entry,
+          text: sanitizeHistoryText(entry),
+        }));
+        setPlayerRevealedInGame(
+          !storyKnowsPlayer &&
+            (storedSession?.playerRevealedInGame === true ||
+              historyRevealedPlayerIdentity(backfilledHistory, playerName)),
+        );
+        setStoryHistory(nextHistory);
+        console.warn('[game] loaded history, count:', nextHistory.length, 'key:', historyKey);
 
-          setStoryMetaLoaded(true);
-          momentStateReadyRef.current = true;
-          setTitle(resolvedTitle || `Game ${id}`);
-
-          const storedHistory = await loadGameHistory(gameHistoryKey);
-          if (!mounted) return;
-
-          const nextHistory = storedHistory;
-          setStoryHistory(nextHistory);
-
-          const openingText =
-            resolvedDescription.trim() ||
-            (typeof storyObj?.description === "string" ? storyObj.description.trim() : "") ||
-            resolvedTitle.trim() ||
-            `Game ${id}`;
-          const opening = buildOpeningDetails(
-            openingText,
-            npc
-              ? {
-                  id: npc.id,
-                  name: npc.name ?? "",
-                  description: npc.description ?? "",
-                  avatarUrl: npc.avatarUrl,
-                }
-              : null,
-            player
-              ? {
-                  id: player.id,
-                  name: player.name ?? "",
-                  description: player.description ?? "",
-                  avatarUrl: player.avatarUrl,
-                }
-              : null,
-          );
-          setChatMessages([
-            {
-              id: "story-opening",
-              from: "agent",
-              text: opening.text,
-              details: opening.details,
-            },
-            ...nextHistory.map((entry) => ({
-              id: entry.id,
-              from: entry.from,
-              text: entry.text,
-            })),
-          ]);
-        } catch {
-          /* ignore */
-        }
+        const openingText =
+          resolvedDescription.trim() ||
+          (typeof storyObj?.description === "string" ? storyObj.description.trim() : "") ||
+          resolvedTitle.trim() ||
+          `Game ${id}`;
+        setChatMessages([
+          {
+            id: "story-opening",
+            from: "agent",
+            text: openingText,
+          },
+          ...nextHistory.map((entry) => ({
+            id: entry.id,
+            from: entry.from,
+            text: entry.text,
+            name:
+              entry.from === "user"
+                ? player?.name?.trim() || "You"
+                : npc?.name?.trim() || "Narrator",
+          })),
+        ]);
       } catch (e) {
         console.error("Failed to load game data", e);
       } finally {
@@ -1086,39 +1577,120 @@ export default function GamePage() {
         contentClassName="p-0"
       >
         <div className="relative h-full">
-          <Pressable
-            type="button"
-            onClick={() => setConfirmQuit(true)}
-            className="fixed bottom-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
-            aria-label="Quit game"
-          >
-            <MdExitToApp className="h-5 w-5" />
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setConfirmQuit(true)}
+                  className="fixed left-4 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Quit game"
+                >
+                  <MdExitToApp className="h-5 w-5" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Quit game
+              </TooltipContent>
+            </Tooltip>
 
-            <span className="pointer-events-none absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
-              Quit game
-            </span>
-          </Pressable>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setDebugOpen(true)}
+                  className="fixed left-16 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Debug"
+                >
+                  <FaBug className="h-4 w-4" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Debug
+              </TooltipContent>
+            </Tooltip>
 
-          <Pressable
-            type="button"
-            onClick={() => setDebugOpen(true)}
-            className="fixed bottom-4 left-16 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
-            aria-label="Debug"
-          >
-            <FaBug className="h-4 w-4" />
-          </Pressable>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setTagDialogOpen(true)}
+                  className="fixed left-28 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Tag current moment"
+                  disabled={!currentMoment}
+                >
+                  <FaTags className="h-4 w-4" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Tag current moment
+              </TooltipContent>
+            </Tooltip>
 
-          <Pressable
-            type="button"
-            onClick={() => setTagDialogOpen(true)}
-            className="fixed bottom-4 left-28 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Tag current moment"
-            disabled={!currentMoment}
-          >
-            <FaTags className="h-4 w-4" />
-          </Pressable>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Pressable
+                  type="button"
+                  onClick={() => setMemoryDialogOpen(true)}
+                  className="fixed left-40 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
+                  aria-label="Show memory"
+                >
+                  <FaBrain className="h-4 w-4" />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={10}
+                className="z-[60] border-0 bg-black/90 text-white"
+              >
+                Memory
+              </TooltipContent>
+            </Tooltip>
+
+            {showDesktopInstall ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pressable
+                    type="button"
+                    onClick={() => void handleInstallDesktop()}
+                    disabled={desktopInstallBusy}
+                    className="fixed left-52 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg shadow-black/30 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Install desktop app"
+                  >
+                    <FaDesktop className="h-4 w-4" />
+                  </Pressable>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  sideOffset={10}
+                  className="z-[60] border-0 bg-black/90 text-white"
+                >
+                  {desktopInstallBusy
+                    ? "Fetching installer…"
+                    : "Install desktop (auto-update)"}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </TooltipProvider>
 
           <div className="relative h-full w-full bg-black">
+            {!gameShellReady ? (
+              <div className="flex h-full items-center justify-center bg-zinc-950 text-sm text-muted-foreground">
+                Loading game…
+              </div>
+            ) : (
             <div
               ref={stageRef}
               className="absolute inset-0 h-full w-full overflow-hidden"
@@ -1176,7 +1748,7 @@ export default function GamePage() {
                 </div>
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4 pl-64">
                 <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] min-w-0 items-center rounded-full border border-white/20 bg-black/45 px-3 py-1 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
                   <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.85)]" />
                   <span className="truncate">{title}</span>
@@ -1220,15 +1792,19 @@ export default function GamePage() {
                     onSteerMessage={handleSteerChatMessage}
                     onContinueMessage={handleContinueChatMessage}
                     steerInstruction={steerInstruction}
-                    disabled={false}
+                    disabled={chatInFlight}
                     connected={connected}
                     connectionModel={connectionModel}
+                    playerMode={playerMode}
+                    onPlayerModeChange={setPlayerMode}
+                    playerIdentityHint={playerIdentityHint}
                     sendIcon={<FaArrowUp className="h-4 w-4" />}
                     sendIconAriaLabel="Send message"
                   />
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {confirmQuit ? (
@@ -1349,6 +1925,26 @@ export default function GamePage() {
                 <h4 className="mb-2 text-sm font-medium text-slate-400">Story Memory</h4>
                 <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
                   {storySummary || "No story summary yet"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Game Context</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {gameContextText || "No game context yet"}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">Memory Debug</h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {memoryDebugInfo}
+                </pre>
+              </div>
+              <div className="flex-shrink-0">
+                <h4 className="mb-2 text-sm font-medium text-slate-400">
+                  Injected Character Memory (Last {CHARACTER_MEMORY_INJECTION_LIMIT} Per Character)
+                </h4>
+                <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+                  {lastInjectedCharacterMemory || "No character memory injected yet"}
                 </pre>
               </div>
               <div className="flex-shrink-0">
@@ -1486,6 +2082,97 @@ export default function GamePage() {
                 )}
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
+        <DialogContent
+          className="z-[210] w-[min(92vw,720px)] max-h-[85vh] overflow-hidden border-slate-700 bg-slate-900 text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">External Memory</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              Imported from Samus-Manus memory for game context.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 overflow-auto">
+            <div className="rounded border border-slate-700 bg-slate-950 p-3 space-y-2">
+              <div className="text-sm font-medium text-slate-100">Player identity</div>
+              {npcKnowsPlayerEffective ? (
+                <p className="text-xs text-slate-300">
+                  NPC knows {assignedPlayer?.name?.trim() || "the player"}
+                  {playerRevealedInGame && !npcKnowsPlayer
+                    ? " — name detected during this game."
+                    : ""}
+                </p>
+              ) : (
+                <p className="text-xs text-slate-300">
+                  Stranger — memory uses &quot;Stranger says/does/thinks&quot; until they introduce
+                  themselves (e.g. &quot;I&apos;m Alex&quot;).
+                </p>
+              )}
+              {!npcKnowsPlayer ? (
+                <label className="flex items-start gap-2 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={playerRevealedInGame}
+                    onChange={(e) => setPlayerRevealedInGame(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>NPC knows who the player is</span>
+                </label>
+              ) : null}
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-400">
+                {memoryLoading ? "Loading memory..." : "Latest injected memory context"}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={memoryFileInputRef}
+                  type="file"
+                  accept="application/json"
+                  className="hidden"
+                  onChange={(e) => handleLoadMemory(e.target.files)}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveMemory}
+                  className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <ArrowDownIcon size={14} />
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => memoryFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <Upload size={14} />
+                  Load
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadExternalMemory()}
+                  className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteMemory()}
+                  className="rounded border border-red-700/60 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40"
+                >
+                  Delete Memory
+                </button>
+              </div>
+            </div>
+            <pre className="max-h-[55vh] overflow-auto rounded bg-slate-950 p-3 text-xs whitespace-pre-wrap">
+              {memoryDebugInfo}
+              {"\n\n"}
+              {externalMemorySummary || "No external memory loaded."}
+            </pre>
           </div>
         </DialogContent>
       </Dialog>

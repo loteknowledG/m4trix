@@ -1,5 +1,11 @@
 import type { NextRequest } from 'next/server';
-import { DEFAULT_LMSTUDIO_URL, getLmstudioModelsUrl, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import {
+  DEFAULT_LMSTUDIO_URL,
+  getLmstudioModelsUrl,
+  LMSTUDIO_HEALTH_TIMEOUT_MS,
+  normalizeLmstudioUrl,
+  parseLmstudioModelsResponse,
+} from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
 export const dynamic =
@@ -10,7 +16,7 @@ type HealthPayload = {
   baseUrl: string;
   modelsUrl: string;
   modelCount?: number;
-  models?: string[];
+  models?: Array<{ id: string; label: string }>;
   error?: string;
 };
 
@@ -49,12 +55,13 @@ export async function GET(req?: NextRequest) {
   const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);
 
   try {
     const response = await fetch(modelsUrl, {
       method: 'GET',
       signal: controller.signal,
+      cache: 'no-store',
     });
 
     const text = await response.text();
@@ -71,29 +78,19 @@ export async function GET(req?: NextRequest) {
       });
     }
 
-    let modelIds: string[] = [];
+    let models: Array<{ id: string; label: string }> = [];
     try {
-      const json = JSON.parse(text);
-      const rawModels = Array.isArray(json)
-        ? json
-        : Array.isArray(json?.data)
-          ? json.data
-          : Array.isArray(json?.models)
-            ? json.models
-            : [];
-      modelIds = rawModels
-        .map((m: { id?: string; model_id?: string; name?: string }) => m?.id || m?.model_id || m?.name)
-        .filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0);
+      models = parseLmstudioModelsResponse(JSON.parse(text));
     } catch {
-      modelIds = [];
+      models = [];
     }
 
     const payload: HealthPayload = {
       ok: true,
       baseUrl: lmstudioUrl,
       modelsUrl,
-      modelCount: modelIds.length,
-      models: modelIds,
+      modelCount: models.length,
+      models,
     };
 
     return new Response(JSON.stringify(payload), {
@@ -101,11 +98,18 @@ export async function GET(req?: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const aborted =
+      (err instanceof Error && err.name === 'AbortError') ||
+      (err instanceof Error && /aborted/i.test(err.message));
     const payload: HealthPayload = {
       ok: false,
       baseUrl: lmstudioUrl,
       modelsUrl,
-      error: err instanceof Error ? err.message : String(err),
+      error: aborted
+        ? `Timed out after ${LMSTUDIO_HEALTH_TIMEOUT_MS / 1000}s reaching ${modelsUrl}`
+        : err instanceof Error
+          ? err.message
+          : String(err),
     };
     return new Response(JSON.stringify(payload), {
       status: 502,

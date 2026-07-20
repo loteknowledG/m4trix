@@ -1,12 +1,13 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
-import { Trash2, Upload } from "@/components/icons";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, SquarePen, Trash2, Upload } from "@/components/icons";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GrUserFemale } from "react-icons/gr";
 import { IoBanOutline } from "react-icons/io5";
 import { LuNotebookText } from "react-icons/lu";
+import { SiLevelsdotfyi } from "react-icons/si";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import CollectionOverlay from "@/components/collection-overlay";
 import { DescriptionEditor } from "@/components/description-editor";
@@ -33,11 +34,75 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { MomentsProvider } from "@/context/moments-collection";
 import useSelection from "@/hooks/use-selection";
 import { useSidebar } from "@/hooks/use-sidebar";
-import { parseStoryArcJson } from "@/lib/game/story-arc";
+import { parseStoryArcJson, type StoryArc, type StoryArcStage } from "@/lib/game/story-arc";
+import {
+  type CheckpointObjective,
+  type ObjectiveInteractionType,
+  type ObjectiveType,
+  type SceneObject,
+  createObjective,
+  createSceneObject,
+} from "@/lib/game/objectives";
 import { logger } from "@/lib/logger";
 import { isEphemeralMomentSrc, materializeMomentSrc } from "@/lib/moments";
+import { cn } from "@/lib/utils";
+
+const STORY_STAGE_PALETTES = [
+  { bg: "#ffffff", fg: "#000000" },
+  { bg: "#000000", fg: "#ffffff" },
+  { bg: "#dddddd", fg: "#333333" },
+  { bg: "#333333", fg: "#dddddd" },
+  { bg: "#ffff00", fg: "#ffffff" },
+  { bg: "#000000", fg: "#ffff00" },
+  { bg: "#00ffff", fg: "#ffffff" },
+  { bg: "#000000", fg: "#00ffff" },
+  { bg: "#ff00ff", fg: "#ffffff" },
+  { bg: "#000000", fg: "#ff00ff" },
+] as const;
+
+function getStagePalette(index: number) {
+  return STORY_STAGE_PALETTES[index % STORY_STAGE_PALETTES.length];
+}
+
+type StageEditForm = {
+  name: string;
+  shortDesc: string;
+  emotionalState: string;
+  powerDynamic: string;
+  keyTags: string;
+  passTest: string;
+  exampleDialogTone: string;
+  objectives: CheckpointObjective[];
+  sceneObjects: SceneObject[];
+};
+
+function parseListField(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatListField(items: string[]): string {
+  return items.join("\n");
+}
+
+function createEmptyStageEditForm(): StageEditForm {
+  return {
+    name: "",
+    shortDesc: "",
+    emotionalState: "",
+    powerDynamic: "",
+    keyTags: "",
+    passTest: "",
+    exampleDialogTone: "",
+    objectives: [],
+    sceneObjects: [],
+  };
+}
 
 type Moment = { id: string; src: string; name?: string; fingerprint?: string };
+type StagedMomentsByStage = Record<number, string[]>;
 type Character = { id: string; name?: string; avatarUrl?: string };
 type StoryMeta = {
   id: string;
@@ -49,7 +114,23 @@ type StoryMeta = {
   npcAppearance?: string;
   playerAppearance?: string;
   storyArc?: unknown;
+  storyArcCurrentStage?: number;
+  stagedMomentsByStage?: StagedMomentsByStage;
+  npcKnowsPlayer?: boolean;
+  directorNotes?: string;
 };
+
+function normalizeStagedMomentsByStage(value: unknown): StagedMomentsByStage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const next: StagedMomentsByStage = {};
+  for (const [rawKey, rawIds] of Object.entries(value)) {
+    const stageNumber = Number(rawKey);
+    if (!Number.isFinite(stageNumber) || !Array.isArray(rawIds)) continue;
+    const ids = rawIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (ids.length > 0) next[stageNumber] = Array.from(new Set(ids));
+  }
+  return next;
+}
 
 function normalizeDescription(value: string) {
   if (!value) return "";
@@ -63,13 +144,19 @@ function normalizeDescription(value: string) {
 
 export default function StoryPage() {
   const params = useParams();
-  const id = params?.id as string | undefined;
+  const searchParams = useSearchParams();
+  const routeId = params?.id as string | undefined;
+  const id = routeId === "new" ? searchParams?.get("story") || undefined : routeId;
 
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [storyInfoOpen, setStoryInfoOpen] = useState(false);
+  const [stageOpen, setStageOpen] = useState(false);
+  const [stageEditTarget, setStageEditTarget] = useState<number | null>(null);
+  const [stageEditForm, setStageEditForm] = useState<StageEditForm>(createEmptyStageEditForm);
+  const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
   const [assignNpcOpen, setAssignNpcOpen] = useState(false);
   const [assignPlayerOpen, setAssignPlayerOpen] = useState(false);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -80,6 +167,9 @@ export default function StoryPage() {
   const [storyDescription, setStoryDescription] = useState("");
   const [storyArcText, setStoryArcText] = useState("");
   const [storyArcError, setStoryArcError] = useState<string | null>(null);
+  const [stagedMomentsByStage, setStagedMomentsByStage] = useState<StagedMomentsByStage>({});
+  const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
+  const [directorNotes, setDirectorNotes] = useState("");
   const assignedNpcCharacter = assignedNpcId
     ? characters.find((character) => character.id === assignedNpcId) || null
     : null;
@@ -152,6 +242,10 @@ export default function StoryPage() {
         let t = stored && stored.title ? stored.title : "";
         const storedArc =
           stored && typeof stored === "object" && !Array.isArray(stored) ? stored.storyArc : null;
+        const storedStaged =
+          stored && typeof stored === "object" && !Array.isArray(stored)
+            ? stored.stagedMomentsByStage
+            : null;
         try {
           const saved = (await get<StoryMeta[]>("stories")) || [];
           const meta = saved.find((m: any) => m.id === id);
@@ -164,6 +258,14 @@ export default function StoryPage() {
           const arcValue = meta?.storyArc ?? storedArc ?? null;
           setStoryArcText(arcValue ? JSON.stringify(arcValue, null, 2) : "");
           setStoryArcError(null);
+          setStoryArcCurrentStage(
+            typeof meta?.storyArcCurrentStage === "number" ? meta.storyArcCurrentStage : null,
+          );
+          setStagedMomentsByStage(
+            normalizeStagedMomentsByStage(meta?.stagedMomentsByStage ?? storedStaged),
+          );
+          setNpcKnowsPlayer(meta?.npcKnowsPlayer === true);
+          setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
         } catch (e) {
           /* ignore */
         }
@@ -194,6 +296,12 @@ export default function StoryPage() {
         setStoryDescription(normalizeDescription(meta?.description || ""));
         setStoryArcText(meta?.storyArc ? JSON.stringify(meta.storyArc, null, 2) : "");
         setStoryArcError(null);
+        setStoryArcCurrentStage(
+          typeof meta?.storyArcCurrentStage === "number" ? meta.storyArcCurrentStage : null,
+        );
+        setStagedMomentsByStage(normalizeStagedMomentsByStage(meta?.stagedMomentsByStage));
+        setNpcKnowsPlayer(meta?.npcKnowsPlayer === true);
+        setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
       } catch (e) {
         /* ignore */
       }
@@ -680,6 +788,213 @@ export default function StoryPage() {
     await saveStoryMetadata({ description: storyDescription });
   }, [saveStoryMetadata, storyDescription]);
 
+  const saveDirectorNotes = useCallback(async () => {
+    await saveStoryMetadata({ directorNotes });
+  }, [directorNotes, saveStoryMetadata]);
+
+  const saveStoryArcCurrentStage = useCallback(
+    async (stageNumber: number) => {
+      setStoryArcCurrentStage(stageNumber);
+      await saveStoryMetadata({ storyArcCurrentStage: stageNumber });
+    },
+    [saveStoryMetadata],
+  );
+
+  const parsedStoryArc = useMemo(() => {
+    const trimmed = storyArcText.trim();
+    if (!trimmed) return null;
+    try {
+      return parseStoryArcJson(trimmed);
+    } catch {
+      return null;
+    }
+  }, [storyArcText]);
+
+  const storyArcStages = useMemo(
+    () =>
+      Array.isArray(parsedStoryArc?.stages)
+        ? [...parsedStoryArc.stages].sort((a, b) => a.stageNumber - b.stageNumber)
+        : [],
+    [parsedStoryArc],
+  );
+
+  const stagePickerOptions = useMemo(() => {
+    if (storyArcStages.length > 0) return storyArcStages;
+    return [1, 2, 3, 4, 5].map((stageNumber) => ({
+      stageNumber,
+      stageName: "",
+      shortDescription: "",
+      emotionalState: [] as string[],
+      keyTags: [] as string[],
+      passTest: [] as string[],
+      exampleDialogTone: "",
+      powerDynamic: "",
+      objectives: [] as CheckpointObjective[],
+      sceneObjects: [] as SceneObject[],
+    }));
+  }, [storyArcStages]);
+
+  useEffect(() => {
+    if (!stageOpen || stageEditTarget == null) {
+      setStageEditForm(createEmptyStageEditForm());
+      return;
+    }
+
+    const stage = stagePickerOptions.find((item) => item.stageNumber === stageEditTarget);
+    setStageEditForm({
+      name: stage?.stageName ?? "",
+      shortDesc: stage?.shortDescription ?? "",
+      emotionalState: formatListField(stage?.emotionalState ?? []),
+      powerDynamic: stage?.powerDynamic ?? "",
+      keyTags: formatListField(stage?.keyTags ?? []),
+      passTest: formatListField(stage?.passTest ?? []),
+      exampleDialogTone: stage?.exampleDialogTone ?? "",
+      objectives: stage?.objectives ?? [],
+      sceneObjects: stage?.sceneObjects ?? [],
+    });
+  }, [stageEditTarget, stageOpen, stagePickerOptions]);
+
+  const buildStoryArcForEditing = useCallback((): StoryArc => {
+    if (parsedStoryArc) return parsedStoryArc;
+    return {
+      id: id ? `story-${id}-arc` : "story-arc",
+      name: title.trim() || "Story Arc",
+      stages: stagePickerOptions,
+    };
+  }, [id, parsedStoryArc, stagePickerOptions, title]);
+
+  const saveStageEdit = useCallback(async () => {
+    if (stageEditTarget == null) return;
+
+    const arc = buildStoryArcForEditing();
+    const nextStage: StoryArcStage = {
+      stageNumber: stageEditTarget,
+      stageName: stageEditForm.name.trim(),
+      shortDescription: stageEditForm.shortDesc.trim(),
+      emotionalState: parseListField(stageEditForm.emotionalState),
+      powerDynamic: stageEditForm.powerDynamic.trim(),
+      keyTags: parseListField(stageEditForm.keyTags),
+      passTest: parseListField(stageEditForm.passTest),
+      exampleDialogTone: stageEditForm.exampleDialogTone.trim(),
+      objectives: stageEditForm.objectives,
+      sceneObjects: stageEditForm.sceneObjects,
+    };
+
+    const stages = [...arc.stages];
+    const existingIndex = stages.findIndex((stage) => stage.stageNumber === stageEditTarget);
+    if (existingIndex >= 0) {
+      stages[existingIndex] = nextStage;
+    } else {
+      stages.push(nextStage);
+    }
+
+    const nextArc: StoryArc = {
+      ...arc,
+      stages: stages.sort((a, b) => a.stageNumber - b.stageNumber),
+    };
+    const nextArcText = JSON.stringify(nextArc, null, 2);
+    setStoryArcText(nextArcText);
+    setStoryArcError(null);
+    await saveStoryArc(nextArcText);
+    await saveStoryArcCurrentStage(stageEditTarget);
+    setStageOpen(false);
+    setStageEditTarget(null);
+  }, [
+    buildStoryArcForEditing,
+    saveStoryArc,
+    saveStoryArcCurrentStage,
+    stageEditForm,
+    stageEditTarget,
+  ]);
+
+  const stagedMomentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const stageIds of Object.values(stagedMomentsByStage)) {
+      for (const momentId of stageIds) ids.add(momentId);
+    }
+    return ids;
+  }, [stagedMomentsByStage]);
+
+  const unstagedMoments = useMemo(
+    () => moments.filter((moment) => !stagedMomentIds.has(moment.id)),
+    [moments, stagedMomentIds],
+  );
+
+  const populatedStageNumbers = useMemo(
+    () =>
+      Object.keys(stagedMomentsByStage)
+        .map(Number)
+        .filter((stageNumber) => (stagedMomentsByStage[stageNumber]?.length ?? 0) > 0)
+        .sort((a, b) => a - b),
+    [stagedMomentsByStage],
+  );
+
+  const saveStagedMoments = useCallback(
+    async (next: StagedMomentsByStage) => {
+      if (!id) return;
+      const cleaned = normalizeStagedMomentsByStage(next);
+      setStagedMomentsByStage(cleaned);
+      try {
+        await saveStoryMetadata({ stagedMomentsByStage: cleaned });
+        const storyKey = `story:${id}`;
+        const stored = (await get<any>(storyKey)) || [];
+        if (Array.isArray(stored)) {
+          await set(storyKey, { items: stored, stagedMomentsByStage: cleaned });
+        } else if (stored && typeof stored === "object") {
+          await set(storyKey, { ...stored, stagedMomentsByStage: cleaned });
+        } else {
+          await set(storyKey, { items: [], stagedMomentsByStage: cleaned });
+        }
+      } catch (e) {
+        logger.error("Failed to save staged moments", e);
+      }
+    },
+    [id, saveStoryMetadata],
+  );
+
+  const assignSelectedToStage = useCallback(
+    async (stageNumber: number) => {
+      const ids = Array.from(selectedIds || []);
+      if (!ids.length) return;
+
+      const next: StagedMomentsByStage = { ...stagedMomentsByStage };
+      const existing = next[stageNumber] || [];
+      next[stageNumber] = Array.from(new Set([...existing, ...ids]));
+
+      for (const rawStageNumber of Object.keys(next)) {
+        const currentStageNumber = Number(rawStageNumber);
+        if (currentStageNumber === stageNumber) continue;
+        const filtered = next[currentStageNumber].filter((momentId) => !ids.includes(momentId));
+        if (filtered.length > 0) {
+          next[currentStageNumber] = filtered;
+        } else {
+          delete next[currentStageNumber];
+        }
+      }
+
+      await saveStagedMoments(next);
+      await saveStoryArcCurrentStage(stageNumber);
+      clearSelection(scope);
+      setStageOpen(false);
+    },
+    [
+      clearSelection,
+      saveStagedMoments,
+      saveStoryArcCurrentStage,
+      selectedIds,
+      stagedMomentsByStage,
+    ],
+  );
+
+  const getStageMoments = useCallback(
+    (stageNumber: number) => {
+      const ids = stagedMomentsByStage[stageNumber] || [];
+      const byId = new Map(moments.map((moment) => [moment.id, moment]));
+      return ids.map((momentId) => byId.get(momentId)).filter(Boolean) as Moment[];
+    },
+    [moments, stagedMomentsByStage],
+  );
+
   const saveNpcAppearance = useCallback(async () => {
     await saveStoryMetadata({ npcAppearance: assignedNpcAppearance });
   }, [assignedNpcAppearance, saveStoryMetadata]);
@@ -775,6 +1090,13 @@ export default function StoryPage() {
       }
       await saveStoryItems(remaining);
 
+      const prunedStaged: StagedMomentsByStage = {};
+      for (const [rawStage, stageIds] of Object.entries(stagedMomentsByStage)) {
+        const filtered = stageIds.filter((momentId) => !ids.includes(momentId));
+        if (filtered.length > 0) prunedStaged[Number(rawStage)] = filtered;
+      }
+      await saveStagedMoments(prunedStaged);
+
       // keep story count in sync
       setStoryCount(remaining.length).catch(() => {});
 
@@ -791,7 +1113,7 @@ export default function StoryPage() {
     } catch (err) {
       logger.error("Failed to move selected to trash", err);
     }
-  }, [clearSelection, id, moments, scope, selectedIds, saveStoryItems]);
+  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems]);
 
   const moveToHeap = useCallback(async () => {
     try {
@@ -816,6 +1138,13 @@ export default function StoryPage() {
       }
       await saveStoryItems(remaining);
 
+      const prunedStaged: StagedMomentsByStage = {};
+      for (const [rawStage, stageIds] of Object.entries(stagedMomentsByStage)) {
+        const filtered = stageIds.filter((momentId) => !ids.includes(momentId));
+        if (filtered.length > 0) prunedStaged[Number(rawStage)] = filtered;
+      }
+      await saveStagedMoments(prunedStaged);
+
       setStoryCount(remaining.length).catch(() => {});
       try {
         window.dispatchEvent(
@@ -830,7 +1159,7 @@ export default function StoryPage() {
     } catch (err) {
       logger.error("Failed to move selected to heap", err);
     }
-  }, [clearSelection, id, moments, scope, selectedIds, saveStoryItems]);
+  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems]);
 
   return (
     <>
@@ -838,22 +1167,33 @@ export default function StoryPage() {
         title={title || "Stories"}
         titleMarquee
         navLeft={
-          <SelectionHeaderBar
-            selectedIds={selectedIds || []}
-            moments={moments}
-            showSelectAll={(selectedIds || []).length > 0}
-            onSelectAll={() => {
-              if ((selectedIds || []).length !== moments.length) {
-                setSelectionStore(
-                  scope,
-                  moments.map((m) => m.id),
-                );
-              } else {
-                clearSelection(scope);
-              }
-            }}
-            onClearSelection={() => clearSelection(scope)}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/stories")}
+              className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
+              aria-label="Back to stories"
+              title="Back to stories"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <SelectionHeaderBar
+              selectedIds={selectedIds || []}
+              moments={moments}
+              showSelectAll={(selectedIds || []).length > 0}
+              onSelectAll={() => {
+                if ((selectedIds || []).length !== moments.length) {
+                  setSelectionStore(
+                    scope,
+                    moments.map((m) => m.id),
+                  );
+                } else {
+                  clearSelection(scope);
+                }
+              }}
+              onClearSelection={() => clearSelection(scope)}
+            />
+          </div>
         }
         navRight={
           <div className="flex items-center gap-2">
@@ -883,6 +1223,28 @@ export default function StoryPage() {
 
             {(selectedIds || []).length > 0 ? (
               <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10"
+                        aria-label="Stage"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setStageOpen(true);
+                        }}
+                      >
+                        <SiLevelsdotfyi size={18} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={10}>
+                      <p>Stage</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -977,18 +1339,26 @@ export default function StoryPage() {
                 )}
               </div>
               {loading ? (
-                <div className="text-sm text-muted-foreground">Loadingâ€¦</div>
+                <div className="text-sm text-muted-foreground">Loading…</div>
               ) : moments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Upload size={16} />
-                    <div className="font-medium">No story selected</div>
+                    <div className="font-medium">No moments yet</div>
                   </div>
                   <div className="text-sm">
-                    Create a new story from the heap to move moments here.
+                    Add moments from the heap or drag animated gifs into this story.
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 flex items-center justify-center gap-2">
                     <button
+                      type="button"
+                      onClick={() => router.push("/heap/")}
+                      className="inline-flex items-center px-3 py-1.5 rounded border text-sm hover:bg-accent/10"
+                    >
+                      Open heap
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleDeleteStory}
                       className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
                     >
@@ -998,40 +1368,82 @@ export default function StoryPage() {
                 </div>
               ) : (
                 <MomentsProvider collection={moments}>
-                  {moments.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2 mb-2">
-                        <Upload size={16} />
-                        <div className="font-medium">No story selected</div>
-                      </div>
-                      <div className="text-sm">
-                        Create a new story from the heap to move moments here.
-                      </div>
-                      <div className="mt-4">
-                        <button
-                          onClick={handleDeleteStory}
-                          className="inline-flex items-center px-3 py-1.5 rounded border text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
-                        >
-                          Delete story
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <MomentsGrid
-                      moments={moments}
-                      selectedIds={selectedIds}
-                      toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                      onDragStart={onDragStart}
-                      onDragEnd={(_idx: number) => {
-                        dragIndexRef.current = null;
-                        setDragOverIndex(null);
-                        stopAutoScroll();
-                      }}
-                      onDragOver={onDragOver}
-                      onDrop={onDrop}
-                      dragOverIndex={dragOverIndex}
-                    />
-                  )}
+                  <>
+                      {populatedStageNumbers.map((stageNumber) => {
+                        const stageMoments = getStageMoments(stageNumber);
+                        if (stageMoments.length === 0) return null;
+                        const stageMeta = stagePickerOptions.find(
+                          (stage) => stage.stageNumber === stageNumber,
+                        );
+                        const palette = getStagePalette(stageNumber - 1);
+                        return (
+                          <div key={`stage-${stageNumber}`} className="mb-8">
+                            <div
+                              className="mb-3 flex items-start justify-between gap-3 rounded border px-3 py-2"
+                              style={{ backgroundColor: palette.bg, color: palette.fg }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-sm font-semibold">
+                                  Stage {stageNumber}
+                                  {stageMeta?.stageName ? `: ${stageMeta.stageName}` : ""}
+                                </h3>
+                                {stageMeta?.shortDescription ? (
+                                  <p className="mt-1 text-xs opacity-80">{stageMeta.shortDescription}</p>
+                                ) : null}
+                              </div>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-70"
+                                      aria-label={`Edit stage ${stageNumber}`}
+                                      onClick={() => {
+                                        setStageEditTarget(stageNumber);
+                                        setStageOpen(true);
+                                      }}
+                                    >
+                                      <SquarePen size={16} />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" sideOffset={10}>
+                                    <p>Edit stage</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <MomentsGrid
+                              moments={stageMoments}
+                              selectedIds={selectedIds}
+                              toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                              onDragStart={onDragStart}
+                              onDragEnd={(_idx: number) => {
+                                dragIndexRef.current = null;
+                                setDragOverIndex(null);
+                                stopAutoScroll();
+                              }}
+                              onDragOver={onDragOver}
+                              onDrop={onDrop}
+                              dragOverIndex={dragOverIndex}
+                            />
+                          </div>
+                        );
+                      })}
+                      <MomentsGrid
+                        moments={unstagedMoments}
+                        selectedIds={selectedIds}
+                        toggleSelect={(tid: string) => toggleSelect(scope, tid)}
+                        onDragStart={onDragStart}
+                        onDragEnd={(_idx: number) => {
+                          dragIndexRef.current = null;
+                          setDragOverIndex(null);
+                          stopAutoScroll();
+                        }}
+                        onDragOver={onDragOver}
+                        onDrop={onDrop}
+                        dragOverIndex={dragOverIndex}
+                      />
+                    </>
                   <CollectionOverlay />
                 </MomentsProvider>
               )}
@@ -1222,6 +1634,44 @@ export default function StoryPage() {
                 />
               </div>
 
+              <div className="space-y-1">
+                <div className="text-xs uppercase text-muted-foreground">Director&apos;s notes</div>
+                <p className="text-[11px] text-muted-foreground">
+                  Hidden setup for the NPC only — not shown in the game or read aloud. Use this for
+                  location, mood, and facts the character would know about the scene.
+                </p>
+                <textarea
+                  value={directorNotes}
+                  onChange={(e) => setDirectorNotes(e.target.value)}
+                  onBlur={() => {
+                    void saveDirectorNotes();
+                  }}
+                  rows={5}
+                  placeholder="e.g. Late evening in her apartment. Rain on the windows. She has never met the player before."
+                  className="min-h-[120px] w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+                />
+              </div>
+
+              <label className="flex items-start gap-3 rounded border border-border/60 px-3 py-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={npcKnowsPlayer}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setNpcKnowsPlayer(next);
+                    void saveStoryMetadata({ npcKnowsPlayer: next });
+                  }}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium">NPC knows player</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Leave unchecked for a first meeting. The NPC will not know the player&apos;s
+                    name or history until it comes up in chat.
+                  </span>
+                </span>
+              </label>
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-xs uppercase text-muted-foreground">Story Arc (JSON)</div>
@@ -1304,6 +1754,461 @@ export default function StoryPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={stageOpen}
+        onOpenChange={(open) => {
+          setStageOpen(open);
+          if (!open) {
+            setStageEditTarget(null);
+            setStageEditForm(createEmptyStageEditForm());
+          }
+        }}
+      >
+        <DialogContent
+          className={cn("p-0", stageEditTarget != null ? "max-w-xl" : "max-w-lg")}
+          aria-describedby="story-stage-description"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>{stageEditTarget != null ? "Edit stage" : "Stage"}</DialogTitle>
+            <DialogDescription id="story-stage-description">
+              {stageEditTarget != null
+                ? "Edit story stage metadata."
+                : "Assign selected moments to a story stage."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex max-h-[75vh] flex-col p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-medium">
+                {stageEditTarget != null ? `Edit Stage ${stageEditTarget}` : "Stage"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setStageOpen(false);
+                  setStageEditTarget(null);
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
+                aria-label="Close stage dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            {stageEditTarget != null ? (
+              <div className="space-y-4 overflow-auto">
+                <div className="space-y-1">
+                  <label htmlFor="stage-edit-name" className="text-xs uppercase text-muted-foreground">
+                    name
+                  </label>
+                  <input
+                    id="stage-edit-name"
+                    value={stageEditForm.name}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="stage-edit-short-desc"
+                    className="text-xs uppercase text-muted-foreground"
+                  >
+                    shortDesc
+                  </label>
+                  <textarea
+                    id="stage-edit-short-desc"
+                    value={stageEditForm.shortDesc}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, shortDesc: e.target.value }))
+                    }
+                    rows={3}
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="stage-edit-emotional-state"
+                    className="text-xs uppercase text-muted-foreground"
+                  >
+                    emotionalState
+                  </label>
+                  <textarea
+                    id="stage-edit-emotional-state"
+                    value={stageEditForm.emotionalState}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, emotionalState: e.target.value }))
+                    }
+                    rows={3}
+                    placeholder="One item per line or comma-separated"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="stage-edit-power-dynamic"
+                    className="text-xs uppercase text-muted-foreground"
+                  >
+                    powerDynamic
+                  </label>
+                  <input
+                    id="stage-edit-power-dynamic"
+                    value={stageEditForm.powerDynamic}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, powerDynamic: e.target.value }))
+                    }
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="stage-edit-key-tags" className="text-xs uppercase text-muted-foreground">
+                    keyTags
+                  </label>
+                  <textarea
+                    id="stage-edit-key-tags"
+                    value={stageEditForm.keyTags}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, keyTags: e.target.value }))
+                    }
+                    rows={3}
+                    placeholder="One item per line or comma-separated"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="stage-edit-pass-test" className="text-xs uppercase text-muted-foreground">
+                    passTest
+                  </label>
+                  <textarea
+                    id="stage-edit-pass-test"
+                    value={stageEditForm.passTest}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, passTest: e.target.value }))
+                    }
+                    rows={3}
+                    placeholder="One item per line or comma-separated"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="stage-edit-example-dialog-tone"
+                    className="text-xs uppercase text-muted-foreground"
+                  >
+                    exampleDialogTone
+                  </label>
+                  <textarea
+                    id="stage-edit-example-dialog-tone"
+                    value={stageEditForm.exampleDialogTone}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, exampleDialogTone: e.target.value }))
+                    }
+                    rows={3}
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs uppercase text-muted-foreground">
+                      objectives ({stageEditForm.objectives.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newObj = createObjective({
+                          type: 'collect-object',
+                          description: 'New objective',
+                        });
+                        setStageEditForm((prev) => ({
+                          ...prev,
+                          objectives: [...prev.objectives, newObj],
+                        }));
+                      }}
+                      className="inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs hover:bg-accent/30"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  {stageEditForm.objectives.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No objectives yet. Click &quot;+ Add&quot; to create one.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-auto rounded border border-border p-2">
+                      {stageEditForm.objectives.map((obj, idx) => (
+                        <div key={obj.id} className="flex items-start gap-2 rounded bg-accent/20 p-2">
+                          <div className="flex-1 space-y-1">
+                            <select
+                              value={obj.type}
+                              onChange={(e) => {
+                                const updated = [...stageEditForm.objectives];
+                                updated[idx] = { ...obj, type: e.target.value as ObjectiveType };
+                                setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                              }}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+                            >
+                              <option value="collect-object">Collect Object</option>
+                              <option value="reach-location">Reach Location</option>
+                              <option value="interact-npc">Interact NPC</option>
+                              <option value="custom">Custom</option>
+                            </select>
+                            <input
+                              value={obj.description}
+                              placeholder="Description"
+                              onChange={(e) => {
+                                const updated = [...stageEditForm.objectives];
+                                updated[idx] = { ...obj, description: e.target.value };
+                                setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                              }}
+                              className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+                            />
+                            <div className="flex gap-1">
+                              <input
+                                value={obj.targetObjectId ?? ''}
+                                placeholder="Target ID (optional)"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.objectives];
+                                  updated[idx] = { ...obj, targetObjectId: e.target.value };
+                                  setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                              <input
+                                type="number"
+                                min={1}
+                                value={obj.requiredCount}
+                                placeholder="Count"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.objectives];
+                                  updated[idx] = { ...obj, requiredCount: parseInt(e.target.value) || 1 };
+                                  setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                                }}
+                                className="w-16 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <div className="flex gap-1">
+                              <select
+                                value={obj.interactionType ?? ''}
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.objectives];
+                                  updated[idx] = {
+                                    ...obj,
+                                    interactionType: e.target.value as ObjectiveInteractionType || undefined,
+                                  };
+                                  setStageEditForm((prev) => ({ ...prev, objectives: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              >
+                                <option value="">Interaction (any)</option>
+                                <option value="pickup">Pick Up</option>
+                                <option value="reach">Reach/Enter</option>
+                                <option value="interact">Interact</option>
+                                <option value="use">Use Item On</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStageEditForm((prev) => ({
+                                    ...prev,
+                                    objectives: prev.objectives.filter((_, i) => i !== idx),
+                                  }));
+                                }}
+                                className="inline-flex items-center justify-center rounded bg-destructive/20 px-2 py-1 text-xs text-destructive hover:bg-destructive/30"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs uppercase text-muted-foreground">
+                      scene objects ({stageEditForm.sceneObjects.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newObj = createSceneObject({ name: 'New Object' });
+                        setStageEditForm((prev) => ({
+                          ...prev,
+                          sceneObjects: [...prev.sceneObjects, newObj],
+                        }));
+                      }}
+                      className="inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs hover:bg-accent/30"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  {stageEditForm.sceneObjects.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No scene objects. Click &quot;+ Add&quot; to place interactive objects.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-auto rounded border border-border p-2">
+                      {stageEditForm.sceneObjects.map((obj, idx) => (
+                        <div key={obj.id} className="flex items-start gap-2 rounded bg-accent/20 p-2">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex gap-1">
+                              <input
+                                value={obj.name}
+                                placeholder="Object name"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.sceneObjects];
+                                  updated[idx] = { ...obj, name: e.target.value };
+                                  setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                              <select
+                                value={obj.type}
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.sceneObjects];
+                                  updated[idx] = {
+                                    ...obj,
+                                    type: e.target.value as SceneObject['type'],
+                                  };
+                                  setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                }}
+                                className="rounded border border-border bg-background px-2 py-1 text-xs"
+                              >
+                                <option value="collectible">Collectible</option>
+                                <option value="door">Door</option>
+                                <option value="npc">NPC</option>
+                                <option value="prop">Prop</option>
+                                <option value="vehicle">Vehicle</option>
+                                <option value="key">Key</option>
+                                <option value="other">Other</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-1">
+                              <input
+                                value={obj.locationId ?? ''}
+                                placeholder="Location ID (optional)"
+                                onChange={(e) => {
+                                  const updated = [...stageEditForm.sceneObjects];
+                                  updated[idx] = { ...obj, locationId: e.target.value };
+                                  setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                }}
+                                className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                              />
+                              <label className="flex items-center gap-1 text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={obj.isObjectiveTarget ?? false}
+                                  onChange={(e) => {
+                                    const updated = [...stageEditForm.sceneObjects];
+                                    updated[idx] = { ...obj, isObjectiveTarget: e.target.checked };
+                                    setStageEditForm((prev) => ({ ...prev, sceneObjects: updated }));
+                                  }}
+                                  className="rounded"
+                                />
+                                Target
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStageEditForm((prev) => ({
+                                    ...prev,
+                                    sceneObjects: prev.sceneObjects.filter((_, i) => i !== idx),
+                                  }));
+                                }}
+                                className="inline-flex items-center justify-center rounded bg-destructive/20 px-2 py-1 text-xs text-destructive hover:bg-destructive/30"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStageOpen(false);
+                      setStageEditTarget(null);
+                    }}
+                    className="inline-flex items-center justify-center rounded border px-3 py-1.5 text-sm hover:bg-accent/30"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void saveStageEdit();
+                    }}
+                    className="inline-flex items-center justify-center rounded border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : stagePickerOptions.length === 0 ? (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>No story arc stages found.</p>
+                <p className="text-xs">
+                  Add a story arc JSON in Story info to define stages.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 overflow-auto">
+                {stagePickerOptions.map((stage: StoryArcStage, index: number) => {
+                  const palette = getStagePalette(index);
+                  const isActive =
+                    stageEditTarget === stage.stageNumber ||
+                    storyArcCurrentStage === stage.stageNumber;
+                  const stagedCount = stagedMomentsByStage[stage.stageNumber]?.length ?? 0;
+                  return (
+                    <button
+                      key={stage.stageNumber}
+                      type="button"
+                      onClick={() => {
+                        void assignSelectedToStage(stage.stageNumber);
+                      }}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded border p-3 text-left transition-colors hover:opacity-95",
+                        isActive ? "border-primary ring-1 ring-primary/40" : "border-border",
+                      )}
+                      style={{ backgroundColor: palette.bg, color: palette.fg }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold">
+                          Stage {stage.stageNumber}
+                          {stage.stageName ? `: ${stage.stageName}` : ""}
+                        </div>
+                        {stage.shortDescription ? (
+                          <div className="mt-1 text-xs opacity-80">{stage.shortDescription}</div>
+                        ) : null}
+                      </div>
+                      {stagedCount > 0 ? (
+                        <span className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide opacity-80">
+                          {stagedCount} staged
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

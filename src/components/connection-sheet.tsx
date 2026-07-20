@@ -23,7 +23,12 @@ import {
   setConnectionItem,
 } from '@/lib/connection-storage';
 import { cn } from '@/lib/utils';
-import { DEFAULT_LMSTUDIO_URL, normalizeLmstudioUrl } from '@/lib/lmstudio';
+import {
+  DEFAULT_LMSTUDIO_URL,
+  normalizeLmstudioUrl,
+  probeLmstudioHealth,
+  type LmstudioModelOption,
+} from '@/lib/lmstudio';
 
 type Provider = 'zen' | 'google' | 'huggingface' | 'nvidia' | 'lmstudio';
 
@@ -44,6 +49,7 @@ export interface ConnectionSheetProps {
 export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSheetProps) {
   const [open, setOpen] = useState(false);
   const [didExplicitlySelectModel, setDidExplicitlySelectModel] = useState(false);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
   const [activeProvider, setActiveProvider] = useState<Provider>('zen');
   const [lmstudioUrl, setLmstudioUrl] = useState('');
   const [lmstudioConnected, setLmstudioConnected] = useState(false);
@@ -135,7 +141,18 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   const validModelsForActiveProvider = modelOptions.filter((option) => option.provider === activeProvider);
   const hasValidSelectedModel = validModelsForActiveProvider.some((option) => option.id === model);
 
-  const probeLmstudioHealth = async (urlOverride?: string) => {
+  const mergeLmstudioModelOptions = (options: LmstudioModelOption[]) => {
+    if (!options.length) return;
+    setModelOptions((prev) => {
+      const filtered = prev.filter((entry) => entry.provider !== 'lmstudio');
+      return [
+        ...filtered,
+        ...options.map((option) => ({ ...option, provider: 'lmstudio' as Provider })),
+      ];
+    });
+  };
+
+  const checkLmstudioHealth = async (urlOverride?: string) => {
     const targetUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
     setLmstudioHealth({ state: 'checking' });
 
@@ -162,12 +179,28 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
         state: 'healthy',
         modelCount: payload.modelCount ?? healthModels.length,
       });
-    } catch (err) {
+      return;
+    } catch {
+      // Packaged desktop builds can lack the local route; probe LM Studio directly.
+    }
+
+    const result = await probeLmstudioHealth(targetUrl);
+    if (!result.ok) {
       setLmstudioHealth({
         state: 'error',
-        message: err instanceof Error ? err.message : String(err),
+        message: result.error || `Unable to reach ${targetUrl}`,
       });
+      return;
     }
+
+    if (result.models.length) {
+      mergeLmstudioModelOptions(result.models);
+    }
+
+    setLmstudioHealth({
+      state: 'healthy',
+      modelCount: result.modelCount,
+    });
   };
 
   const storeSession = () => {
@@ -243,13 +276,40 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       void validateAndFetchModels('nvidia', storedNvidia);
     }
     if (storedLmstudio === '1' || storedLmstudioUrl) {
-      void validateAndFetchModels('lmstudio', '');
+      void (async () => {
+        try {
+          const options = await fetchLmstudioModels(storedLmstudioUrl || undefined);
+          if (options.length) {
+            mergeLmstudioModelOptions(options);
+            // Re-mark connected whenever a stored LM Studio session is still reachable.
+            setLmstudioConnected(true);
+          }
+        } catch {
+          // Health probe on provider select will retry.
+        } finally {
+          setSessionHydrated(true);
+        }
+      })();
+    } else {
+      setSessionHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    // Avoid wiping persisted LM Studio state before restore finishes.
+    if (!sessionHydrated) return;
     storeSession();
-  }, [zenApiKey, googleApiKey, hfApiKey, nvidiaApiKey, activeProvider, model, lmstudioUrl, lmstudioConnected]);
+  }, [
+    sessionHydrated,
+    zenApiKey,
+    googleApiKey,
+    hfApiKey,
+    nvidiaApiKey,
+    activeProvider,
+    model,
+    lmstudioUrl,
+    lmstudioConnected,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -266,7 +326,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     }
 
     const timer = setTimeout(() => {
-      void probeLmstudioHealth();
+      void checkLmstudioHealth();
     }, 300);
 
     return () => clearTimeout(timer);
@@ -299,10 +359,17 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   // Ensure that when sending requests, the selected model is from the active provider
   // (This is enforced by the above effect, but double-check before sending any request)
 
+  const fetchLmstudioModels = async (urlOverride?: string): Promise<LmstudioModelOption[]> => {
+    const normalizedUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
+    const result = await probeLmstudioHealth(normalizedUrl);
+    if (!result.ok) {
+      throw new Error(result.error || 'Failed to fetch LM Studio models');
+    }
+    return result.models;
+  };
+
   const validateAndFetchModels = async (provider: Provider, keyToUse: string) => {
     if (provider === 'lmstudio') {
-      // LM Studio is local or remote, no key required, just mark as connected and fetch models
-      setLmstudioConnected(true);
       setConnectionError(null);
       setIsConnecting(true);
       try {
@@ -363,6 +430,21 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
             setModel(options[0]!.id);
           }
         }
+
+        if (!options.length) {
+          const fallback = await fetchLmstudioModels(normalizedLmstudioUrl);
+          options = fallback.map((option) => ({ ...option, provider }));
+          if (options.length) {
+            mergeLmstudioModelOptions(fallback);
+            setModel((current) =>
+              current && options.some((option) => option.id === current) ? current : options[0]!.id,
+            );
+          }
+        }
+        if (!options.length) {
+          throw new Error('LM Studio returned no models');
+        }
+        setLmstudioConnected(true);
 
         toast.success(
           `LM Studio connected — ${options.length} model${options.length === 1 ? '' : 's'} loaded`
@@ -755,7 +837,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                     placeholder={
                       activeProviderConnected
                         ? 'Connected'
-                        : 'Enter LM Studio IP address (e.g. http://192.168.12.48:1234)'
+                        : 'LM Studio URL (use http://localhost:3000 for local HTTP servers)'
                     }
                     value={lmstudioUrl}
                     onChange={e => setLmstudioUrl(e.target.value)}

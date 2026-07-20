@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
-import { get } from 'idb-keyval';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Carousel,
   CarouselContent,
@@ -11,19 +10,28 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel';
 import { pressableClass } from '@/components/ui/pressable';
+import { safeGet } from '@/lib/storage-compat';
 
-type StoryMeta = { id: string; title?: string; count?: number };
+type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
 
 type GamesCarouselProps = {
   onTitleChange?: (title: string) => void;
 };
 
+const CLICK_MOVE_THRESHOLD_PX = 8;
+
+function gameHref(storyId: string) {
+  return `/games/new/?game=${encodeURIComponent(storyId)}`;
+}
+
 export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
+  const router = useRouter();
   const [stories, setStories] = useState<StoryMeta[]>([]);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [emblaApi, setEmblaApi] = useState<any | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
 
   const setTitleFromIndex = useCallback(
     (index: number) => {
@@ -34,19 +42,23 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
   );
 
   useEffect(() => {
+    for (const story of stories) {
+      router.prefetch(gameHref(story.id));
+    }
+  }, [router, stories]);
+
+  useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const saved = (await get<any[]>('stories')) || [];
+        const saved = (await safeGet<any[]>('stories')) || [];
         if (!mounted) return;
         setStories(saved);
 
-        // load preview (title moment src if set, else first item src) for each story
         const previewEntries = await Promise.all(
           saved.map(async s => {
             try {
-              const items = (await get<any>(`story:${s.id}`)) || [];
-              // Check for titleMomentId in story meta or object
+              const items = (await safeGet<any>(`story:${s.id}`)) || [];
               const titleMomentId = s.titleMomentId || (items && items.titleMomentId);
               let momentsArr = Array.isArray(items)
                 ? items
@@ -58,12 +70,11 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
                 const titleMoment = momentsArr.find((m: any) => m.id === titleMomentId);
                 src = titleMoment ? titleMoment.src || titleMoment : null;
               }
-              // fallback to first moment if no title moment
               if (!src && Array.isArray(momentsArr) && momentsArr.length > 0) {
                 src = momentsArr[0].src || momentsArr[0];
               }
               return [s.id, src] as const;
-            } catch (e) {
+            } catch {
               return [s.id, null] as const;
             }
           })
@@ -72,7 +83,6 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
         const map: Record<string, string | null> = {};
         previewEntries.forEach(([id, src]) => (map[id] = src));
         setPreviews(map);
-
         setCurrentIndex(0);
       } catch (err) {
         console.error('Failed to load stories', err);
@@ -106,6 +116,29 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
     };
   }, [emblaApi]);
 
+  const openGame = useCallback(
+    (storyId: string) => {
+      router.push(gameHref(storyId));
+    },
+    [router]
+  );
+
+  const handlePointerDown = (event: React.PointerEvent) => {
+    pointerDownRef.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const handleSlideClick = (event: React.MouseEvent, storyId: string) => {
+    const start = pointerDownRef.current;
+    pointerDownRef.current = null;
+    if (start) {
+      const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      if (moved > CLICK_MOVE_THRESHOLD_PX) return;
+    }
+    // Embla swallows <Link> navigations after tiny drag movements — force open.
+    event.preventDefault();
+    openGame(storyId);
+  };
+
   if (loading) {
     return <div className="text-center text-gray-300">Loading...</div>;
   }
@@ -123,21 +156,26 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
       <CarouselContent>
         {stories.map(story => (
           <CarouselItem key={story.id}>
-            <Link href={`/games/${story.id}`}>
-              <div className="h-[100vh] w-full max-w-full bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto">
-                {previews[story.id] ? (
-                  <img
-                    src={previews[story.id] || undefined}
-                    alt={story.title ?? 'story'}
-                    className="h-full w-auto object-contain"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-400">
-                    No preview
-                  </div>
-                )}
-              </div>
-            </Link>
+            <button
+              type="button"
+              className="h-[100vh] w-full max-w-full bg-zinc-800 rounded-lg cursor-pointer overflow-hidden flex items-center justify-center mx-auto border-0 p-0"
+              aria-label={`Open game ${story.title || story.id}`}
+              onPointerDown={handlePointerDown}
+              onClick={event => handleSlideClick(event, story.id)}
+            >
+              {previews[story.id] ? (
+                <img
+                  src={previews[story.id] || undefined}
+                  alt={story.title ?? 'story'}
+                  className="h-full w-auto object-contain pointer-events-none"
+                  draggable={false}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  No preview
+                </div>
+              )}
+            </button>
           </CarouselItem>
         ))}
       </CarouselContent>

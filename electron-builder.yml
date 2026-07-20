@@ -1,19 +1,18 @@
 # Electron Builder config for m4trix desktop release.
 # Daily development stays on `pnpm dev`. This is only for release packaging.
 
-appId: com.m4trix.app
+appId: com.loteknowledg.m4trix
 productName: m4trix
-copyright: Copyright © m4trix
+copyright: Copyright © loteknowledG
 
 directories:
   output: release
   buildResources: electron/build
 
 files:
-  - from: electron
-    to: electron
-  - filter:
-      - package.json
+  - electron/**/*
+  - package.json
+  - "!electron/build/**/*"
   - "!**/node_modules/**"
 
 extraMetadata:
@@ -60,3 +59,8 @@ linux:
   target:
     - AppImage
   artifactName: ${productName}-${version}-linux-${arch}.${ext}
+
+publish:
+  provider: github
+  owner: loteknowledG
+  repo: m4trix
