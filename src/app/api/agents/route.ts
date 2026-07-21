@@ -13,6 +13,7 @@ import {
 } from "@/lib/agents";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const AGENT_MARKDOWN_DIR = path.join(process.cwd(), "agents");
 

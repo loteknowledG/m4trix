@@ -6,8 +6,7 @@ import {
 } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic =
-  process.env.M4TRIX_BUILD_TARGET === 'desktop' ? 'force-dynamic' : 'force-static';
+export const dynamic = "force-dynamic";
 
 // Hardcoded OpenCode endpoints.
 const ZEN_CHAT_URL = 'https://opencode.ai/zen/v1/chat/completions';

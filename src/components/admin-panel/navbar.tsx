@@ -8,6 +8,7 @@ import { GrUserAdd } from 'react-icons/gr';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Marquee } from '@/components/ui/marquee';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
+import { characterDetailHref } from '@/lib/character-routes';
 import { toast } from 'sonner';
 import { useRef, useEffect, type ReactNode } from 'react';
 
@@ -54,7 +55,7 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
       const next = agents ? [...agents, newAgent] : [newAgent];
       await idbSet('PLAYGROUND_AGENTS', next);
       window.dispatchEvent(new Event('characters-updated'));
-      router.push(`/characters/${newAgent.id}`);
+      router.push(characterDetailHref(newAgent.id));
     } catch (err) {
       toast.error('Failed to create character');
     }

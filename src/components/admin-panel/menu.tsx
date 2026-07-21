@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CollapseMenuButton } from '@/components/admin-panel/collapse-menu-button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { get } from 'idb-keyval';
+import { characterDetailHref, isActiveCharacterDetail } from '@/lib/character-routes';
 
 // removed unused imports
 import CountBadge from '@/components/ui/count-badge';
@@ -287,9 +288,13 @@ export function Menu({ isOpen }: MenuProps) {
                                 active: pathname === '/characters/chat',
                               },
                               ...agentsList.map(a => ({
-                                href: `/characters/${a.id}`,
+                                href: characterDetailHref(a.id),
                                 label: a.name && a.name.trim() ? a.name : 'Untitled',
-                                active: pathname?.startsWith(`/characters/${a.id}`),
+                                active: isActiveCharacterDetail(
+                                  pathname,
+                                  a.id,
+                                  searchParams?.get('id'),
+                                ),
                               })),
                             ]
                           : submenus
