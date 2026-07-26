@@ -1,5 +1,6 @@
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import { safeGet, safeSet } from "@/lib/storage-compat";
+import type { StoryArcTodoProgress } from "@/lib/game/story-arc-progress";
 
 export type GameMomentState = {
   index: number;
@@ -18,6 +19,7 @@ export const getGameMomentKey = (id?: string | null) =>
 
 export type GameSessionState = {
   playerRevealedInGame?: boolean;
+  storyArcTodoProgress?: StoryArcTodoProgress;
 };
 
 export const getGameSessionKey = (id?: string | null) =>

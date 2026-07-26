@@ -38,6 +38,8 @@ export interface CustomChatMessage {
   name?: string;
   avatarUrl?: string;
   details?: string[];
+  /** Distinguish narrator beats from NPC dialogue in VN chat. */
+  messageKind?: 'narrator' | 'npc' | 'opening';
 }
 
 interface CustomChatWindowProps {
@@ -115,6 +117,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     msg.id.startsWith('pending-') ||
     /^Working on that request\b/i.test(msg.text.trim()) ||
     /^Waiting for LM Studio\b/i.test(msg.text.trim());
+  const isPendingNarratorMessage = (msg: CustomChatMessage) =>
+    msg.id.startsWith('pending-narrator-');
   const latestAgentMessage = [...messages]
     .reverse()
     .find((msg) => msg.from === 'agent' && msg.id !== 'story-opening' && !isPendingAgentMessage(msg));
@@ -335,9 +339,16 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
             </div>
           ) : (
             messages.map(msg => {
+              const isNarrator = msg.messageKind === 'narrator' || msg.name?.trim() === 'Narrator';
               const speakerName =
                 msg.name?.trim() ||
-                (msg.from === 'user' ? 'You' : msg.id === 'story-opening' ? 'Story' : 'Narrator');
+                (msg.from === 'user'
+                  ? 'You'
+                  : msg.id === 'story-opening'
+                    ? 'Story'
+                    : isNarrator
+                      ? 'Narrator'
+                      : 'Agent');
 
               return (
               <div
@@ -360,6 +371,8 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                           'w-full px-0 py-0',
                           msg.id === 'story-opening'
                             ? 'text-amber-50/95'
+                            : isNarrator
+                              ? 'text-amber-100/95'
                             : isPendingAgentMessage(msg)
                               ? 'text-zinc-200'
                               : msg.from === 'user'
@@ -382,7 +395,11 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     <div
                       className={cn(
                         'mb-1 text-sm font-bold uppercase tracking-wide',
-                        msg.from === 'user' ? 'text-sky-300' : 'text-lime-400',
+                        msg.from === 'user'
+                          ? 'text-sky-300'
+                          : isNarrator
+                            ? 'text-amber-300'
+                            : 'text-lime-400',
                       )}
                       style={{ textShadow: '0 1px 2px rgba(0,0,0,0.85)' }}
                     >
@@ -424,7 +441,9 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                     </div>
                   ) : isPendingAgentMessage(msg) ? (
                     <div className="flex items-center gap-3">
-                      <span className={isVn ? 'text-white/85' : 'text-zinc-300'}>{msg.text}</span>
+                      <span className={isVn ? 'text-white/85' : 'text-zinc-300'}>
+                        {isPendingNarratorMessage(msg) ? 'Summarizing the scene…' : msg.text}
+                      </span>
                       <span
                         className={cn(
                           'flex items-center gap-1.5',
