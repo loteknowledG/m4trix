@@ -17,7 +17,10 @@ function PressableInner<T extends React.ElementType = 'button'>(
   return <Component ref={ref} className={cn(pressableClass, className)} {...props} />;
 }
 
-export const Pressable = React.forwardRef(PressableInner) as <
+export const Pressable = React.forwardRef(PressableInner as React.ForwardRefRenderFunction<
+  Element,
+  PressableProps<'button'>
+>) as <
   T extends React.ElementType = 'button',
 >(
   props: PressableProps<T> & { ref?: React.ComponentPropsWithRef<T>['ref'] },

@@ -18,6 +18,7 @@
 /desktop-dist/
 /release
 /dist
+/electron/vendor/
 *.exe
 *.blockmap
 latest.yml

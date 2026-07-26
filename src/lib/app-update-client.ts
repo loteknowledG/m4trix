@@ -9,15 +9,29 @@ type AppVersionResponse = {
 export type M4trixDesktopBridge = {
   isElectron: true;
   getVersion: () => Promise<string>;
-  checkForUpdates: () => Promise<unknown>;
-  installUpdate: () => void;
-  onUpdateAvailable: (callback: (info: { version: string }) => void) => () => void;
-  onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
+  checkForUpdates: () => Promise<
+    | { status: "up-to-date"; running: string; latest: string; downloaded?: boolean }
+    | { status: "update-available"; running: string; latest: string; downloaded?: boolean }
+    | { status: "unavailable"; message?: string }
+    | { status: "local-dev"; message: string }
+  >;
+  quitAndInstall?: () => Promise<{ ok: boolean; error?: string }>;
+  installUpdate?: () => void;
+  subscribe?: (
+    callback: (payload: {
+      type: string;
+      version?: string;
+      percent?: number;
+      message?: string;
+    }) => void,
+  ) => () => void;
+  onUpdateAvailable?: (callback: (info: { version: string }) => void) => () => void;
+  onUpdateDownloaded?: (callback: (info: { version: string }) => void) => () => void;
 };
 
 export type AppUpdateCheckResult =
-  | { status: "up-to-date"; running: string; latest: string }
-  | { status: "update-available"; running: string; latest: string }
+  | { status: "up-to-date"; running: string; latest: string; downloaded?: boolean }
+  | { status: "update-available"; running: string; latest: string; downloaded?: boolean }
   | { status: "unavailable"; message?: string }
   | { status: "local-dev"; message: string };
 
@@ -27,7 +41,21 @@ export function getDesktopBridge(): M4trixDesktopBridge | null {
   return bridge?.isElectron ? bridge : null;
 }
 
+export function isDesktopAutoUpdateShell(): boolean {
+  return getDesktopBridge() != null;
+}
+
 export async function fetchAppReleaseVersion(): Promise<string | null> {
+  const desktop = getDesktopBridge();
+  if (desktop) {
+    try {
+      const version = (await desktop.getVersion()).trim();
+      return version || null;
+    } catch {
+      return null;
+    }
+  }
+
   try {
     const res = await fetch("/api/app-version/", { cache: "no-store" });
     if (!res.ok) return null;
@@ -116,7 +144,11 @@ export async function restartAppForUpdate(waitingWorker?: ServiceWorker | null) 
   const desktop = getDesktopBridge();
   if (desktop) {
     clearDismissedAppUpdate();
-    desktop.installUpdate();
+    if (desktop.quitAndInstall) {
+      await desktop.quitAndInstall();
+      return;
+    }
+    desktop.installUpdate?.();
     return;
   }
 
@@ -141,13 +173,22 @@ export async function checkForAppUpdate(options?: {
   const desktop = getDesktopBridge();
 
   if (desktop) {
-    if (manual) {
-      await desktop.checkForUpdates();
+    try {
+      const result = await desktop.checkForUpdates();
+      if (result.status === "up-to-date" || result.status === "update-available") {
+        setStoredRunningVersion(result.running);
+        // Only auto-prompt once the installer is downloaded and ready.
+        if (result.status === "update-available" && !manual && result.downloaded) {
+          promptForAppUpdate(result.latest);
+        }
+      }
+      return result;
+    } catch (error) {
+      return {
+        status: "unavailable",
+        message: error instanceof Error ? error.message : "Desktop update check failed.",
+      };
     }
-    return {
-      status: "local-dev",
-      message: "Desktop updates are handled by electron-updater.",
-    };
   }
 
   if (!manual && !shouldPollForAppUpdates()) {
@@ -187,9 +228,22 @@ export async function checkForAppUpdate(options?: {
 
 export function shouldPollForAppUpdates(): boolean {
   if (typeof window === "undefined") return false;
+  if (isDesktopAutoUpdateShell()) return true;
   if (process.env.NODE_ENV === "development") return false;
-  if (getDesktopBridge()) return false;
 
   const host = window.location.hostname;
   return host !== "localhost" && host !== "127.0.0.1";
+}
+
+export function subscribeDesktopAppUpdateEvents(
+  callback: (payload: {
+    type: string;
+    version?: string;
+    percent?: number;
+    message?: string;
+  }) => void,
+): () => void {
+  const desktop = getDesktopBridge();
+  if (!desktop?.subscribe) return () => {};
+  return desktop.subscribe(callback);
 }

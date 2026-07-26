@@ -1,14 +1,15 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
-const { autoUpdater } = require('electron-updater');
+const { initializeAutoUpdater } = require('./auto-updater');
 
 const PACKAGED_PORT = 3210;
 const DEV_PORT = 3000;
-const READY_TIMEOUT_MS = 120_000;
-const RETRY_MS = 500;
+// USB / cold starts of the packaged Next server can take several minutes.
+const READY_TIMEOUT_MS = 5 * 60_000;
+const RETRY_MS = 750;
 
 /** @type {import('child_process').ChildProcess | null} */
 let serverProcess = null;
@@ -51,23 +52,76 @@ function setStatus(title, message) {
     .catch(() => {});
 }
 
-function waitForUrl(url, timeoutMs = READY_TIMEOUT_MS) {
+function probeUrl(url, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const req = http.get(url, (res) => {
+      res.resume();
+      resolve(true);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+function waitForUrl(url, timeoutMs = READY_TIMEOUT_MS, onProgress) {
   const started = Date.now();
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let inFlight = false;
+
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(message));
+    };
+
+    const succeed = () => {
+      if (settled) return;
+      settled = true;
+      resolve(url);
+    };
+
+    const schedule = (delay = RETRY_MS) => {
+      if (settled) return;
+      setTimeout(tryOnce, delay);
+    };
+
     const tryOnce = () => {
+      if (settled || inFlight) return;
+      inFlight = true;
+      const elapsedSec = Math.round((Date.now() - started) / 1000);
+      try {
+        onProgress?.(elapsedSec);
+      } catch {
+        // ignore progress errors
+      }
+
       const req = http.get(url, (res) => {
+        inFlight = false;
         res.resume();
-        resolve(url);
+        succeed();
       });
-      req.on('error', () => {
+
+      const retryOrTimeout = () => {
+        inFlight = false;
+        if (settled) return;
         if (Date.now() - started >= timeoutMs) {
-          reject(new Error(`Timed out waiting for ${url}`));
+          fail(`Timed out waiting for ${url} after ${Math.round(timeoutMs / 1000)}s`);
           return;
         }
-        setTimeout(tryOnce, RETRY_MS);
+        schedule();
+      };
+
+      req.on('error', retryOrTimeout);
+      req.setTimeout(2000, () => {
+        req.destroy();
+        retryOrTimeout();
       });
-      req.setTimeout(1500, () => req.destroy());
     };
+
     tryOnce();
   });
 }
@@ -127,6 +181,17 @@ function stopStandaloneServer() {
   serverProcess = null;
 }
 
+function readRecentBootLines(limit = 12) {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'm4trix-boot.log');
+    if (!fs.existsSync(logPath)) return '';
+    const lines = fs.readFileSync(logPath, 'utf8').trim().split(/\r?\n/);
+    return lines.slice(-limit).join('\n');
+  } catch {
+    return '';
+  }
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -157,61 +222,41 @@ async function createWindow() {
   const url = appUrl(port);
 
   try {
-    if (usePackagedServer) {
-      setStatus('Starting m4trix…', 'Starting the bundled app server.');
+    const alreadyUp = await probeUrl(url);
+    if (usePackagedServer && !alreadyUp) {
+      setStatus('Starting m4trix…', 'Starting the bundled app server (first launch can be slow).');
       startStandaloneServer(port);
-    } else {
+    } else if (!usePackagedServer) {
       setStatus('Starting m4trix…', `Waiting for ${url}. Start Next with pnpm dev.`);
+    } else {
+      bootLog(`reusing existing server at ${url}`);
+      setStatus('Starting m4trix…', 'Connecting to local app server…');
     }
+
     bootLog(`waiting for ${url}`);
-    await waitForUrl(url);
+    await waitForUrl(url, READY_TIMEOUT_MS, (elapsedSec) => {
+      if (elapsedSec < 3) return;
+      setStatus(
+        'Starting m4trix…',
+        usePackagedServer
+          ? `Still starting bundled server… ${elapsedSec}s`
+          : `Waiting for ${url}… ${elapsedSec}s`,
+      );
+    });
     await mainWindow.loadURL(url);
     bootLog('ui loaded');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const recent = readRecentBootLines();
     bootLog(`startup failed: ${message}`);
+    if (recent) bootLog(`recent boot log:\n${recent}`);
     setStatus(
       'm4trix could not start',
       usePackagedServer
-        ? `${message}. Rebuild with pnpm desktop:dist.`
+        ? `${message}. If this install is on a USB drive, try again or move it to an internal disk. Or run pnpm electron:dev / rebuild with pnpm desktop:dist.`
         : `${message}. Start Next with pnpm dev.`,
     );
   }
-}
-
-function setupIpc() {
-  ipcMain.handle('app-version', () => app.getVersion());
-  ipcMain.handle('check-for-updates', async () => {
-    if (!app.isPackaged) return { status: 'dev' };
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return { status: 'checked', version: result?.updateInfo?.version ?? null };
-    } catch (error) {
-      return { status: 'error', message: error instanceof Error ? error.message : String(error) };
-    }
-  });
-  ipcMain.on('install-update', () => {
-    app.isQuitting = true;
-    autoUpdater.quitAndInstall(false, true);
-  });
-}
-
-function setupAutoUpdater() {
-  if (!app.isPackaged) return;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('update-available', { version: info.version });
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    mainWindow?.webContents.send('update-downloaded', { version: info.version });
-  });
-  autoUpdater.on('error', (error) => console.error('autoUpdater error', error));
-  setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-      console.error('checkForUpdatesAndNotify failed', error);
-    });
-  }, 2500);
 }
 
 async function bootstrap() {
@@ -224,11 +269,10 @@ async function bootstrap() {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
   });
-  setupIpc();
   await app.whenReady();
   bootLog('app ready');
   await createWindow();
-  setupAutoUpdater();
+  initializeAutoUpdater();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });

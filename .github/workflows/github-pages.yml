@@ -32,7 +32,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare static export
+        run: node scripts/prepare-pages-export.mjs
+
       - name: Build static export
+        env:
+          M4TRIX_BUILD_TARGET: pages
+          GITHUB_ACTIONS: "true"
         run: pnpm build
 
       - name: Add .nojekyll

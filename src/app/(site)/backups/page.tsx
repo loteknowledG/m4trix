@@ -539,6 +539,39 @@ export default function BackupsPage() {
     return renderPreview(text, emptyLabel);
   };
 
+  const handleResetLocalDatabase = useCallback(async () => {
+    const ok = window.confirm(
+      'Reset the local browser database?\n\nExport a backup first if you can — this cannot be undone.',
+    );
+    if (!ok) return;
+
+    setMessage('Resetting local database…');
+    try {
+      await clear();
+    } catch (e) {
+      logger.warn('Failed to clear IndexedDB', e);
+    }
+
+    try {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+    } catch (e) {
+      logger.warn('Failed to clear web storage', e);
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent('stories-updated', { detail: {} }));
+    } catch {
+      /* ignore in non-browser */
+    }
+
+    setExportedText(null);
+    setExportedObj(null);
+    setImportedText(null);
+    setMessage('Local database reset. Reload the page, then import a backup if you have one.');
+    setTimeout(() => setMessage(null), 6000);
+  }, []);
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       {message ? (
@@ -552,6 +585,12 @@ export default function BackupsPage() {
       ) : null}
       <h2 className="text-2xl font-bold mb-4">Backups</h2>
       <p className="mb-4">Export or import your moment backups as JSON.</p>
+      <p className="mb-4 text-sm text-slate-500">
+        m4trix stores moments, stories, and characters in your browser IndexedDB (
+        <code className="text-xs">keyval-db</code>
+        ). If that database is corrupted, export a backup if possible, reset below, then import your
+        JSON backup.
+      </p>
       {/* buttons in two-column grid align with preview panels below */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="flex justify-start">
@@ -603,6 +642,20 @@ export default function BackupsPage() {
             {renderPreview(importedText, 'No import yet')}
           </div>
         </div>
+      </div>
+      <div className="mt-8 rounded border border-amber-500/40 bg-amber-500/5 p-4">
+        <h3 className="font-semibold mb-2">Repair corrupted local data</h3>
+        <p className="text-sm text-slate-600 mb-3">
+          Use this if pages fail to load, moments disappear, or DevTools shows IndexedDB errors on{' '}
+          <code className="text-xs">localhost</code>.
+        </p>
+        <button
+          type="button"
+          onClick={handleResetLocalDatabase}
+          className="px-4 py-2 rounded border border-amber-600 text-amber-900 bg-amber-50 hover:bg-amber-100"
+        >
+          Reset local database
+        </button>
       </div>
     </div>
   );

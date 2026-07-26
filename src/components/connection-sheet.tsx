@@ -74,20 +74,19 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   >([]);
 
   const applyLmstudioModels = (rawModels: unknown[]) => {
-    const options = rawModels
-      .map((entry) => {
+    const options: Array<{ id: string; label: string; provider: 'lmstudio' }> = rawModels
+      .flatMap((entry) => {
         if (typeof entry === 'string') {
           const id = entry.trim();
-          return id ? { id, label: id, provider: 'lmstudio' as Provider } : null;
+          return id ? [{ id, label: id, provider: 'lmstudio' as const }] : [];
         }
-        if (!entry || typeof entry !== 'object') return null;
+        if (!entry || typeof entry !== 'object') return [];
         const row = entry as { id?: string; name?: string; label?: string; display_name?: string };
         const id = (row.id || row.name || '').trim();
-        if (!id) return null;
+        if (!id) return [];
         const label = (row.label || row.display_name || row.name || id).trim() || id;
-        return { id, label, provider: 'lmstudio' as Provider };
-      })
-      .filter((m): m is { id: string; label: string; provider: Provider } => Boolean(m));
+        return [{ id, label, provider: 'lmstudio' as const }];
+      });
 
     if (!options.length) return options;
 
@@ -393,22 +392,22 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
           else if (Array.isArray(obj.models)) rawModels = obj.models;
         }
 
-        let options: Array<{ id: string; label: string; provider: Provider }> = rawModels
-          .map((m: unknown) => {
-            if (!m || typeof m !== 'object') return null;
+        let options: Array<{ id: string; label: string; provider: Provider }> = rawModels.flatMap(
+          (m: unknown) => {
+            if (!m || typeof m !== 'object') return [];
             const row = m as { id?: string; model_id?: string; name?: string; display_name?: string };
             const id =
               (typeof row.id === 'string' && row.id) ||
               (typeof row.model_id === 'string' && row.model_id) ||
               (typeof row.name === 'string' && row.name);
-            if (!id) return null;
+            if (!id) return [];
             const label =
               (typeof row.display_name === 'string' && row.display_name) ||
               (typeof row.name === 'string' && row.name) ||
               id;
-            return { id, label, provider };
-          })
-          .filter((m): m is { id: string; label: string; provider: Provider } => Boolean(m));
+            return [{ id, label, provider: 'lmstudio' as const }];
+          },
+        );
 
         // Desktop builds previously baked an empty /api/models response; fall back to health.
         if (!options.length) {

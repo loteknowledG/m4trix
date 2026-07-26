@@ -5,6 +5,7 @@ import {
   DatabaseBackup,
   Trash2,
   Gamepad,
+  VideoIcon,
   LucideIcon,
 } from '@/components/icons';
 
@@ -73,6 +74,17 @@ export function getMenuList(): Group[] {
             {
               href: '/games',
               label: 'All Games',
+            },
+          ],
+        },
+        {
+          href: '/videos',
+          label: 'Videos',
+          icon: VideoIcon,
+          submenus: [
+            {
+              href: '/videos',
+              label: 'All Playlists',
             },
           ],
         },

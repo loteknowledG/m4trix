@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
+import { characterDetailHref } from "@/lib/character-routes";
 import { ChevronLeft, SquarePen, Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -673,7 +674,7 @@ export default function StoryPage() {
         }
         setAssignedNpcId(newCharacter.id);
       }
-      router.push(`/characters/${newCharacter.id}`);
+      router.push(characterDetailHref(newCharacter.id));
     } catch (e) {
       logger.error("Failed to create character", e);
     }

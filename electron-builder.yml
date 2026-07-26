@@ -13,7 +13,13 @@ files:
   - electron/**/*
   - package.json
   - "!electron/build/**/*"
+  # Keep Electron main-process deps inside the asar via electron/vendor.
   - "!**/node_modules/**"
+  - "!electron/vendor/**/README*"
+  - "!electron/vendor/**/CHANGELOG*"
+  - "!electron/vendor/**/*.md"
+  - "!electron/vendor/**/test/**"
+  - "!electron/vendor/**/tests/**"
 
 extraMetadata:
   name: m4trix

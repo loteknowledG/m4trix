@@ -20,6 +20,7 @@ interface MomentsGridProps {
   toggleSelect: (id: string) => void;
   dragIndexRef?: React.RefObject<number | null>;
   dragOverIndex?: number | null;
+  onOpen?: (item: Moment) => void;
 }
 
 export default function MomentsGrid({
@@ -31,6 +32,7 @@ export default function MomentsGrid({
   onDrop,
   toggleSelect,
   dragOverIndex,
+  onOpen,
 }: MomentsGridProps) {
   if (!moments || moments.length === 0) return null;
   return (
@@ -58,6 +60,7 @@ export default function MomentsGrid({
               item={{ ...item, selected: selectedIds.includes(item.id as string) }}
               anySelected={selectedIds.length > 0}
               toggleSelect={toggleSelect}
+              onOpen={onOpen}
             />
           </div>
         );

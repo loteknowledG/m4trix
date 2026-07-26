@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Marquee } from '@/components/ui/marquee';
 import { GrUserAdd } from 'react-icons/gr';
+import { characterDetailHref } from '@/lib/character-routes';
 
 type Agent = {
   id: string;
@@ -59,7 +60,7 @@ export default function AgentsListPage() {
     setAgents(next);
     await idbSet(AGENTS_KEY, next);
     window.dispatchEvent(new Event('characters-updated'));
-    router.push(`/characters/${newAgent.id}`);
+    router.push(characterDetailHref(newAgent.id));
   };
 
   return (
@@ -81,7 +82,7 @@ export default function AgentsListPage() {
               return (
                 <div key={agent.id} className="relative group rounded-xl">
                   <Link
-                    href={`/characters/${agent.id}`}
+                    href={characterDetailHref(agent.id)}
                     className="block"
                   >
                     <Card

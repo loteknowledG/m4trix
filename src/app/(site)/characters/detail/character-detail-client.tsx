@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState, DragEvent } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
@@ -35,10 +35,9 @@ function normalizeDescription(value: string) {
 }
 
 export default function CharacterDetailClient() {
-  const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const rawAgentId = params?.id;
-  const agentId = Array.isArray(rawAgentId) ? rawAgentId[0] ?? '' : rawAgentId ?? '';
+  const agentId = searchParams.get('id')?.trim() ?? '';
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -48,6 +47,11 @@ export default function CharacterDetailClient() {
   const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0, zoom: 1 });
 
   useEffect(() => {
+    if (!agentId) {
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
     (async () => {
       const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
@@ -83,15 +87,38 @@ export default function CharacterDetailClient() {
     };
   }, [agentId]);
 
+  if (!agentId) {
+    return (
+      <ContentLayout
+        title="Character"
+        navLeft={
+          <Link href="/characters/list">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        }
+      >
+        <p>Missing character id.</p>
+        <Link href="/characters/list">
+          <Button>Back to characters list</Button>
+        </Link>
+      </ContentLayout>
+    );
+  }
+
   if (loading) {
     return (
-      <ContentLayout title="Agent" navLeft={
-        <Link href="/characters/list">
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-      }>
+      <ContentLayout
+        title="Agent"
+        navLeft={
+          <Link href="/characters/list">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        }
+      >
         <p>Loading...</p>
       </ContentLayout>
     );
@@ -99,14 +126,17 @@ export default function CharacterDetailClient() {
 
   if (!agent) {
     return (
-      <ContentLayout title="Character not found" navLeft={
-        <Link href="/characters/list">
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-      }>
-        <p>Character '{agentId}' not found.</p>
+      <ContentLayout
+        title="Character not found"
+        navLeft={
+          <Link href="/characters/list">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        }
+      >
+        <p>Character &apos;{agentId}&apos; not found.</p>
         <Link href="/characters/list">
           <Button>Back to characters list</Button>
         </Link>

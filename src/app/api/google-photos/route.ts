@@ -6,8 +6,7 @@ import { pathToFileURL } from "node:url";
 
 // Ensure this route runs on Node.js (not Edge)
 export const runtime = "nodejs";
-export const dynamic =
-  process.env.M4TRIX_BUILD_TARGET === "desktop" ? "force-dynamic" : "force-static";
+export const dynamic = "force-static";
 
 export async function POST(req: Request) {
   try {

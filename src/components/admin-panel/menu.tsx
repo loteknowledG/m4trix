@@ -13,6 +13,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CollapseMenuButton } from '@/components/admin-panel/collapse-menu-button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { get } from 'idb-keyval';
+import { characterDetailHref, isActiveCharacterDetail } from '@/lib/character-routes';
+import { playlistEditorHref } from '@/lib/video-routes';
 
 // removed unused imports
 import CountBadge from '@/components/ui/count-badge';
@@ -29,6 +31,10 @@ export function Menu({ isOpen }: MenuProps) {
   );
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
+  const [playlistsList, setPlaylistsList] = useState<{ id: string; title?: string; count?: number }[]>(
+    []
+  );
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [agentsList, setAgentsList] = useState<{ id: string; name: string }[]>([]);
   const [heapCount, setHeapCount] = useState<number>(0);
   const [trashCount, setTrashCount] = useState<number>(0);
@@ -61,8 +67,32 @@ export function Menu({ isOpen }: MenuProps) {
             ? gameRouteId
             : searchParams?.get('game');
         if (mounted) setActiveGameId(gameParam || null);
+
+        const playlistRouteId = pathname?.startsWith('/videos/') ? pathname.split('/')[2] : null;
+        const playlistParam =
+          playlistRouteId && playlistRouteId !== 'new'
+            ? playlistRouteId
+            : searchParams?.get('playlist');
+        if (playlistParam) {
+          if (mounted) setActivePlaylistId(playlistParam);
+        } else {
+          try {
+            const storedActive = await get<string>('playlists-active');
+            if (mounted) setActivePlaylistId(storedActive || null);
+          } catch {
+            if (mounted) setActivePlaylistId(null);
+          }
+        }
       } catch (err) {
         logger.error('Failed to load stories for menu', err);
+      }
+
+      try {
+        const savedPlaylists =
+          (await get<{ id: string; title?: string; count?: number }[]>('playlists')) || [];
+        if (mounted) setPlaylistsList(savedPlaylists);
+      } catch (err) {
+        logger.error('Failed to load playlists for menu', err);
       }
 
       try {
@@ -104,6 +134,7 @@ export function Menu({ isOpen }: MenuProps) {
     window.addEventListener('stories-updated', handler);
     window.addEventListener('moments-updated', handler);
     window.addEventListener('characters-updated', handler);
+    window.addEventListener('playlists-updated', handler);
     // backward compat
     window.addEventListener('heap-updated', handler);
     return () => {
@@ -111,6 +142,7 @@ export function Menu({ isOpen }: MenuProps) {
       window.removeEventListener('stories-updated', handler);
       window.removeEventListener('moments-updated', handler);
       window.removeEventListener('characters-updated', handler);
+      window.removeEventListener('playlists-updated', handler);
       // backward compat
       window.removeEventListener('heap-updated', handler);
     };
@@ -134,6 +166,15 @@ export function Menu({ isOpen }: MenuProps) {
       );
     } else {
       setActiveGameId(searchParams?.get('game') || null);
+    }
+
+    if (pathname?.startsWith('/videos/')) {
+      const routeId = pathname.split('/')[2];
+      setActivePlaylistId(
+        routeId && routeId !== 'new' ? routeId : searchParams?.get('playlist') || null
+      );
+    } else {
+      setActivePlaylistId(searchParams?.get('playlist') || null);
     }
   }, [pathname, searchParams]);
 
@@ -251,6 +292,10 @@ export function Menu({ isOpen }: MenuProps) {
                           ? isOpen === false
                             ? pathname === href && !activeGameId
                             : pathname === href
+                          : label === 'Videos'
+                          ? isOpen === false
+                            ? pathname === href && !activePlaylistId
+                            : pathname === href
                           : label === 'Characters'
                           ? pathname.startsWith('/characters')
                           : active === undefined
@@ -279,6 +324,16 @@ export function Menu({ isOpen }: MenuProps) {
                                   : false,
                               count: s.count ?? 0,
                             }))
+                          : label === 'Videos'
+                          ? playlistsList.map(p => ({
+                              href: playlistEditorHref(p.id),
+                              label: p.title && p.title.trim() ? p.title : 'Untitled',
+                              active:
+                                pathname?.startsWith('/videos/') || !!searchParams?.get('playlist')
+                                  ? p.id === activePlaylistId
+                                  : false,
+                              count: p.count ?? 0,
+                            }))
                           : label === 'Characters'
                           ? [
                               {
@@ -287,9 +342,13 @@ export function Menu({ isOpen }: MenuProps) {
                                 active: pathname === '/characters/chat',
                               },
                               ...agentsList.map(a => ({
-                                href: `/characters/${a.id}`,
+                                href: characterDetailHref(a.id),
                                 label: a.name && a.name.trim() ? a.name : 'Untitled',
-                                active: pathname?.startsWith(`/characters/${a.id}`),
+                                active: isActiveCharacterDetail(
+                                  pathname,
+                                  a.id,
+                                  searchParams?.get('id'),
+                                ),
                               })),
                             ]
                           : submenus
@@ -298,11 +357,14 @@ export function Menu({ isOpen }: MenuProps) {
                       disableToggle={
                         (label === 'Stories' && storiesList.length === 0) ||
                         (label === 'Games' && storiesList.length === 0) ||
+                        (label === 'Videos' && playlistsList.length === 0) ||
                         (label === 'Characters' && agentsList.length === 0)
                       }
                       topCount={
                         label === 'Stories' || label === 'Games'
                           ? storiesList.length
+                          : label === 'Videos'
+                          ? playlistsList.length
                           : label === 'Characters'
                           ? agentsList.length
                           : undefined

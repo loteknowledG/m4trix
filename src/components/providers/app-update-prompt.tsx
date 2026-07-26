@@ -7,10 +7,11 @@ import {
   checkForAppUpdate,
   dismissAppUpdate,
   fetchAppReleaseVersion,
-  getDesktopBridge,
+  isDesktopAutoUpdateShell,
   promptForAppUpdate,
   restartAppForUpdate,
   shouldPollForAppUpdates,
+  subscribeDesktopAppUpdateEvents,
   syncRunningReleaseVersion,
 } from "@/lib/app-update-client";
 
@@ -59,6 +60,15 @@ export function AppUpdatePrompt() {
   useEffect(() => {
     if (!shouldPollForAppUpdates()) return;
 
+    const unsubscribeDesktop = isDesktopAutoUpdateShell()
+      ? subscribeDesktopAppUpdateEvents((payload) => {
+          // Ask only once the installer payload is ready to apply.
+          if (payload.type === "update-downloaded" && payload.version) {
+            promptForAppUpdate(payload.version, { force: true });
+          }
+        })
+      : () => {};
+
     void checkForUpdate();
 
     const onFocus = () => {
@@ -79,6 +89,7 @@ export function AppUpdatePrompt() {
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
+      unsubscribeDesktop();
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -86,23 +97,8 @@ export function AppUpdatePrompt() {
   }, [checkForUpdate]);
 
   useEffect(() => {
-    const desktop = getDesktopBridge();
-    if (!desktop) return;
-
-    // Only prompt once the installer payload is ready to apply.
-    const unsubscribeDownloaded = desktop.onUpdateDownloaded(info => {
-      if (info?.version) promptForAppUpdate(info.version, { force: true });
-    });
-
-    void desktop.checkForUpdates();
-
-    return () => {
-      unsubscribeDownloaded();
-    };
-  }, []);
-
-  useEffect(() => {
     if (!shouldPollForAppUpdates()) return;
+    if (isDesktopAutoUpdateShell()) return;
     if (!("serviceWorker" in navigator)) return;
 
     let cancelled = false;
@@ -179,7 +175,9 @@ export function AppUpdatePrompt() {
         <div className="min-w-0">
           <p className="text-sm font-medium tracking-wide text-fuchsia-200">Update ready</p>
           <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-            A newer m4trix build is available. Restart to load the latest version.
+            {isDesktopAutoUpdateShell()
+              ? `m4trix ${updateVersion} downloaded in the background. Restart to install it.`
+              : `A newer m4trix build (${updateVersion}) is available. Restart to load the latest version.`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
