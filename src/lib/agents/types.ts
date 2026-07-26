@@ -1,4 +1,4 @@
-export type AgentId = "researcher" | "critic" | "summarizer";
+export type AgentId = "researcher" | "critic" | "summarizer" | "narrator";
 
 export type Agent = {
   id: AgentId;

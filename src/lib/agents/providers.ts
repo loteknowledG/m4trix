@@ -156,6 +156,42 @@ function formatPlayerSpeakerLabel(player?: { name?: string }, npcKnowsPlayer = t
   return name ? `${name} (player)` : 'Player';
 }
 
+/** Remove model regurgitation of injected scene/setup text from NPC replies. */
+export function stripAssistantPromptLeak(text: string): string {
+  let cleaned = String(text || '').trim();
+  if (!cleaned) return '';
+
+  const pipeContextIdx = cleaned.search(/\s\|\s*context\s*:/i);
+  if (pipeContextIdx >= 0) {
+    cleaned = cleaned.slice(0, pipeContextIdx).trim();
+  }
+
+  const leakMarkers = [
+    /\n+\s*Story title\s*:/i,
+    /\n+\s*NPC \(you are /i,
+    /\n+\s*Player character \(user controls /i,
+    /\n+\s*Player character:\s*a stranger/i,
+    /\n+\s*When .+ says "you", they mean /i,
+    /\n+\s*You see a stranger in the scene/i,
+    /\n+\s*User input is Stranger \(player\)/i,
+    /\n+\s*ROLE RULES \(critical\)/i,
+    /\n+\s*FIRST MEETING \(critical\)/i,
+    /\n+\s*Stay in character as /i,
+    /\n+\s*Game mode context/i,
+    /\n+\s*Character turn memory/i,
+    /\n+\s*Director's notes/i,
+  ];
+
+  for (const marker of leakMarkers) {
+    const match = cleaned.search(marker);
+    if (match >= 0) {
+      cleaned = cleaned.slice(0, match).trim();
+    }
+  }
+
+  return cleaned;
+}
+
 export function stripHistoryMessageText(
   text: string,
   agentName: string,
@@ -197,12 +233,14 @@ export function stripHistoryMessageText(
     }
   }
 
-  return cleaned;
+  return stripAssistantPromptLeak(cleaned);
 }
 
 function buildInCharacterRules(agentName: string) {
   return (
-    `Stay in character as ${agentName}. Reply with dialogue and action only — no speaker labels, no name prefixes, no "(you, NPC)", and no behind-the-scenes or production descriptions. ` +
+    `Stay in character as ${agentName}. Reply with in-character dialogue and brief *actions* only. ` +
+    `Never include speaker labels, name prefixes, story metadata, role rules, scene summaries, or lines like "| context:". ` +
+    `Do not repeat or quote the hidden setup text. ` +
     `Never break the fourth wall or describe cameras, crew, lighting rigs, or filming. `
   );
 }

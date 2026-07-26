@@ -41,7 +41,7 @@ import {
   normalizeLmstudioUrl,
   probeLmstudioHealth,
 } from "@/lib/lmstudio";
-import { stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
+import { stripAssistantPromptLeak, stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
@@ -55,6 +55,7 @@ import {
   buildGameAgentRequest,
   queueDemoReply,
   runConnectedChatTurn,
+  type ConnectedChatTurnResult,
 } from "@/lib/game/game-agent";
 import {
   getGameHistoryKey,
@@ -77,6 +78,13 @@ import {
   resolveNpcKnowsPlayerForSession,
 } from "@/lib/game/player-identity";
 import { refreshStorySummary as refreshGameStorySummary } from "@/lib/game/story-memory";
+import { runNarratorBeat } from "@/lib/game/story-narrator";
+import {
+  emptyStoryArcTodoProgress,
+  evaluateStageProgressWithArc,
+  getCompletedTodoIds,
+  type StoryArcTodoProgress,
+} from "@/lib/game/story-arc-progress";
 import { normalizeMomentSrc } from "@/lib/moments";
 
 const VN_CHAT_HEIGHT_KEY = "game-vn-chat-height-pct";
@@ -150,9 +158,13 @@ export default function GamePage() {
   const [storyDescription, setStoryDescription] = useState("");
   const [storyArc, setStoryArc] = useState<any>(null);
   const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
+  const [storyArcTodoProgress, setStoryArcTodoProgress] = useState<StoryArcTodoProgress>(() =>
+    emptyStoryArcTodoProgress(),
+  );
   const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
   const [playerRevealedInGame, setPlayerRevealedInGame] = useState(false);
   const [directorNotes, setDirectorNotes] = useState("");
+  const [narratorEnabled, setNarratorEnabled] = useState(true);
   const [storyHistory, setStoryHistory] = useState<OrchestratedMessage[]>([]);
   const [storySummary, setStorySummary] = useState("");
   const [externalMemorySummary, setExternalMemorySummary] = useState("");
@@ -337,7 +349,11 @@ export default function GamePage() {
     [chatMessages, assignedNpc, assignedPlayer],
   );
   const chatInFlight = useMemo(
-    () => chatMessages.some((message) => message.id.startsWith("pending-")),
+    () =>
+      chatMessages.some(
+        (message) =>
+          message.id.startsWith("pending-") || message.id.startsWith("pending-narrator-"),
+      ),
     [chatMessages],
   );
   const gameHistoryKey = getGameHistoryKey(id);
@@ -440,7 +456,15 @@ export default function GamePage() {
                   m.playerMode,
                 )
               : m.characterName || target.character?.name || "NPC";
-          return `- [${new Date(m.createdAt).toISOString()}] ${label}: ${m.text} | context: ${m.sceneContext}`;
+          const lineText = stripAssistantPromptLeak(
+            stripHistoryMessageText(
+              m.text,
+              assignedNpc?.name || "NPC",
+              assignedPlayer ? { name: assignedPlayer.name } : undefined,
+              m.npcKnewPlayerAtTurn ?? npcKnowsPlayerEffective,
+            ),
+          );
+          return `- [${new Date(m.createdAt).toISOString()}] ${label}: ${lineText}`;
         }),
       ].join("\n");
       chunks.push(section);
@@ -625,9 +649,12 @@ export default function GamePage() {
   }, [gameSummaryKey, storySummary]);
 
   useEffect(() => {
-    if (!gameSessionKey || npcKnowsPlayer) return;
-    void saveGameSession(gameSessionKey, { playerRevealedInGame });
-  }, [gameSessionKey, npcKnowsPlayer, playerRevealedInGame]);
+    if (!gameSessionKey || !storyMetaLoaded) return;
+    void saveGameSession(gameSessionKey, {
+      playerRevealedInGame,
+      storyArcTodoProgress,
+    });
+  }, [gameSessionKey, playerRevealedInGame, storyArcTodoProgress, storyMetaLoaded]);
 
   useEffect(() => {
     if (!id) return;
@@ -857,6 +884,145 @@ export default function GamePage() {
       setMomentSelectionMode,
     });
 
+  const persistStoryArcStage = useCallback(
+    async (stageNumber: number) => {
+      if (!id) return;
+      setStoryArcCurrentStage(stageNumber);
+      try {
+        const saved = (await get<any[]>("stories")) || [];
+        const idx = saved.findIndex((story) => story.id === id);
+        if (idx > -1) {
+          saved[idx] = { ...saved[idx], storyArcCurrentStage: stageNumber };
+          await set("stories", saved);
+        }
+        const storyKey = `story:${id}`;
+        const stored = (await get<any>(storyKey)) || [];
+        if (Array.isArray(stored)) {
+          await set(storyKey, { items: stored, storyArcCurrentStage: stageNumber });
+        } else if (stored && typeof stored === "object") {
+          await set(storyKey, { ...stored, storyArcCurrentStage: stageNumber });
+        }
+      } catch (err) {
+        console.warn("[game] failed to persist story arc stage", err);
+      }
+    },
+    [id],
+  );
+
+  const appendNarratorBeat = useCallback(
+    async (args: {
+      userText: string;
+      npcText: string;
+      history: OrchestratedMessage[];
+      sceneSummary: string;
+      storyContext: string;
+      currentTurnNpcKnewPlayer?: boolean;
+    }) => {
+      if (!narratorEnabled) return;
+
+      const pendingId = `pending-narrator-${Date.now()}`;
+      setChatMessages((messages) => [
+        ...messages,
+        {
+          id: pendingId,
+          from: "agent",
+          name: "Narrator",
+          text: "…",
+          messageKind: "narrator",
+        },
+      ]);
+
+      const beat = await runNarratorBeat({
+        connected,
+        connectionModel,
+        storyContext: args.storyContext,
+        sceneSummary: args.sceneSummary,
+        userText: args.userText,
+        npcName: assignedNpc?.name?.trim() || "NPC",
+        npcText: args.npcText,
+        playerName: assignedPlayer?.name,
+        history: args.history,
+        playerMode,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
+        currentTurnNpcKnewPlayer: args.currentTurnNpcKnewPlayer,
+        arcStage: resolvedArcStage,
+        completedTodoIds:
+          resolvedArcStageNumber == null
+            ? []
+            : getCompletedTodoIds(storyArcTodoProgress, resolvedArcStageNumber),
+      });
+
+      const evaluation = evaluateStageProgressWithArc({
+        storyArc,
+        currentStageNumber: resolvedArcStageNumber,
+        progress: storyArcTodoProgress,
+        newlyCompleted: beat.completedTodoIds,
+        stageCompleteFlag: beat.stageComplete,
+      });
+
+      setStoryArcTodoProgress(evaluation.progress);
+
+      let narratorText = beat.text;
+      if (evaluation.stageWon && evaluation.nextStage) {
+        setStoryArcCurrentStage(evaluation.nextStageNumber);
+        await persistStoryArcStage(evaluation.nextStageNumber ?? evaluation.nextStage.stageNumber);
+        const stageLabel = evaluation.nextStage.stageName
+          ? `: ${evaluation.nextStage.stageName}`
+          : "";
+        narratorText += `\n\nStage ${resolvedArcStageNumber} complete. Stage ${evaluation.nextStage.stageNumber} begins${stageLabel}.`;
+      }
+
+      setChatMessages((messages) =>
+        messages.map((message) =>
+          message.id === pendingId
+            ? {
+                ...message,
+                id: `narrator-${Date.now()}`,
+                text: narratorText,
+                messageKind: "narrator" as const,
+              }
+            : message,
+        ),
+      );
+    },
+    [
+      assignedNpc?.name,
+      assignedPlayer?.name,
+      connected,
+      connectionModel,
+      narratorEnabled,
+      npcKnowsPlayerEffective,
+      persistStoryArcStage,
+      playerMode,
+      resolvedArcStage,
+      resolvedArcStageNumber,
+      storyArc,
+      storyArcTodoProgress,
+    ],
+  );
+
+  const handleNpcTurnComplete = useCallback(
+    async (
+      turn: ConnectedChatTurnResult,
+      args: {
+        trimmed: string;
+        sceneSummary: string;
+        storyContext: string;
+        currentTurnNpcKnewPlayer?: boolean;
+      },
+    ) => {
+      await appendNarratorBeat({
+        userText: args.trimmed,
+        npcText: turn.assistantText,
+        history: turn.nextHistory,
+        sceneSummary: args.sceneSummary,
+        storyContext: args.storyContext,
+        currentTurnNpcKnewPlayer: args.currentTurnNpcKnewPlayer,
+      });
+    },
+    [appendNarratorBeat],
+  );
+
   // User send flow
   const sendGamePrompt = async (
     trimmed: string,
@@ -915,6 +1081,13 @@ export default function GamePage() {
     }
 
     if (!connected) {
+      const offlineSceneSummary = buildSceneSummary({
+        title,
+        currentMomentName: currentMoment?.name ?? "",
+        npc: assignedNpc,
+        player: assignedPlayer,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
+      });
       queueDemoReply({
         trimmed,
         storyHistory,
@@ -934,6 +1107,13 @@ export default function GamePage() {
             npc,
             player,
             npcKnowsPlayer: npcKnowsPlayerEffective,
+          }),
+        onNpcReplyComplete: (turn) =>
+          handleNpcTurnComplete(turn, {
+            trimmed,
+            sceneSummary: offlineSceneSummary,
+            storyContext: [gameContextText, storySummary].filter(Boolean).join("\n\n"),
+            currentTurnNpcKnewPlayer: knewBeforeSend,
           }),
       });
       return;
@@ -1017,6 +1197,14 @@ export default function GamePage() {
         setMomentSelectionMode,
         setDebugData,
         refreshStorySummary,
+      }).then((turn) => {
+        if (!turn) return;
+        return handleNpcTurnComplete(turn, {
+          trimmed,
+          sceneSummary: currentSceneSummary,
+          storyContext,
+          currentTurnNpcKnewPlayer: knewBeforeSend,
+        });
       });
     } catch (err) {
       const message =
@@ -1436,6 +1624,7 @@ export default function GamePage() {
 
           setStoryArcCurrentStage(resolveCurrentArcStage());
           setNpcKnowsPlayer(storyMeta?.npcKnowsPlayer === true);
+          setNarratorEnabled(storyMeta?.narratorEnabled !== false);
           setDirectorNotes(
             typeof storyMeta?.directorNotes === "string" ? storyMeta.directorNotes : "",
           );
@@ -1529,6 +1718,9 @@ export default function GamePage() {
             (storedSession?.playerRevealedInGame === true ||
               historyRevealedPlayerIdentity(backfilledHistory, playerName)),
         );
+        setStoryArcTodoProgress(
+          storedSession?.storyArcTodoProgress ?? emptyStoryArcTodoProgress(),
+        );
         setStoryHistory(nextHistory);
         console.warn('[game] loaded history, count:', nextHistory.length, 'key:', historyKey);
 
@@ -1550,7 +1742,7 @@ export default function GamePage() {
             name:
               entry.from === "user"
                 ? player?.name?.trim() || "You"
-                : npc?.name?.trim() || "Narrator",
+                : npc?.name?.trim() || "NPC",
           })),
         ]);
       } catch (e) {

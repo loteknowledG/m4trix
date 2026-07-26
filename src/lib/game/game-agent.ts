@@ -50,6 +50,7 @@ type DemoReplyArgs = {
     playerMode?: PlayerMode;
   }) => void | Promise<void>;
   buildSceneSummary: (npc: GameCharacterContext, player: GameCharacterContext) => string;
+  onNpcReplyComplete?: (result: ConnectedChatTurnResult) => void | Promise<void>;
 };
 
 type ConnectedTurnArgs = {
@@ -81,6 +82,11 @@ type ConnectedTurnArgs = {
     history: OrchestratedMessage[];
     playerMode?: PlayerMode;
   }) => void | Promise<void>;
+};
+
+export type ConnectedChatTurnResult = {
+  assistantText: string;
+  nextHistory: OrchestratedMessage[];
 };
 
 export function updateStreamingMessage(
@@ -218,7 +224,7 @@ async function streamAgentReply({
   onHistoryUpdate,
   onMomentReset,
   refreshStorySummary,
-}: StreamAgentReplyArgs) {
+}: StreamAgentReplyArgs): Promise<ConnectedChatTurnResult> {
   const extractAssistantText = (raw: string) => {
     const text = (raw || "").trim();
     if (!text) return "";
@@ -373,6 +379,11 @@ async function streamAgentReply({
     history: nextHistorySnapshot,
     playerMode: userHistoryEntry?.playerMode ?? normalizePlayerMode(requestBody.playerMode as string | null | undefined),
   });
+
+  return {
+    assistantText: finalText,
+    nextHistory: nextHistorySnapshot,
+  };
 }
 
 export function queueDemoReply({
@@ -388,6 +399,7 @@ export function queueDemoReply({
   setMomentSelectionMode,
   refreshStorySummary,
   buildSceneSummary,
+  onNpcReplyComplete,
 }: DemoReplyArgs) {
   setTimeout(() => {
     const npcName = assignedNpc?.name?.trim() || "NPC";
@@ -438,6 +450,10 @@ export function queueDemoReply({
       history: nextHistorySnapshot,
       playerMode: userHistoryEntry?.playerMode,
     });
+    void onNpcReplyComplete?.({
+      assistantText: botMessage.text,
+      nextHistory: nextHistorySnapshot,
+    });
   }, 450);
 }
 
@@ -455,7 +471,7 @@ export async function runConnectedChatTurn({
   setMomentSelectionMode,
   setDebugData,
   refreshStorySummary,
-}: ConnectedTurnArgs) {
+}: ConnectedTurnArgs): Promise<ConnectedChatTurnResult | undefined> {
   const isLmstudio = String(requestBody.provider || "").toLowerCase() === "lmstudio";
   const waitingLabel = isLmstudio
     ? "Waiting for LM Studio… (large local models can take 30–90s)"
@@ -502,7 +518,7 @@ export async function runConnectedChatTurn({
 
   setDebugData({ request: requestBody, response: null, prompt: trimmed });
   try {
-    await streamAgentReply({
+    return await streamAgentReply({
       requestBody,
       pendingId,
       storyHistory,
