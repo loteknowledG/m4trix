@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
-import { characterDetailHref } from "@/lib/character-routes";
 import { ChevronLeft, SquarePen, Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,6 +36,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { MomentsProvider } from "@/context/moments-collection";
 import useSelection from "@/hooks/use-selection";
 import { useSidebar } from "@/hooks/use-sidebar";
+import { characterDetailHref } from "@/lib/character-routes";
 import {
   ensureNarratorCharacterRecord,
   NARRATOR_CHARACTER_ID,
