@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 // Ensure this route runs on Node.js (not Edge)
 export const runtime = "nodejs";
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {

@@ -8,7 +8,7 @@ import {
 } from '@/lib/lmstudio';
 
 export const runtime = 'nodejs';
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 type HealthPayload = {
   ok: boolean;

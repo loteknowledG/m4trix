@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
-import { characterDetailHref } from "@/lib/character-routes";
 import { ChevronLeft, SquarePen, Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

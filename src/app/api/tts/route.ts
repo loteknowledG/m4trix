@@ -1,4 +1,4 @@
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 import { spawn } from 'child_process';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';

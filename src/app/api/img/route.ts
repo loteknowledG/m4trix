@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 function isAllowedHost(urlStr: string): boolean {
   try {
