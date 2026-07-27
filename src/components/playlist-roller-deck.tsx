@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Carousel,
   CarouselContent,
@@ -27,16 +27,31 @@ export default function PlaylistRollerDeck({
 }: PlaylistRollerDeckProps) {
   const [api, setApi] = useState<CarouselApi>();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedIdRef = useRef(selectedId);
+  const programmaticScrollRef = useRef(false);
+
+  selectedIdRef.current = selectedId;
 
   const scrollToVideo = useCallback(
     (videoId: string) => {
       const idx = videos.findIndex(v => v.id === videoId);
       if (idx >= 0 && api) {
+        programmaticScrollRef.current = true;
         api.scrollTo(idx);
+        setSelectedIndex(idx);
       }
     },
     [api, videos]
   );
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const idx = videos.findIndex(v => v.id === selectedId);
+    if (idx >= 0) {
+      setSelectedIndex(idx);
+    }
+    scrollToVideo(selectedId);
+  }, [selectedId, videos, scrollToVideo]);
 
   useEffect(() => {
     if (!api) return;
@@ -45,24 +60,23 @@ export default function PlaylistRollerDeck({
       const idx = api.selectedScrollSnap();
       setSelectedIndex(idx);
       const video = videos[idx];
-      if (video && video.id !== selectedId) {
+      if (!video) return;
+
+      if (programmaticScrollRef.current) {
+        programmaticScrollRef.current = false;
+        return;
+      }
+
+      if (video.id !== selectedIdRef.current) {
         onSelect(video.id);
       }
     };
 
-    onSelectSlide();
     api.on('select', onSelectSlide);
-    api.on('reInit', onSelectSlide);
     return () => {
       api.off('select', onSelectSlide);
-      api.off('reInit', onSelectSlide);
     };
-  }, [api, videos, selectedId, onSelect]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    scrollToVideo(selectedId);
-  }, [selectedId, scrollToVideo]);
+  }, [api, videos, onSelect]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -110,7 +124,7 @@ export default function PlaylistRollerDeck({
                   type="button"
                   onClick={() => {
                     onSelect(video.id);
-                    api?.scrollTo(index);
+                    scrollToVideo(video.id);
                   }}
                   className={cn(
                     'group w-full overflow-hidden rounded-xl border-2 border-border bg-card text-left shadow-[2px_2px_0_0_hsl(var(--foreground))] transition-all duration-200 ease-out',
@@ -121,7 +135,7 @@ export default function PlaylistRollerDeck({
                 >
                   <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
                     <img
-                      src={getVideoThumbnail(video.src)}
+                      src={getVideoThumbnail(video.src, video.kind)}
                       alt={video.name || 'Video thumbnail'}
                       className="h-full w-full object-cover"
                     />

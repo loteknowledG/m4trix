@@ -1,9 +1,10 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
 const { initializeAutoUpdater } = require('./auto-updater');
+const { autoClickEmbedPlay } = require('./embed-auto-click');
 
 const PACKAGED_PORT = 3210;
 const DEV_PORT = 3000;
@@ -259,18 +260,49 @@ async function createWindow() {
   }
 }
 
+ipcMain.handle('m4trix:embed:auto-click-play', async (event, bounds) => {
+  const webContents = event.sender;
+  if (!webContents || webContents.isDestroyed()) {
+    return { ok: false, error: 'Web contents unavailable' };
+  }
+  if (
+    !bounds ||
+    typeof bounds.x !== 'number' ||
+    typeof bounds.y !== 'number' ||
+    typeof bounds.width !== 'number' ||
+    typeof bounds.height !== 'number'
+  ) {
+    return { ok: false, error: 'Invalid player bounds' };
+  }
+  try {
+    return await autoClickEmbedPlay(webContents, bounds);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
+  }
+});
+
 async function bootstrap() {
-  if (!app.requestSingleInstanceLock()) {
+  const isDevShell = !app.isPackaged;
+
+  if (isDevShell) {
+    console.log('[m4trix] Dev shell — single-instance lock disabled.');
+  } else if (!app.requestSingleInstanceLock()) {
+    console.error('[m4trix] Another m4trix instance is already running — exiting.');
     app.quit();
     return;
   }
-  app.on('second-instance', () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  });
+
+  if (!isDevShell) {
+    app.on('second-instance', () => {
+      if (!mainWindow) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    });
+  }
+
   await app.whenReady();
-  bootLog('app ready');
+  bootLog(isDevShell ? 'dev shell ready' : 'app ready');
   await createWindow();
   initializeAutoUpdater();
   app.on('activate', () => {

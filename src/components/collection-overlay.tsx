@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
 import { normalizeMomentSrc } from '@/lib/moments';
+import { storyIdFromPathname } from '@/lib/story-routes';
 import { safeDel, safeGet, safeKeys, safeSet } from '@/lib/storage-compat';
 import { X, ArrowLeft, ArrowRight } from '@/components/icons';
 import {
@@ -14,8 +15,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import dynamic from 'next/dynamic';
+import { HiMiniChatBubbleLeftRight } from 'react-icons/hi2';
 import { FaTags } from 'react-icons/fa';
 import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
+import { MomentDialogModal } from '@/components/moment-dialog-modal';
+import { MomentDialogDisplay } from '@/components/moment-dialog-display';
 
 const MomentClassifier = dynamic(
   () => import('@/components/ai/moment-classifier'),
@@ -26,19 +30,16 @@ const noop = () => {};
 
 export default function CollectionOverlay() {
   const ctx = useMomentsContext();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const collection = ctx?.collection ?? [];
   const currentId = ctx?.currentId ?? null;
+  const storyId = useMemo(
+    () => storyIdFromPathname(pathname, searchParams?.get('story')),
+    [pathname, searchParams],
+  );
   // Track if this moment is the title moment for the current story
   const [isTitleMoment, setIsTitleMoment] = useState(false);
-
-  // Get story id from URL if possible
-  const storyId = (() => {
-    if (typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/stories\/(.+?)(\/|$)/);
-      return match ? match[1] : null;
-    }
-    return null;
-  })();
 
   // Check if this moment is the title moment on mount or when currentId/storyId changes
   useEffect(() => {
@@ -62,6 +63,13 @@ export default function CollectionOverlay() {
   const isOpen = ctx?.isOpen ?? false;
   const [editing, setEditing] = useState(false);
   const [tagging, setTagging] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const editingRef = useRef(editing);
+  const taggingRef = useRef(tagging);
+  const dialogOpenRef = useRef(dialogOpen);
+  editingRef.current = editing;
+  taggingRef.current = tagging;
+  dialogOpenRef.current = dialogOpen;
   const [text, setText] = useState('');
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
   const [font, setFont] = useState('system');
@@ -80,6 +88,8 @@ export default function CollectionOverlay() {
 
   const posRef = useRef(pos);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const draggingRef = useRef(false);
   const skipPersistRef = useRef(false);
 
@@ -375,7 +385,29 @@ export default function CollectionOverlay() {
     if (!ctx || !isOpen) return;
     const prevOverflow = document.body.style.overflow || '';
     document.body.style.overflow = 'hidden';
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return (
+        target.isContentEditable ||
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT'
+      );
+    };
     const onKey = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+      const dialogOpen = dialogOpenRef.current;
+      const editing = editingRef.current;
+      const tagging = taggingRef.current;
+      if (dialogOpen || editing || tagging) {
+        if (e.key === 'Escape') {
+          if (dialogOpen) setDialogOpen(false);
+          if (editing) setEditing(false);
+          if (tagging) setTagging(false);
+        }
+        return;
+      }
       if (e.key === 'Escape') close();
       if (e.key === 'ArrowLeft') prev();
       if (e.key === 'ArrowRight') next();
@@ -393,7 +425,6 @@ export default function CollectionOverlay() {
 
   // close overlay when the route changes to avoid leaving a full-screen
   // overlay active after navigation (e.g., sidebar link clicks)
-  const pathname = usePathname();
   const prevPathRef = useRef<string | null>(pathname);
   const overlayFontFamily =
     font === 'serif'
@@ -487,6 +518,18 @@ export default function CollectionOverlay() {
 
       <div className="absolute right-4 top-4 flex items-center gap-2 z-10">
         <button
+          onClick={e => {
+            e.stopPropagation();
+            e.preventDefault();
+            setDialogOpen(true);
+          }}
+          className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white"
+          aria-label="Dialog"
+          title="Dialog"
+        >
+          <HiMiniChatBubbleLeftRight size={18} />
+        </button>
+        <button
           onClick={async e => {
             e.stopPropagation();
             e.preventDefault();
@@ -571,48 +614,59 @@ export default function CollectionOverlay() {
       )}
 
       <div
-        ref={containerRef}
-        className="max-h-full max-w-full flex items-center justify-center relative"
+        ref={stageRef}
+        className="absolute inset-0 flex items-center justify-center"
       >
-        <div className="flex items-center justify-center w-full">
+        <div
+          ref={containerRef}
+          className="relative flex h-full w-full max-h-full max-w-full items-center justify-center"
+        >
           <img
+            ref={imageRef}
             src={normalizeMomentSrc(item.src)}
             alt={item.name || 'Moment preview'}
-            className="h-screen max-w-full object-contain rounded"
+            className="h-full max-h-screen w-full max-w-full object-contain rounded"
             onClick={e => {
               e.stopPropagation();
               e.preventDefault();
             }}
           />
-        </div>
 
-        {text ? (
-          <div
-            onMouseDown={e => onStartDrag(e)}
-            onTouchStart={e => onStartDrag(e)}
-            onDragStart={e => e.preventDefault()}
-            className="absolute z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab pointer-events-auto select-none touch-none"
-            role="presentation"
-          >
-            <span
-              className="block px-4 text-center break-words whitespace-pre-wrap leading-tight select-none"
-              style={{
-                fontFamily: overlayFontFamily,
-                fontSize: `${fontSize}px`,
-                color: fontColor,
-                width: pixelWidth ? `${pixelWidth}px` : `${textWidth}%`,
-                maxWidth: `${textWidth}%`,
-                WebkitTextStroke: strokeWidth > 0 ? `${strokeWidth}px ${strokeColor}` : undefined,
-                textShadow:
-                  strokeWidth > 0
-                    ? `0 0 1px ${strokeColor}, 0 0 2px ${strokeColor}`
-                    : '0 2px 8px rgba(0,0,0,0.85)',
-              }}
+          <MomentDialogDisplay
+            momentId={currentId}
+            storyId={storyId}
+            stageRef={stageRef}
+            imageRef={imageRef}
+          />
+
+          {text ? (
+            <div
+              onMouseDown={e => onStartDrag(e)}
+              onTouchStart={e => onStartDrag(e)}
+              onDragStart={e => e.preventDefault()}
+              className="absolute z-30 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab pointer-events-auto select-none touch-none"
+              role="presentation"
             >
-              {text}
-            </span>
-          </div>
-        ) : null}
+              <span
+                className="block px-4 text-center break-words whitespace-pre-wrap leading-tight select-none"
+                style={{
+                  fontFamily: overlayFontFamily,
+                  fontSize: `${fontSize}px`,
+                  color: fontColor,
+                  width: pixelWidth ? `${pixelWidth}px` : `${textWidth}%`,
+                  maxWidth: `${textWidth}%`,
+                  WebkitTextStroke: strokeWidth > 0 ? `${strokeWidth}px ${strokeColor}` : undefined,
+                  textShadow:
+                    strokeWidth > 0
+                      ? `0 0 1px ${strokeColor}, 0 0 2px ${strokeColor}`
+                      : '0 2px 8px rgba(0,0,0,0.85)',
+                }}
+              >
+                {text}
+              </span>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* Editor action buttons removed per request */}
@@ -849,6 +903,13 @@ export default function CollectionOverlay() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <MomentDialogModal
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        momentId={currentId}
+        storyId={storyId}
+      />
     </div>
   );
 }

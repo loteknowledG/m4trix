@@ -1,4 +1,9 @@
 /** @type {import('next').NextConfig} */
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const isGithubActions = process.env.GITHUB_ACTIONS === "true";
 const isDev =
 	process.env.NODE_ENV === "development" || process.argv.includes("dev");
@@ -36,6 +41,13 @@ const nextConfig = {
 				hostname: "models.dev",
 			},
 		],
+	},
+	webpack: (config) => {
+		config.resolve.alias = {
+			...config.resolve.alias,
+			"video.js": path.resolve(__dirname, "node_modules/video.js"),
+		};
+		return config;
 	},
 };
 

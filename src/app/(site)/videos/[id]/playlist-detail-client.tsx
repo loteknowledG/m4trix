@@ -6,11 +6,20 @@ import { set } from 'idb-keyval';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
 import ErrorBoundary from '@/components/error-boundary';
 import PlaylistRollerDeck from '@/components/playlist-roller-deck';
-import WebVideoPlayer from '@/components/web-video-player';
-import { ChevronLeft, Upload } from '@/components/icons';
+import UniversalVideoPlayer from '@/components/universal-video-player';
+import { ChevronLeft, Trash2, Upload } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { Marquee } from '@/components/ui/marquee';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { logger } from '@/lib/logger';
 import {
   addVideoToPlaylist,
@@ -18,9 +27,12 @@ import {
   loadPlaylistVideos,
   newPlaylistId,
   renamePlaylist,
+  removeVideoFromPlaylist,
   type PlaylistVideo,
 } from '@/lib/playlists';
-import { isValidVideoUrl } from '@/lib/video-utils';
+import { isValidVideoUrl, parseEmbedCode } from '@/lib/video-utils';
+import { dispatchVideoSelected } from '@/lib/video-playback-events';
+import { cn } from '@/lib/utils';
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -29,6 +41,18 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+}
+
+function videoLabel(video: PlaylistVideo) {
+  if (video.name?.trim()) return video.name.trim();
+  if (video.kind === 'upload') return 'Uploaded video';
+  if (video.kind === 'embed') return 'Embedded video';
+  try {
+    const url = new URL(video.src);
+    return url.hostname + url.pathname.slice(0, 24);
+  } catch {
+    return video.src.slice(0, 48);
+  }
 }
 
 export default function PlaylistDetailClient() {
@@ -45,10 +69,15 @@ export default function PlaylistDetailClient() {
   const [title, setTitle] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [urlInput, setUrlInput] = useState('');
+  const [embedInput, setEmbedInput] = useState('');
   const [addingUrl, setAddingUrl] = useState(false);
+  const [addingEmbed, setAddingEmbed] = useState(false);
+  const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
+  const [playbackArmed, setPlaybackArmed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedVideo = videos.find(v => v.id === selectedVideoId) ?? null;
+  const selectedIndex = videos.findIndex(v => v.id === selectedVideoId);
+  const selectedVideo = selectedIndex >= 0 ? videos[selectedIndex] : null;
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) {
@@ -77,12 +106,18 @@ export default function PlaylistDetailClient() {
   }, [loadPlaylist]);
 
   useEffect(() => {
-    const handler = () => {
-      void loadPlaylist();
+    const handler = async () => {
+      if (!playlistId) return;
+      try {
+        const items = await loadPlaylistVideos(playlistId);
+        setVideos(items);
+      } catch (err) {
+        logger.error('Failed to refresh playlist videos', err);
+      }
     };
     window.addEventListener('playlists-updated', handler);
     return () => window.removeEventListener('playlists-updated', handler);
-  }, [loadPlaylist]);
+  }, [playlistId]);
 
   useEffect(() => {
     const prev = document.title;
@@ -118,12 +153,41 @@ export default function PlaylistDetailClient() {
       };
       const next = await addVideoToPlaylist(playlistId, video);
       setVideos(next);
-      setSelectedVideoId(video.id);
+      selectVideo(video.id);
       setUrlInput('');
     } catch (err) {
       logger.error('Failed to add video URL', err);
     } finally {
       setAddingUrl(false);
+    }
+  };
+
+  const handleAddEmbed = async () => {
+    const trimmed = embedInput.trim();
+    if (!playlistId || !trimmed || addingEmbed) return;
+
+    const parsed = parseEmbedCode(trimmed);
+    if (!parsed) {
+      logger.warn('Invalid embed code', trimmed);
+      return;
+    }
+
+    setAddingEmbed(true);
+    try {
+      const video: PlaylistVideo = {
+        id: newPlaylistId(),
+        src: parsed.src,
+        name: parsed.name,
+        kind: 'embed',
+      };
+      const next = await addVideoToPlaylist(playlistId, video);
+      setVideos(next);
+      selectVideo(video.id);
+      setEmbedInput('');
+    } catch (err) {
+      logger.error('Failed to add embed code', err);
+    } finally {
+      setAddingEmbed(false);
     }
   };
 
@@ -139,18 +203,57 @@ export default function PlaylistDetailClient() {
       };
       const next = await addVideoToPlaylist(playlistId, video);
       setVideos(next);
-      setSelectedVideoId(video.id);
+      selectVideo(video.id);
     } catch (err) {
       logger.error('Failed to upload video', err);
     }
   };
 
+  const handleRemoveVideo = async (videoId: string) => {
+    if (!playlistId) return;
+    const removedIndex = videos.findIndex(v => v.id === videoId);
+    try {
+      const next = await removeVideoFromPlaylist(playlistId, videoId);
+      setVideos(next);
+      setSelectedVideoId(prev => {
+        if (prev !== videoId) return prev;
+        if (next.length === 0) return null;
+        const nextIndex = Math.min(Math.max(removedIndex, 0), next.length - 1);
+        return next[nextIndex]?.id ?? null;
+      });
+    } catch (err) {
+      logger.error('Failed to remove video from playlist', err);
+    }
+  };
+
+  const selectVideo = useCallback(
+    (videoId: string, userInitiated = true) => {
+      const video = videos.find(v => v.id === videoId);
+      if (userInitiated) {
+        setPlaybackArmed(true);
+      }
+      setSelectedVideoId(videoId);
+      if (video) {
+        dispatchVideoSelected({
+          id: video.id,
+          kind: video.kind,
+          src: video.src,
+          userInitiated,
+        });
+      }
+    },
+    [videos]
+  );
+
   const advanceToNext = useCallback(() => {
     if (videos.length === 0) return;
     const currentIndex = videos.findIndex(v => v.id === selectedVideoId);
     const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % videos.length : 0;
-    setSelectedVideoId(videos[nextIndex]?.id ?? null);
-  }, [videos, selectedVideoId]);
+    const nextId = videos[nextIndex]?.id;
+    if (!nextId) return;
+    setPlaybackArmed(true);
+    selectVideo(nextId, false);
+  }, [videos, selectedVideoId, selectVideo]);
 
   if (!playlistId) {
     return (
@@ -178,11 +281,11 @@ export default function PlaylistDetailClient() {
     >
       <ErrorBoundary>
         <div
-          className="overflow-auto px-4 pb-8"
+          className="overflow-auto"
           style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
         >
-          <div className="py-4 space-y-6">
-            <div>
+          <div className="py-4">
+            <div className="mb-6">
               {editingTitle ? (
                 <input
                   autoFocus
@@ -202,16 +305,21 @@ export default function PlaylistDetailClient() {
                       setEditingTitle(false);
                     }
                   }}
-                  className="w-full text-3xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
+                  className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
                 />
               ) : (
                 <button
                   type="button"
                   onClick={() => setEditingTitle(true)}
-                  className="w-full text-left text-3xl font-light bg-transparent border-0 focus:outline-none"
+                  className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
                   aria-label="Edit playlist title"
                 >
-                  <Marquee className="text-3xl font-light" duration="8s" gap="13rem" distance="200%">
+                  <Marquee
+                    className="text-5xl font-light"
+                    duration="8s"
+                    gap="13rem"
+                    distance="200%"
+                  >
                     {title.trim() ? title : 'Add a title'}
                   </Marquee>
                 </button>
@@ -221,64 +329,163 @@ export default function PlaylistDetailClient() {
             {loading ? (
               <div className="text-sm text-muted-foreground">Loading…</div>
             ) : (
-              <>
-                <WebVideoPlayer
-                  src={selectedVideo?.src ?? ''}
-                  autoPlay={Boolean(selectedVideo)}
-                  onEnded={advanceToNext}
-                />
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                <div className="min-w-0 flex-1 space-y-6">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
+                      <div>
+                        <div className="text-sm font-medium">Autoplay</div>
+                        <div className="text-xs text-muted-foreground">
+                          Start each video automatically and continue to the next
+                        </div>
+                      </div>
+                      <Switch
+                        checked={autoPlayEnabled}
+                        onCheckedChange={setAutoPlayEnabled}
+                        aria-label="Toggle autoplay"
+                      />
+                    </div>
 
-                <PlaylistRollerDeck
-                  videos={videos}
-                  selectedId={selectedVideoId}
-                  onSelect={setSelectedVideoId}
-                />
+                    <UniversalVideoPlayer
+                      src={selectedVideo?.src ?? ''}
+                      kind={selectedVideo?.kind ?? 'url'}
+                      videoId={selectedVideo?.id}
+                      autoPlay={autoPlayEnabled}
+                      userActivated={playbackArmed}
+                      onEnded={autoPlayEnabled ? advanceToNext : undefined}
+                    />
+                  </div>
 
-                <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                  <div className="text-sm font-medium">Add video</div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      value={urlInput}
-                      onChange={e => setUrlInput(e.target.value)}
-                      placeholder="Paste video URL (YouTube, Vimeo, MP4…)"
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          void handleAddUrl();
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => void handleAddUrl()}
-                      disabled={addingUrl || !urlInput.trim()}
-                    >
-                      Add URL
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) void handleUpload(file);
-                        e.target.value = '';
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload size={16} className="mr-2" />
-                      Upload video
-                    </Button>
-                  </div>
+                  <PlaylistRollerDeck
+                    videos={videos}
+                    selectedId={selectedVideoId}
+                    onSelect={selectVideo}
+                  />
                 </div>
-              </>
+
+                <aside className="w-full shrink-0 lg:w-80 xl:w-96">
+                  <div className="sticky top-4 space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+                    <div className="space-y-2">
+                      <label htmlFor="playlist-video-select" className="text-sm font-medium">
+                        Playlist
+                      </label>
+                      {videos.length > 0 ? (
+                        <>
+                          <Select
+                            value={selectedVideoId ?? undefined}
+                            onValueChange={selectVideo}
+                          >
+                            <SelectTrigger id="playlist-video-select" aria-label="Select video">
+                              <SelectValue placeholder="Choose a video" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {videos.map((video, index) => (
+                                <SelectItem key={video.id} value={video.id}>
+                                  {index + 1}. {videoLabel(video)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1">
+                            {videos.map((video, index) => (
+                              <li key={video.id} className="flex items-stretch gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => selectVideo(video.id)}
+                                  className={cn(
+                                    'min-w-0 flex-1 rounded-md px-3 py-2 text-left text-sm transition-colors',
+                                    selectedVideoId === video.id
+                                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                                      : 'hover:bg-accent/40'
+                                  )}
+                                >
+                                  <span className="mr-2 text-xs text-muted-foreground">
+                                    {index + 1}.
+                                  </span>
+                                  <span className="line-clamp-2">{videoLabel(video)}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRemoveVideo(video.id)}
+                                  className="inline-flex shrink-0 items-center justify-center rounded-md px-2 text-destructive transition-colors hover:bg-destructive/10"
+                                  aria-label={`Remove ${videoLabel(video)}`}
+                                  title="Remove from playlist"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No videos yet.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 border-t border-border/60 pt-4">
+                      <div className="text-sm font-medium">Add to playlist</div>
+                      <Input
+                        value={urlInput}
+                        onChange={e => setUrlInput(e.target.value)}
+                        placeholder="Paste video URL (YouTube, Vimeo, MP4…)"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleAddUrl();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        className="w-full"
+                        onClick={() => void handleAddUrl()}
+                        disabled={addingUrl || !urlInput.trim()}
+                      >
+                        Add URL
+                      </Button>
+
+                      <Textarea
+                        value={embedInput}
+                        onChange={e => setEmbedInput(e.target.value)}
+                        placeholder={'Paste embed code (<iframe …>) or embed URL'}
+                        rows={4}
+                        className="resize-y font-mono text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full"
+                        onClick={() => void handleAddEmbed()}
+                        disabled={addingEmbed || !embedInput.trim()}
+                      >
+                        Add embed
+                      </Button>
+
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload size={16} className="mr-2" />
+                        Choose local file
+                      </Button>
+                    </div>
+                  </div>
+                </aside>
+              </div>
             )}
           </div>
         </div>

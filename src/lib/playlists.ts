@@ -14,7 +14,7 @@ export type PlaylistVideo = {
   id: string;
   src: string;
   name?: string;
-  kind: 'url' | 'upload';
+  kind: 'url' | 'upload' | 'embed';
 };
 
 export function newPlaylistId() {
@@ -48,9 +48,9 @@ function resolveCoverSrc(videos: PlaylistVideo[], meta: PlaylistMeta): string | 
   if (meta.coverSrc) return meta.coverSrc;
   if (meta.titleVideoId) {
     const titleVideo = videos.find(v => v.id === meta.titleVideoId);
-    if (titleVideo?.src) return getVideoThumbnail(titleVideo.src);
+    if (titleVideo?.src) return getVideoThumbnail(titleVideo.src, titleVideo.kind);
   }
-  if (videos[0]?.src) return getVideoThumbnail(videos[0].src);
+  if (videos[0]?.src) return getVideoThumbnail(videos[0].src, videos[0].kind);
   return VIDEO_PLACEHOLDER;
 }
 

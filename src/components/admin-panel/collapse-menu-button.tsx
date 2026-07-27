@@ -55,6 +55,8 @@ export function CollapseMenuButton({
   const isStories = label === 'Stories';
   const isGames = label === 'Games';
   const isCharacters = label === 'Characters';
+  const isVideos = label === 'Videos';
+  const useStaticLabel = isStories || isGames || isCharacters || isVideos;
   const isSubmenuActive = submenus.some(submenu =>
     submenu.active === undefined ? submenu.href === pathname : submenu.active
   );
@@ -87,7 +89,7 @@ export function CollapseMenuButton({
                   <span className="mr-4">
                     <Icon size={18} />
                   </span>
-                  {isStories || isGames || isCharacters ? (
+                  {useStaticLabel ? (
                     <p
                       className={cn(
                         'max-w-[150px] truncate',
@@ -133,7 +135,7 @@ export function CollapseMenuButton({
                 <span className="mr-4">
                   <Icon size={18} />
                 </span>
-                {isStories || isGames || isCharacters ? (
+                {useStaticLabel ? (
                   <p
                     className={cn(
                       'max-w-[150px] truncate',

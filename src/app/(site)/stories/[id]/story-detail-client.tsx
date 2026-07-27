@@ -49,6 +49,13 @@ import {
 } from "@/lib/game/story-arc";
 import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import {
+  filterStoryMomentItems,
+  mergeStoryMomentItemsForSave,
+  normalizeStoryMomentList,
+  readStoryMomentItems,
+  type StoryMomentRecord,
+} from "@/lib/story-moments";
+import {
   type CheckpointObjective,
   type ObjectiveInteractionType,
   type ObjectiveType,
@@ -97,7 +104,7 @@ function createEmptyStageEditForm(): StageEditForm {
   };
 }
 
-type Moment = { id: string; src: string; name?: string; fingerprint?: string };
+type Moment = StoryMomentRecord;
 type StagedMomentsByStage = Record<number, string[]>;
 type Character = { id: string; name?: string; avatarUrl?: string };
 type StoryDialogLine = {
@@ -226,16 +233,18 @@ export default function StoryPage() {
   const scrollAnimRef = useRef<number | null>(null);
 
   const saveStoryItems = useCallback(
-    async (nextItems: any[]) => {
+    async (nextItems: Moment[]) => {
       if (!id) return;
       const storyKey = `story:${id}`;
       const stored = (await get<any>(storyKey)) || [];
+      const existingRawItems = readStoryMomentItems(stored);
+      const mergedItems = mergeStoryMomentItemsForSave(nextItems, existingRawItems);
       if (Array.isArray(stored)) {
-        await set(storyKey, nextItems);
+        await set(storyKey, mergedItems);
       } else if (stored && typeof stored === "object") {
-        await set(storyKey, { ...stored, items: nextItems });
+        await set(storyKey, { ...stored, items: mergedItems });
       } else {
-        await set(storyKey, nextItems);
+        await set(storyKey, mergedItems);
       }
     },
     [id],
@@ -257,22 +266,28 @@ export default function StoryPage() {
         const stored = (await get<any>(`story:${id}`)) || null;
         if (!mounted) return;
 
-        let loadedMoments: Moment[] = [];
-        if (Array.isArray(stored)) {
-          loadedMoments = stored.map((s: any) => ({
-            id: s.id || s,
-            src: s.src || s,
-            name: s.name,
-          }));
-        } else if (stored && Array.isArray(stored.items)) {
-          loadedMoments = stored.items.map((s: any) => ({
-            id: s.id || s,
-            src: s.src || s,
-            name: s.name,
-          }));
-        }
-
+        const rawItems = readStoryMomentItems(stored);
+        const loadedMoments = normalizeStoryMomentList(rawItems);
         setMoments(loadedMoments);
+
+        if (loadedMoments.length !== rawItems.length) {
+          const storyKey = `story:${id}`;
+          if (Array.isArray(stored)) {
+            await set(storyKey, loadedMoments);
+          } else if (stored && typeof stored === "object") {
+            await set(storyKey, { ...stored, items: loadedMoments });
+          }
+          try {
+            const saved = (await get<StoryMeta[]>("stories")) || [];
+            const idx = saved.findIndex((entry) => entry.id === id);
+            if (idx > -1) {
+              saved[idx].count = loadedMoments.length;
+              await set("stories", saved);
+            }
+          } catch (e) {
+            /* ignore */
+          }
+        }
 
         // try to get title from stored object or stories metadata
         let t = stored && stored.title ? stored.title : "";
@@ -370,25 +385,17 @@ export default function StoryPage() {
           // remove from story
           const storyKey = `story:${id}`;
           const stored = (await get<any>(storyKey)) || [];
-          let remaining: any[] = [];
-          if (Array.isArray(stored)) {
-            try {
-              window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-            } catch (e) {
-              /* ignore */
-            }
-          } else if (stored && Array.isArray(stored.items)) {
-            remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-          }
+          const rawItems = readStoryMomentItems(stored);
+          const remainingRaw = filterStoryMomentItems(rawItems, ids);
+          const remaining = normalizeStoryMomentList(remainingRaw);
           await saveStoryItems(remaining);
-          // update local state
           setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
           // update stories metadata count
           try {
             const saved = (await get<any>("stories")) || [];
             const idx = saved.findIndex((s: any) => s.id === id);
             if (idx > -1) {
-              saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
+              saved[idx].count = remaining.length;
               await set("stories", saved);
               try {
                 window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
@@ -414,32 +421,18 @@ export default function StoryPage() {
           const moving = moments.filter((g) => ids.includes(g.id));
           const newTrash = [...trash, ...moving];
           await set("trash-moments", newTrash);
-          // remove from story (same as above)
           const storyKey = `story:${id}`;
           const stored = (await get<any>(storyKey)) || [];
-          let remaining: any[] = [];
-          try {
-            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-          } catch (e) {
-            /* ignore */
-          }
-          if (Array.isArray(stored)) {
-            remaining = stored.filter((s: any) => !ids.includes(s.id || s));
-          } else if (stored && Array.isArray(stored.items)) {
-            remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-          }
+          const rawItems = readStoryMomentItems(stored);
+          const remainingRaw = filterStoryMomentItems(rawItems, ids);
+          const remaining = normalizeStoryMomentList(remainingRaw);
           await saveStoryItems(remaining);
-          try {
-            clearSelection(scope);
-          } catch (e) {
-            /* ignore */
-          }
           setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
           try {
             const saved = (await get<any>("stories")) || [];
             const idx = saved.findIndex((s: any) => s.id === id);
             if (idx > -1) {
-              saved[idx].count = Math.max(0, (saved[idx].count || 0) - ids.length);
+              saved[idx].count = remaining.length;
               await set("stories", saved);
               try {
                 window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
@@ -1111,15 +1104,11 @@ export default function StoryPage() {
       // remove moved items from this story
       setMoments((prev) => prev.filter((m) => !ids.includes(m.id)));
 
-      // update stored story list
       const storyKey = `story:${id}`;
       const stored = (await get<any>(storyKey)) || [];
-      let remaining: any[] = [];
-      if (Array.isArray(stored)) {
-        remaining = stored.filter((s: any) => !ids.includes(s.id || s));
-      } else if (stored && Array.isArray(stored.items)) {
-        remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-      }
+      const rawItems = readStoryMomentItems(stored);
+      const remainingRaw = filterStoryMomentItems(rawItems, ids);
+      const remaining = normalizeStoryMomentList(remainingRaw);
       await saveStoryItems(remaining);
 
       const prunedStaged: StagedMomentsByStage = {};
@@ -1145,7 +1134,7 @@ export default function StoryPage() {
     } catch (err) {
       logger.error("Failed to move selected to trash", err);
     }
-  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems]);
+  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems, setStoryCount]);
 
   const moveToHeap = useCallback(async () => {
     try {
@@ -1162,12 +1151,9 @@ export default function StoryPage() {
 
       const storyKey = `story:${id}`;
       const stored = (await get<any>(storyKey)) || [];
-      let remaining: any[] = [];
-      if (Array.isArray(stored)) {
-        remaining = stored.filter((s: any) => !ids.includes(s.id || s));
-      } else if (stored && Array.isArray(stored.items)) {
-        remaining = stored.items.filter((s: any) => !ids.includes(s.id || s));
-      }
+      const rawItems = readStoryMomentItems(stored);
+      const remainingRaw = filterStoryMomentItems(rawItems, ids);
+      const remaining = normalizeStoryMomentList(remainingRaw);
       await saveStoryItems(remaining);
 
       const prunedStaged: StagedMomentsByStage = {};
@@ -1191,7 +1177,7 @@ export default function StoryPage() {
     } catch (err) {
       logger.error("Failed to move selected to heap", err);
     }
-  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems]);
+  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems, setStoryCount]);
 
   return (
     <>

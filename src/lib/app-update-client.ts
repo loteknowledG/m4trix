@@ -6,9 +6,24 @@ type AppVersionResponse = {
   version?: string;
 };
 
+export type EmbedClickBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type EmbedAutoClickResult = {
+  ok: boolean;
+  click?: { x: number; y: number } | 'overlay';
+  screenshotPath?: string | null;
+  error?: string;
+};
+
 export type M4trixDesktopBridge = {
   isElectron: true;
   getVersion: () => Promise<string>;
+  autoClickEmbedPlay?: (bounds: EmbedClickBounds) => Promise<EmbedAutoClickResult>;
   checkForUpdates: () => Promise<
     | { status: "up-to-date"; running: string; latest: string; downloaded?: boolean }
     | { status: "update-available"; running: string; latest: string; downloaded?: boolean }

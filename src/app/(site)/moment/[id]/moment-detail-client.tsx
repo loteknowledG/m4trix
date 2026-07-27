@@ -2,18 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { get } from "idb-keyval";
-import { logger } from "@/lib/logger";
+import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
 import { ArrowLeft } from "@/components/icons";
 import MomentCard from "@/components/moment-card";
+import { MomentDialogModal } from "@/components/moment-dialog-modal";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { logger } from "@/lib/logger";
+import { get } from "idb-keyval";
+
+type MomentRecord = {
+  id: string;
+  src: string;
+  name?: string;
+  dialogLines?: unknown;
+};
 
 export default function MomentPage() {
   const params = useParams();
   const router = useRouter();
-  const id = (params as any)?.id as string | undefined;
+  const id = (params as { id?: string })?.id;
 
-  const [item, setItem] = useState<any | null>(null);
+  const [item, setItem] = useState<MomentRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -21,50 +32,60 @@ export default function MomentPage() {
       setLoading(false);
       return;
     }
-    (async () => {
-      try {
-        // support both new and old storage keys for compatibility
-        const saved = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
-        let found = saved.find((s) => s.id === id) || null;
 
-        // if not in heap, try searching stories for this moment id
+    void (async () => {
+      try {
+        const saved =
+          (await get<MomentRecord[]>("heap-moments")) ||
+          (await get<MomentRecord[]>("heap-gifs")) ||
+          [];
+        let found = saved.find((entry) => entry.id === id) || null;
+
         if (!found) {
-          try {
-            const storiesMeta = (await get<any[]>("stories")) || [];
-            for (const meta of storiesMeta) {
-              const storyKey = `story:${meta.id}`;
-              const stored = (await get<any>(storyKey)) || [];
-              let items: any[] = [];
-              if (Array.isArray(stored)) items = stored;
-              else if (stored && Array.isArray(stored.items)) items = stored.items;
-              const f = items.find((s) => (s && (s.id || s)) === id);
-              if (f) {
-                // normalize to object with id/src
-                if (typeof f === "string") {
-                  found = { id: f, src: f };
-                } else {
-                  found = { id: f.id || id, src: f.src || f, name: f.name };
-                }
-                break;
-              }
+          const storiesMeta = (await get<Array<{ id: string }>>("stories")) || [];
+          for (const meta of storiesMeta) {
+            const storyKey = `story:${meta.id}`;
+            const stored = await get<unknown>(storyKey);
+            const items: unknown[] = Array.isArray(stored)
+              ? stored
+              : stored &&
+                  typeof stored === "object" &&
+                  Array.isArray((stored as { items?: unknown[] }).items)
+                ? ((stored as { items: unknown[] }).items ?? [])
+                : [];
+            const match = items.find(
+              (entry) => (typeof entry === "string" ? entry : (entry as { id?: string })?.id) === id,
+            );
+            if (match) {
+              found =
+                typeof match === "string"
+                  ? { id: match, src: match }
+                  : {
+                      id: (match as MomentRecord).id || id,
+                      src: (match as MomentRecord).src || id,
+                      name: (match as MomentRecord).name,
+                      dialogLines: (match as MomentRecord).dialogLines,
+                    };
+              break;
             }
-          } catch (err) {
-            // ignore errors searching stories
           }
         }
 
         if (mounted) setItem(found);
-      } catch (e) {
-        logger.error("Failed to load moment", e);
+      } catch (error) {
+        logger.error("Failed to load moment", error);
       } finally {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false };
+
+    return () => {
+      mounted = false;
+    };
   }, [id]);
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-black/95 flex items-center justify-center">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/95">
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : !item ? (
@@ -73,18 +94,39 @@ export default function MomentPage() {
         <>
           <button
             onClick={() => router.back()}
-            className="absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white"
+            className="absolute left-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-white hover:bg-white/5"
             aria-label="Close"
           >
             <ArrowLeft size={18} />
           </button>
-          <div className="max-w-6xl w-full h-full flex items-center justify-center">
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="max-h-full max-w-full flex items-center justify-center">
-                <MomentCard item={item} anySelected={false} toggleSelect={() => { }} fullHeight />
-              </div>
-            </div>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-white hover:bg-white/10"
+                  aria-label="Dialog"
+                  onClick={() => setDialogOpen(true)}
+                >
+                  <HiMiniChatBubbleLeftRight size={18} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={8}>
+                <p>Dialog</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <div className="flex h-full w-full max-w-6xl items-center justify-center">
+            <MomentCard item={item} anySelected={false} toggleSelect={() => {}} fullHeight />
           </div>
+
+          <MomentDialogModal
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            momentId={item.id}
+          />
         </>
       )}
     </div>

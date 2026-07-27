@@ -28,4 +28,5 @@ contextBridge.exposeInMainWorld('m4trixDesktop', {
     ipcRenderer.on('m4trix:app-update:event', handler);
     return () => ipcRenderer.removeListener('m4trix:app-update:event', handler);
   },
+  autoClickEmbedPlay: (bounds) => ipcRenderer.invoke('m4trix:embed:auto-click-play', bounds),
 });
