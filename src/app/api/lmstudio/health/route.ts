@@ -31,7 +31,7 @@ function resolveBaseUrl(req?: NextRequest): string {
   return normalizeLmstudioUrl(DEFAULT_LMSTUDIO_URL);
 }
 
-export async function GET(req?: NextRequest) {
+export async function GET(req: NextRequest) {
   // Pages static export: avoid reading request.url during prerender.
   if (
     process.env.NEXT_PHASE === 'phase-production-build' &&

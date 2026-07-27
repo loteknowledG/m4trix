@@ -13,7 +13,7 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "node scripts/write-api-dynamic.mjs && next dev --turbo",
-    "build": "node scripts/write-api-dynamic.mjs && next build",
+    "build": "node scripts/write-api-dynamic.mjs && next build --webpack",
     "start": "next start",
     "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://127.0.0.1:3000 && electron . --user-data-dir=.tmp/electron-user-data\"",
     "electron:prod": "pnpm desktop:build && pnpm desktop:prepare && node scripts/run-packaged-electron.js",

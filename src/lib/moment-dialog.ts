@@ -55,25 +55,27 @@ export function scriptUsesFreePlacement(script: MomentDialogScript): boolean {
 
 function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((line) => {
-      if (!line || typeof line !== "object") return null;
-      const record = line as Record<string, unknown>;
-      const text = typeof record.text === "string" ? record.text.trim() : "";
-      if (!text) return null;
-      const characterId =
-        typeof record.characterId === "string" ? record.characterId.trim() : "";
-      const speaker = typeof record.speaker === "string" ? record.speaker.trim() : "";
-      return {
-        id: typeof record.id === "string" ? record.id : newMomentDialogLineId(),
-        characterId,
-        speaker,
-        text,
-        textEffect: normalizeDialogTextEffect(record.textEffect),
-        pos: normalizeDialogLinePosition(record.pos),
-      };
-    })
-    .filter((line): line is MomentDialogLine => line !== null);
+  const normalized: MomentDialogLine[] = [];
+  for (const line of value) {
+    if (!line || typeof line !== "object") continue;
+    const record = line as Record<string, unknown>;
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    if (!text) continue;
+    const characterId =
+      typeof record.characterId === "string" ? record.characterId.trim() : "";
+    const speaker = typeof record.speaker === "string" ? record.speaker.trim() : "";
+    const entry: MomentDialogLine = {
+      id: typeof record.id === "string" ? record.id : newMomentDialogLineId(),
+      characterId,
+      speaker,
+      text,
+      textEffect: normalizeDialogTextEffect(record.textEffect),
+    };
+    const pos = normalizeDialogLinePosition(record.pos);
+    if (pos) entry.pos = pos;
+    normalized.push(entry);
+  }
+  return normalized;
 }
 
 export function normalizeMomentDialogScript(

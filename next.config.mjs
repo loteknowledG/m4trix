@@ -15,6 +15,8 @@ const buildTarget =
 const isDesktopBuild = buildTarget === "desktop";
 const isPagesBuild = buildTarget === "pages" && !isDev;
 
+const videoJsPath = path.resolve(__dirname, "node_modules/video.js");
+
 const nextConfig = {
 	devIndicators: false,
 	...(isDesktopBuild
@@ -42,10 +44,15 @@ const nextConfig = {
 			},
 		],
 	},
+	turbopack: {
+		resolveAlias: {
+			"video.js": "./node_modules/video.js",
+		},
+	},
 	webpack: (config) => {
 		config.resolve.alias = {
 			...config.resolve.alias,
-			"video.js": path.resolve(__dirname, "node_modules/video.js"),
+			"video.js": videoJsPath,
 		};
 		return config;
 	},

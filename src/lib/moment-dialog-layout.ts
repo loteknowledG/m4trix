@@ -1,6 +1,6 @@
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { NARRATOR_CHARACTER_ID } from "@/lib/game/narrator-agent";
-import type { MomentDialogLine, MomentDialogScript } from "@/lib/moment-dialog";
+import type { DialogLinePosition, MomentDialogLine, MomentDialogScript } from "@/lib/moment-dialog";
 import type { SceneCharacter } from "@/lib/scene-characters";
 
 export type DialogSide = "left" | "right" | "center";
