@@ -80,21 +80,29 @@ const config = {
           to: { height: '0' },
         },
         marquee: {
-          // Move by a configured distance or by one copy width (1 / repeatCount of full content width).
-          // The component sets --marquee-repeat to match how many copies it renders.
-          '0%': { transform: 'translateX(0)' },
-          '100%': {
+          "0%": { transform: "translateX(0)" },
+          "100%": {
             transform:
-              'translateX(calc(-1 * var(--marquee-distance, 100% / var(--marquee-repeat, 2))))',
+              "translateX(calc(-1 * var(--marquee-distance, 100% / var(--marquee-repeat, 2))))",
           },
+        },
+        "dialog-shimmer": {
+          "0%": { backgroundPosition: "200% center" },
+          "100%": { backgroundPosition: "-200% center" },
+        },
+        "dialog-gradient": {
+          "0%": { backgroundPosition: "0% center" },
+          "100%": { backgroundPosition: "200% center" },
         },
       },
       animation: {
-        'accordion-down': 'accordion-down 0.2s ease-out',
-        'accordion-up': 'accordion-up 0.2s ease-out',
-        'collapsible-down': 'collapsible-down 0.2s ease-out',
-        'collapsible-up': 'collapsible-up 0.2s ease-out',
-        marquee: 'marquee var(--marquee-duration, 14s) linear infinite',
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+        "collapsible-down": "collapsible-down 0.2s ease-out",
+        "collapsible-up": "collapsible-up 0.2s ease-out",
+        marquee: "marquee var(--marquee-duration, 14s) linear infinite",
+        "dialog-shimmer": "dialog-shimmer 2.4s linear infinite",
+        "dialog-gradient": "dialog-gradient 4s ease infinite",
       },
     },
   },

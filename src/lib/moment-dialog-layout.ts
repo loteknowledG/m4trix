@@ -148,3 +148,15 @@ export function groupLinesBySide(
 
   return grouped;
 }
+
+export function defaultDialogLinePosition(
+  index: number,
+  total: number,
+  side: DialogSide,
+): DialogLinePosition {
+  const stackStep = total > 1 ? Math.min(0.12, 0.55 / (total - 1)) : 0;
+  const y = Math.min(0.9, 0.35 + index * stackStep);
+  if (side === "left") return { x: 0.12, y };
+  if (side === "right") return { x: 0.88, y };
+  return { x: 0.5, y: Math.min(0.88, 0.78 + index * 0.04) };
+}

@@ -1,11 +1,19 @@
 import { get, set } from "idb-keyval";
+import { normalizeDialogTextEffect, type DialogTextEffect } from "@/lib/dialog-text-effects";
 import { isLikelyMomentSrc } from "@/lib/story-moments";
+
+export type DialogLinePosition = {
+  x: number;
+  y: number;
+};
 
 export type MomentDialogLine = {
   id: string;
   characterId: string;
   speaker: string;
   text: string;
+  textEffect?: DialogTextEffect;
+  pos?: DialogLinePosition;
 };
 
 export type MomentDialogScript = {
@@ -29,6 +37,22 @@ export function newMomentDialogLineId() {
   return `dialog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function normalizeDialogLinePosition(value: unknown): DialogLinePosition | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const x = typeof record.x === "number" ? record.x : Number.NaN;
+  const y = typeof record.y === "number" ? record.y : Number.NaN;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return {
+    x: Math.min(1, Math.max(0, x)),
+    y: Math.min(1, Math.max(0, y)),
+  };
+}
+
+export function scriptUsesFreePlacement(script: MomentDialogScript): boolean {
+  return script.lines.some((line) => line.pos != null);
+}
+
 function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -45,6 +69,8 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
         characterId,
         speaker,
         text,
+        textEffect: normalizeDialogTextEffect(record.textEffect),
+        pos: normalizeDialogLinePosition(record.pos),
       };
     })
     .filter((line): line is MomentDialogLine => line !== null);
@@ -370,6 +396,41 @@ export function updateLineTextInScript(
     lines: script.lines.map((line) =>
       line.id === lineId ? { ...line, text: trimmed } : line,
     ),
+  };
+}
+
+export function updateLineEffectInScript(
+  script: MomentDialogScript,
+  lineId: string,
+  textEffect: DialogTextEffect,
+): MomentDialogScript {
+  return {
+    ...script,
+    lines: script.lines.map((line) =>
+      line.id === lineId ? { ...line, textEffect } : line,
+    ),
+  };
+}
+
+export function updateLinePositionInScript(
+  script: MomentDialogScript,
+  lineId: string,
+  pos: DialogLinePosition,
+): MomentDialogScript {
+  return {
+    ...script,
+    lines: script.lines.map((line) =>
+      line.id === lineId
+        ? { ...line, pos: normalizeDialogLinePosition(pos) ?? pos }
+        : line,
+    ),
+  };
+}
+
+export function clearLinePositionsInScript(script: MomentDialogScript): MomentDialogScript {
+  return {
+    ...script,
+    lines: script.lines.map(({ pos: _pos, ...line }) => line),
   };
 }
 

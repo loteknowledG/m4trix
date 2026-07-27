@@ -19,7 +19,8 @@ import { HiMiniChatBubbleLeftRight } from 'react-icons/hi2';
 import { FaTags } from 'react-icons/fa';
 import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
 import { MomentDialogModal } from '@/components/moment-dialog-modal';
-import { MomentDialogDisplay } from '@/components/moment-dialog-display';
+import { MomentDialogDisplay, seedDialogPlacementDefaults } from '@/components/moment-dialog-display';
+import { loadStorySceneCharacters } from '@/lib/scene-characters';
 
 const MomentClassifier = dynamic(
   () => import('@/components/ai/moment-classifier'),
@@ -64,12 +65,15 @@ export default function CollectionOverlay() {
   const [editing, setEditing] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogPlacementMode, setDialogPlacementMode] = useState(false);
   const editingRef = useRef(editing);
   const taggingRef = useRef(tagging);
   const dialogOpenRef = useRef(dialogOpen);
+  const dialogPlacementModeRef = useRef(dialogPlacementMode);
   editingRef.current = editing;
   taggingRef.current = tagging;
   dialogOpenRef.current = dialogOpen;
+  dialogPlacementModeRef.current = dialogPlacementMode;
   const [text, setText] = useState('');
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
   const [font, setFont] = useState('system');
@@ -400,6 +404,11 @@ export default function CollectionOverlay() {
       const dialogOpen = dialogOpenRef.current;
       const editing = editingRef.current;
       const tagging = taggingRef.current;
+      const dialogPlacementMode = dialogPlacementModeRef.current;
+      if (dialogPlacementMode) {
+        if (e.key === 'Escape') setDialogPlacementMode(false);
+        return;
+      }
       if (dialogOpen || editing || tagging) {
         if (e.key === 'Escape') {
           if (dialogOpen) setDialogOpen(false);
@@ -510,13 +519,13 @@ export default function CollectionOverlay() {
           e.preventDefault();
           close();
         }}
-        className="absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white z-10"
+        className="absolute left-4 top-4 z-40 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent hover:bg-white/5 text-white"
         aria-label="Close"
       >
         <X size={18} />
       </button>
 
-      <div className="absolute right-4 top-4 flex items-center gap-2 z-10">
+      <div className="absolute right-4 top-4 z-40 flex items-center gap-2">
         <button
           onClick={e => {
             e.stopPropagation();
@@ -595,7 +604,7 @@ export default function CollectionOverlay() {
               prev();
             }}
             aria-label="Previous"
-            className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
+            className="absolute left-4 top-1/2 z-40 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white"
           >
             <ArrowLeft size={20} />
           </button>
@@ -606,7 +615,7 @@ export default function CollectionOverlay() {
               next();
             }}
             aria-label="Next"
-            className="absolute right-4 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white z-20"
+            className="absolute right-4 top-1/2 z-40 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white"
           >
             <ArrowRight size={20} />
           </button>
@@ -615,7 +624,7 @@ export default function CollectionOverlay() {
 
       <div
         ref={stageRef}
-        className="absolute inset-0 flex items-center justify-center"
+        className="pointer-events-none absolute inset-0 flex items-center justify-center"
       >
         <div
           ref={containerRef}
@@ -637,7 +646,26 @@ export default function CollectionOverlay() {
             storyId={storyId}
             stageRef={stageRef}
             imageRef={imageRef}
+            placementMode={dialogPlacementMode}
           />
+
+          {dialogPlacementMode ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-6 z-40 flex justify-center px-4">
+              <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/20 bg-black/70 px-3 py-2 text-xs text-white shadow-lg backdrop-blur-sm">
+                <span>Drag dialog bubbles to place them</span>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDialogPlacementMode(false);
+                  }}
+                  className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {text ? (
             <div
@@ -909,6 +937,18 @@ export default function CollectionOverlay() {
         onOpenChange={setDialogOpen}
         momentId={currentId}
         storyId={storyId}
+        onStartPlacement={async () => {
+          if (!currentId) return;
+          const characters = await loadStorySceneCharacters(storyId);
+          await seedDialogPlacementDefaults(currentId, storyId, characters);
+          setDialogOpen(false);
+          setDialogPlacementMode(true);
+          try {
+            window.dispatchEvent(new CustomEvent('moments-updated'));
+          } catch (e) {
+            /* ignore */
+          }
+        }}
       />
     </div>
   );

@@ -13,22 +13,31 @@ import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import { logger } from "@/lib/logger";
 import {
   addLineForCharacter,
+  clearLinePositionsInScript,
   loadMomentDialogScript,
   moveCharacterInOrder,
   moveLineForCharacter,
   orderedCharactersFromScript,
   removeLineFromScript,
   saveMomentDialogScript,
+  updateLineEffectInScript,
   updateLineTextInScript,
   type MomentDialogScript,
 } from "@/lib/moment-dialog";
+import {
+  DIALOG_TEXT_EFFECTS,
+  normalizeDialogTextEffect,
+  type DialogTextEffect,
+} from "@/lib/dialog-text-effects";
 import { loadStorySceneCharacters, type SceneCharacter } from "@/lib/scene-characters";
+import { DialogTextEffectView } from "@/components/text/dialog-text-effect-view";
 
 type MomentDialogModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   momentId: string | null;
   storyId?: string | null;
+  onStartPlacement?: () => void | Promise<void>;
 };
 
 type OrderedCharacter = SceneCharacter & { roleLabel: string };
@@ -41,16 +50,19 @@ function DialogLineEditor({
   onMoveLine,
   onRemoveLine,
   onUpdateLine,
+  onUpdateEffect,
 }: {
-  line: { id: string; text: string };
+  line: { id: string; text: string; textEffect?: DialogTextEffect };
   palette: { bg: string; fg: string };
   lineIndex: number;
   totalLines: number;
   onMoveLine: (direction: -1 | 1) => void;
   onRemoveLine: () => void;
   onUpdateLine: (text: string) => void;
+  onUpdateEffect: (effect: DialogTextEffect) => void;
 }) {
   const [draft, setDraft] = useState(line.text);
+  const effect = normalizeDialogTextEffect(line.textEffect);
 
   useEffect(() => {
     setDraft(line.text);
@@ -61,25 +73,55 @@ function DialogLineEditor({
       className="flex items-start gap-2 rounded-lg border px-3 py-2"
       style={{ backgroundColor: palette.bg, color: palette.fg }}
     >
-      <textarea
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          const trimmed = draft.trim();
-          if (!trimmed) {
-            onRemoveLine();
-            return;
-          }
-          if (trimmed !== line.text) {
-            onUpdateLine(trimmed);
-          } else {
-            setDraft(trimmed);
-          }
-        }}
-        rows={Math.min(6, Math.max(1, draft.split("\n").length))}
-        className="min-w-0 flex-1 resize-y bg-transparent text-sm outline-none placeholder:opacity-60"
-        aria-label="Edit dialog line"
-      />
+      <div className="min-w-0 flex-1 space-y-2">
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            const trimmed = draft.trim();
+            if (!trimmed) {
+              onRemoveLine();
+              return;
+            }
+            if (trimmed !== line.text) {
+              onUpdateLine(trimmed);
+            } else {
+              setDraft(trimmed);
+            }
+          }}
+          rows={Math.min(6, Math.max(1, draft.split("\n").length))}
+          className="w-full resize-y bg-transparent text-sm outline-none placeholder:opacity-60"
+          aria-label="Edit dialog line"
+        />
+        <label className="flex items-center gap-2 text-[11px] opacity-80">
+          <span className="shrink-0">Text effect</span>
+          <select
+            value={effect}
+            onChange={(event) =>
+              onUpdateEffect(normalizeDialogTextEffect(event.target.value))
+            }
+            className="min-w-0 flex-1 rounded border border-current/20 bg-black/10 px-2 py-1 text-[11px] outline-none"
+            aria-label="Dialog text effect"
+          >
+            {DIALOG_TEXT_EFFECTS.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {draft.trim() && effect !== "none" ? (
+          <div className="rounded border border-current/15 bg-black/10 px-2 py-1.5 text-sm">
+            <DialogTextEffectView
+              text={draft.trim()}
+              effect={effect}
+              lineKey={line.id}
+              replayKey={`${line.id}-${effect}-preview`}
+              className="text-inherit"
+            />
+          </div>
+        ) : null}
+      </div>
       <div className="flex shrink-0 flex-col items-center gap-0.5">
         <button
           type="button"
@@ -122,16 +164,18 @@ function ParticipantDialogCard({
   onMoveLine,
   onRemoveLine,
   onUpdateLine,
+  onUpdateEffect,
 }: {
   character: OrderedCharacter;
   index: number;
   total: number;
-  lines: Array<{ id: string; text: string }>;
+  lines: Array<{ id: string; text: string; textEffect?: DialogTextEffect }>;
   onMoveParticipant: (direction: -1 | 1) => void;
   onAddLine: (text: string) => void;
   onMoveLine: (lineId: string, direction: -1 | 1) => void;
   onRemoveLine: (lineId: string) => void;
   onUpdateLine: (lineId: string, text: string) => void;
+  onUpdateEffect: (lineId: string, effect: DialogTextEffect) => void;
 }) {
   const [draft, setDraft] = useState("");
   const palette = getStagePalette(index);
@@ -186,6 +230,7 @@ function ParticipantDialogCard({
               onMoveLine={(direction) => onMoveLine(line.id, direction)}
               onRemoveLine={() => onRemoveLine(line.id)}
               onUpdateLine={(text) => onUpdateLine(line.id, text)}
+              onUpdateEffect={(effect) => onUpdateEffect(line.id, effect)}
             />
           ))}
         </div>
@@ -234,6 +279,7 @@ export function MomentDialogModal({
   onOpenChange,
   momentId,
   storyId,
+  onStartPlacement,
 }: MomentDialogModalProps) {
   const [script, setScript] = useState<MomentDialogScript>({ characterOrder: [], lines: [] });
   const [sceneCharacters, setSceneCharacters] = useState<SceneCharacter[]>([]);
@@ -332,12 +378,23 @@ export function MomentDialogModal({
     [persistScript, script],
   );
 
+  const updateLineEffect = useCallback(
+    (lineId: string, textEffect: DialogTextEffect) => {
+      void persistScript(updateLineEffectInScript(script, lineId, textEffect));
+    },
+    [persistScript, script],
+  );
+
   const moveLine = useCallback(
     (characterId: string, lineId: string, direction: -1 | 1) => {
       void persistScript(moveLineForCharacter(script, characterId, lineId, direction));
     },
     [persistScript, script],
   );
+
+  const resetLayout = useCallback(() => {
+    void persistScript(clearLinePositionsInScript(script));
+  }, [persistScript, script]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -373,7 +430,7 @@ export function MomentDialogModal({
             ) : orderedCharacters.length ? (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Top to bottom is speak order. Click a line to edit it, then blur to save.
+                  Top to bottom is speak order. Pick a text effect per line, then place bubbles on the scene.
                 </p>
                 {orderedCharacters.map((character, index) => (
                   <ParticipantDialogCard
@@ -387,6 +444,7 @@ export function MomentDialogModal({
                     onMoveLine={(lineId, direction) => moveLine(character.id, lineId, direction)}
                     onRemoveLine={removeLine}
                     onUpdateLine={updateLine}
+                    onUpdateEffect={updateLineEffect}
                   />
                 ))}
               </div>
@@ -400,6 +458,29 @@ export function MomentDialogModal({
               </p>
             )}
           </div>
+
+          {script.lines.length > 0 ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => resetLayout()}
+                className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent/20"
+              >
+                Reset layout
+              </button>
+              {onStartPlacement ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void onStartPlacement();
+                  }}
+                  className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90"
+                >
+                  Place on scene
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
