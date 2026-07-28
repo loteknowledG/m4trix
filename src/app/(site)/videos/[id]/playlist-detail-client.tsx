@@ -7,6 +7,7 @@ import { ContentLayout } from '@/components/admin-panel/content-layout';
 import ErrorBoundary from '@/components/error-boundary';
 import PlaylistRollerDeck from '@/components/playlist-roller-deck';
 import UniversalVideoPlayer from '@/components/universal-video-player';
+import VideoCueTimeline from '@/components/video-cue-timeline';
 import { ChevronLeft, Trash2, Upload } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,12 +32,14 @@ import {
   updatePlaylistVideo,
   type PlaylistVideo,
 } from '@/lib/playlists';
-import { isValidVideoUrl, parseEmbedCode } from '@/lib/video-utils';
+import { isValidVideoUrl, parseEmbedCode, getVideoEmbedKind } from '@/lib/video-utils';
 import PlaylistVideoCueEditor from '@/components/playlist-video-cue-editor';
 import PlaylistVideoSkipSegmentEditor from '@/components/playlist-video-skip-segment-editor';
 import { normalizeVideoTimedCues, type VideoTimedCue } from '@/lib/video-timed-cues';
 import { normalizeVideoSkipSegments, type VideoSkipSegment } from '@/lib/video-skip-segments';
 import { dispatchVideoSelected } from '@/lib/video-playback-events';
+import type { VideoPlaybackControls } from '@/lib/video-playback-controls';
+import { usePlaybackDebugHud } from '@/hooks/use-playback-debug-hud';
 import { cn } from '@/lib/utils';
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -124,14 +127,23 @@ export default function PlaylistDetailClient() {
   const [addingUrl, setAddingUrl] = useState(false);
   const [addingEmbed, setAddingEmbed] = useState(false);
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
+  const [playbackDebugHud, setPlaybackDebugHud] = usePlaybackDebugHud();
   const [playbackArmed, setPlaybackArmed] = useState(false);
   const [placementCueId, setPlacementCueId] = useState<string | null>(null);
+  const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0);
+  const [timelineFollowEnabled, setTimelineFollowEnabled] = useState(false);
+  const playbackControlsRef = useRef<VideoPlaybackControls | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedIndex = videos.findIndex(v => v.id === selectedVideoId);
   const selectedVideo = selectedIndex >= 0 ? videos[selectedIndex] : null;
   const selectedVideoCues = normalizeVideoTimedCues(selectedVideo?.cues);
   const selectedSkipSegments = normalizeVideoSkipSegments(selectedVideo?.skipSegments);
+  const selectedEmbedKind =
+    selectedVideo?.kind === 'embed' && selectedVideo.src
+      ? getVideoEmbedKind(selectedVideo.src)
+      : null;
+  const needsManualTimelineFollow = selectedEmbedKind === 'direct';
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) {
@@ -343,6 +355,36 @@ export default function PlaylistDetailClient() {
     [selectedVideoId, selectedVideoCues, handleCuesChange],
   );
 
+  const handleCueTimingChange = useCallback(
+    (cueId: string, patch: { start?: number; end?: number }) => {
+      if (!selectedVideoId) return;
+      const nextCues = selectedVideoCues.map(cue =>
+        cue.id === cueId ? { ...cue, ...patch } : cue,
+      );
+      void handleCuesChange(selectedVideoId, nextCues);
+    },
+    [selectedVideoId, selectedVideoCues, handleCuesChange],
+  );
+
+  const handleTimelineSeek = useCallback((time: number) => {
+    playbackControlsRef.current?.seek(time);
+    setPlaybackCurrentTime(time);
+  }, []);
+
+  const handleTimelineScrubStart = useCallback(() => {
+    playbackControlsRef.current?.pause();
+    playbackControlsRef.current?.setTimelineFollow(false);
+    setTimelineFollowEnabled(false);
+  }, []);
+
+  const handleTimelineFollowToggle = useCallback(() => {
+    const controls = playbackControlsRef.current;
+    if (!controls) return;
+    const next = !controls.isTimelineFollowEnabled();
+    controls.setTimelineFollow(next);
+    setTimelineFollowEnabled(next);
+  }, []);
+
   const selectVideo = useCallback(
     (videoId: string, userInitiated = true) => {
       const video = videos.find(v => v.id === videoId);
@@ -350,6 +392,8 @@ export default function PlaylistDetailClient() {
         setPlaybackArmed(true);
       }
       setPlacementCueId(null);
+      setPlaybackCurrentTime(0);
+      setTimelineFollowEnabled(false);
       setSelectedVideoId(videoId);
       if (video) {
         dispatchVideoSelected({
@@ -450,6 +494,42 @@ export default function PlaylistDetailClient() {
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
                 <div className="min-w-0 flex-1 space-y-6">
                   <div className="space-y-3">
+                    <UniversalVideoPlayer
+                      key={selectedVideo?.id ?? 'playlist-empty'}
+                      src={selectedVideo?.src ?? ''}
+                      kind={selectedVideo?.kind ?? 'url'}
+                      videoId={selectedVideo?.id}
+                      autoPlay={autoPlayEnabled}
+                      userActivated={playbackArmed}
+                      onEnded={autoPlayEnabled ? advanceToNext : undefined}
+                      cues={selectedVideoCues}
+                      editCueId={placementCueId}
+                      onCueLayoutChange={handleCueLayoutChange}
+                      skipSegments={selectedSkipSegments}
+                      playbackDebugHud={playbackDebugHud}
+                      onPlaybackTimeChange={setPlaybackCurrentTime}
+                      onTimelineFollowChange={running => {
+                        if (running) setTimelineFollowEnabled(true);
+                      }}
+                      playbackControlsRef={playbackControlsRef}
+                    />
+
+                    {selectedVideo ? (
+                      <VideoCueTimeline
+                        cues={selectedVideoCues}
+                        skipSegments={selectedSkipSegments}
+                        selectedCueId={placementCueId}
+                        currentTime={playbackCurrentTime}
+                        onSelectCue={setPlacementCueId}
+                        onCueTimingChange={handleCueTimingChange}
+                        onSeek={handleTimelineSeek}
+                        onScrubStart={handleTimelineScrubStart}
+                        manualFollow={needsManualTimelineFollow}
+                        followRunning={timelineFollowEnabled}
+                        onFollowToggle={handleTimelineFollowToggle}
+                      />
+                    ) : null}
+
                     <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
                       <div>
                         <div className="text-sm font-medium">Autoplay</div>
@@ -464,19 +544,19 @@ export default function PlaylistDetailClient() {
                       />
                     </div>
 
-                    <UniversalVideoPlayer
-                      key={selectedVideo?.id ?? 'playlist-empty'}
-                      src={selectedVideo?.src ?? ''}
-                      kind={selectedVideo?.kind ?? 'url'}
-                      videoId={selectedVideo?.id}
-                      autoPlay={autoPlayEnabled}
-                      userActivated={playbackArmed}
-                      onEnded={autoPlayEnabled ? advanceToNext : undefined}
-                      cues={selectedVideoCues}
-                      editCueId={placementCueId}
-                      onCueLayoutChange={handleCueLayoutChange}
-                      skipSegments={selectedSkipSegments}
-                    />
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
+                      <div>
+                        <div className="text-sm font-medium">Playback debugger</div>
+                        <div className="text-xs text-muted-foreground">
+                          Show current time, next mark, and manual clock controls
+                        </div>
+                      </div>
+                      <Switch
+                        checked={playbackDebugHud}
+                        onCheckedChange={setPlaybackDebugHud}
+                        aria-label="Toggle playback debugger"
+                      />
+                    </div>
                   </div>
 
                   <PlaylistRollerDeck
@@ -561,6 +641,7 @@ export default function PlaylistDetailClient() {
                           onChange={cues => void handleCuesChange(selectedVideo.id, cues)}
                           placementCueId={placementCueId}
                           onPlacementCueIdChange={setPlacementCueId}
+                          currentTime={playbackCurrentTime}
                         />
                         <PlaylistVideoSkipSegmentEditor
                           segments={selectedSkipSegments}

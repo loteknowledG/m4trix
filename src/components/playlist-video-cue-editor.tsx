@@ -24,17 +24,20 @@ type PlaylistVideoCueEditorProps = {
   onChange: (cues: VideoTimedCue[]) => void;
   placementCueId: string | null;
   onPlacementCueIdChange: (cueId: string | null) => void;
+  currentTime?: number;
 };
 
 function CueTimeField({
   cueId,
   label,
   value,
+  currentTime,
   onCommit,
 }: {
   cueId: string;
   label: string;
   value: number;
+  currentTime?: number;
   onCommit: (seconds: number) => void;
 }) {
   const [draft, setDraft] = useState(formatCueTime(value));
@@ -56,19 +59,35 @@ function CueTimeField({
   return (
     <label className="grid gap-1">
       <span className="text-[11px] text-muted-foreground">{label}</span>
-      <Input
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commitDraft}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            (e.currentTarget as HTMLInputElement).blur();
-          }
-        }}
-        className="h-8 font-mono text-xs"
-        placeholder="0:00"
-      />
+      <div className="flex items-center gap-1">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              (e.currentTarget as HTMLInputElement).blur();
+            }
+          }}
+          className="h-8 flex-1 font-mono text-xs"
+          placeholder="0:00"
+        />
+        {currentTime != null ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 px-2 text-[10px]"
+            onClick={() => {
+              onCommit(currentTime);
+              setDraft(formatCueTime(currentTime));
+            }}
+          >
+            Now
+          </Button>
+        ) : null}
+      </div>
     </label>
   );
 }
@@ -78,6 +97,7 @@ export default function PlaylistVideoCueEditor({
   onChange,
   placementCueId,
   onPlacementCueIdChange,
+  currentTime,
 }: PlaylistVideoCueEditorProps) {
   const sortedCues = useMemo(
     () => [...cues].sort((a, b) => a.start - b.start),
@@ -114,7 +134,7 @@ export default function PlaylistVideoCueEditor({
         <div>
           <div className="text-sm font-medium">Timed dialogs</div>
           <div className="text-xs text-muted-foreground">
-            Text overlays that appear during playback
+            Use the timeline under the video, or type times below
           </div>
         </div>
         <Button type="button" size="sm" variant="secondary" onClick={addCue}>
@@ -124,7 +144,7 @@ export default function PlaylistVideoCueEditor({
 
       {sortedCues.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No dialogs yet. Add one, set start/end times, then edit on video.
+          No dialogs yet. Add one, then drag it on the timeline under the video.
         </p>
       ) : (
         <ul className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
@@ -169,6 +189,7 @@ export default function PlaylistVideoCueEditor({
                     cueId={cue.id}
                     label="Start"
                     value={cue.start}
+                    currentTime={currentTime}
                     onCommit={start => {
                       const next = commitCueStartTime(start, cue.end);
                       updateCue(cue.id, next);
@@ -178,6 +199,7 @@ export default function PlaylistVideoCueEditor({
                     cueId={cue.id}
                     label="End"
                     value={cue.end}
+                    currentTime={currentTime}
                     onCommit={end => {
                       const next = commitCueEndTime(cue.start, end);
                       updateCue(cue.id, next);

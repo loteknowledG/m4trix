@@ -25,6 +25,14 @@ function readYouTubeInfoTime(info: unknown): number | null {
   if (typeof currentTime === 'number' && Number.isFinite(currentTime) && currentTime >= 0) {
     return currentTime;
   }
+  const mediaReferenceTime = record.mediaReferenceTime;
+  if (
+    typeof mediaReferenceTime === 'number' &&
+    Number.isFinite(mediaReferenceTime) &&
+    mediaReferenceTime >= 0
+  ) {
+    return mediaReferenceTime;
+  }
   return null;
 }
 
@@ -60,9 +68,14 @@ export function readEmbedCurrentTime(
         if (Number.isFinite(parsed)) return parsed;
       }
     }
-    if (payload.event === 'timeupdate' && payload.data && typeof payload.data === 'object') {
-      const seconds = (payload.data as { seconds?: number }).seconds;
-      if (typeof seconds === 'number' && Number.isFinite(seconds)) return seconds;
+    if (payload.event === 'timeupdate') {
+      if (typeof payload.data === 'number' && Number.isFinite(payload.data)) {
+        return payload.data;
+      }
+      if (payload.data && typeof payload.data === 'object') {
+        const seconds = (payload.data as { seconds?: number }).seconds;
+        if (typeof seconds === 'number' && Number.isFinite(seconds)) return seconds;
+      }
     }
   }
 
@@ -71,30 +84,32 @@ export function readEmbedCurrentTime(
 
 function postYouTubeMessage(
   iframe: HTMLIFrameElement,
-  iframeSrc: string,
   message: Record<string, unknown>,
 ) {
   const win = iframe.contentWindow;
-  const targetOrigin = getEmbedTargetOrigin(iframeSrc);
-  if (!win || !targetOrigin) return;
-  win.postMessage(JSON.stringify(message), targetOrigin);
+  if (!win) return;
+  win.postMessage(JSON.stringify(message), '*');
 }
 
-export function notifyYouTubeListening(iframe: HTMLIFrameElement, iframeSrc: string) {
-  postYouTubeMessage(iframe, iframeSrc, {
+function postVimeoMessage(iframe: HTMLIFrameElement, message: Record<string, unknown>) {
+  const win = iframe.contentWindow;
+  if (!win) return;
+  const targetOrigin = getEmbedTargetOrigin(iframe.src) ?? '*';
+  win.postMessage(JSON.stringify(message), targetOrigin);
+  win.postMessage(JSON.stringify(message), '*');
+}
+
+export function notifyYouTubeListening(iframe: HTMLIFrameElement) {
+  postYouTubeMessage(iframe, {
     event: 'listening',
     id: 1,
     channel: 'widget',
   });
 }
 
-export function notifyVimeoListening(iframe: HTMLIFrameElement, iframeSrc: string) {
-  const targetOrigin = getEmbedTargetOrigin(iframeSrc);
-  const win = iframe.contentWindow;
-  if (!targetOrigin || !win) return;
-
+export function notifyVimeoListening(iframe: HTMLIFrameElement) {
   for (const event of ['finish', 'play', 'pause', 'timeupdate'] as const) {
-    win.postMessage(JSON.stringify({ method: 'addEventListener', value: event }), targetOrigin);
+    postVimeoMessage(iframe, { method: 'addEventListener', value: event });
   }
 }
 
@@ -104,22 +119,22 @@ export function notifyEmbedListening(
   embedKind: VideoEmbedKind,
 ) {
   if (embedKind === 'youtube') {
-    notifyYouTubeListening(iframe, iframeSrc);
+    notifyYouTubeListening(iframe);
   } else if (embedKind === 'vimeo') {
-    notifyVimeoListening(iframe, iframeSrc);
+    notifyVimeoListening(iframe);
   }
 }
 
-/** Kick YouTube into sending infoDelivery updates that include currentTime. */
-export function activateYouTubeTimeUpdates(iframe: HTMLIFrameElement, iframeSrc: string) {
-  notifyYouTubeListening(iframe, iframeSrc);
-  postYouTubeMessage(iframe, iframeSrc, {
+/** Fallback when the YouTube IFrame API is unavailable. */
+export function activateYouTubeTimeUpdates(iframe: HTMLIFrameElement) {
+  notifyYouTubeListening(iframe);
+  postYouTubeMessage(iframe, {
     event: 'listening',
     func: 'getPlayerState',
     args: [],
     id: 1,
   });
-  postYouTubeMessage(iframe, iframeSrc, {
+  postYouTubeMessage(iframe, {
     event: 'listening',
     func: 'getCurrentTime',
     args: [],
@@ -133,13 +148,9 @@ export function requestEmbedCurrentTime(
   embedKind: VideoEmbedKind,
   youtubePollPending?: MutableRefObject<boolean>,
 ) {
-  const win = iframe.contentWindow;
-  const targetOrigin = getEmbedTargetOrigin(iframeSrc);
-  if (!win || !targetOrigin) return;
-
   if (embedKind === 'youtube') {
     if (youtubePollPending) youtubePollPending.current = true;
-    postYouTubeMessage(iframe, iframeSrc, {
+    postYouTubeMessage(iframe, {
       event: 'listening',
       func: 'getCurrentTime',
       args: [],
@@ -149,7 +160,26 @@ export function requestEmbedCurrentTime(
   }
 
   if (embedKind === 'vimeo') {
-    win.postMessage(JSON.stringify({ method: 'getCurrentTime' }), targetOrigin);
+    postVimeoMessage(iframe, { method: 'getCurrentTime' });
+  }
+}
+
+export function pauseEmbedPlayback(
+  iframe: HTMLIFrameElement,
+  embedKind: VideoEmbedKind,
+) {
+  if (embedKind === 'youtube') {
+    postYouTubeMessage(iframe, {
+      event: 'command',
+      func: 'pauseVideo',
+      args: [],
+      id: 1,
+    });
+    return;
+  }
+
+  if (embedKind === 'vimeo') {
+    postVimeoMessage(iframe, { method: 'pause' });
   }
 }
 
@@ -159,12 +189,8 @@ export function seekEmbedTime(
   embedKind: VideoEmbedKind,
   seconds: number,
 ) {
-  const win = iframe.contentWindow;
-  const targetOrigin = getEmbedTargetOrigin(iframeSrc);
-  if (!win || !targetOrigin) return;
-
   if (embedKind === 'youtube') {
-    postYouTubeMessage(iframe, iframeSrc, {
+    postYouTubeMessage(iframe, {
       event: 'command',
       func: 'seekTo',
       args: [seconds, true],
@@ -174,6 +200,6 @@ export function seekEmbedTime(
   }
 
   if (embedKind === 'vimeo') {
-    win.postMessage(JSON.stringify({ method: 'setCurrentTime', value: seconds }), targetOrigin);
+    postVimeoMessage(iframe, { method: 'setCurrentTime', value: seconds });
   }
 }

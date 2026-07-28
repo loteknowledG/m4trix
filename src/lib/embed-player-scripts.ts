@@ -3,6 +3,9 @@ type YouTubePlayer = {
   pauseVideo: () => void;
   loadVideoById: (videoId: string) => void;
   getVideoData: () => { video_id?: string };
+  getCurrentTime: () => number;
+  getPlayerState: () => number;
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   destroy: () => void;
 };
 
@@ -17,26 +20,40 @@ type YouTubeNamespace = {
       events?: {
         onReady?: (event: { target: YouTubePlayer }) => void;
         onStateChange?: (event: { data: number; target: YouTubePlayer }) => void;
+        onError?: (event: { data: number }) => void;
       };
-    }
+    },
   ) => YouTubePlayer;
   PlayerState: {
-    ENDED: number;
+    ENDED: 0;
+    PLAYING: 1;
+    PAUSED: 2;
+    BUFFERING: 3;
+    CUED: 5;
   };
 };
 
 type VimeoPlayerInstance = {
   play: () => Promise<void>;
+  pause: () => Promise<void>;
   loadVideo: (id: string | number) => Promise<number>;
-  on: (event: 'ended' | 'ready', handler: () => void) => void;
-  off: (event: 'ended' | 'ready', handler: () => void) => void;
+  getCurrentTime: () => Promise<number>;
+  setCurrentTime: (seconds: number) => Promise<number>;
+  on: (
+    event: 'ended' | 'ready' | 'play' | 'pause' | 'timeupdate',
+    handler: (data?: { seconds?: number }) => void,
+  ) => void;
+  off: (
+    event: 'ended' | 'ready' | 'play' | 'pause' | 'timeupdate',
+    handler: (data?: { seconds?: number }) => void,
+  ) => void;
   destroy: () => void;
 };
 
 type VimeoNamespace = {
   Player: new (
     element: HTMLElement,
-    options: { id?: string | number; url?: string; autoplay?: boolean; responsive?: boolean }
+    options: { id?: string | number; url?: string; autoplay?: boolean; responsive?: boolean },
   ) => VimeoPlayerInstance;
 };
 
@@ -115,6 +132,86 @@ export function loadVimeoPlayerApi(): Promise<VimeoNamespace> {
     });
   }
   return vimeoPromise;
+}
+
+export function attachYouTubePlayer(
+  iframe: HTMLIFrameElement,
+  handlers: {
+    onReady?: (player: YouTubePlayer) => void;
+    onStateChange?: (state: number, player: YouTubePlayer) => void;
+    onError?: (code: number) => void;
+  },
+): Promise<YouTubePlayer> {
+  if (!iframe.id) {
+    iframe.id = `m4trix-yt-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  return loadYouTubeIframeApi().then(
+    YT =>
+      new Promise((resolve, reject) => {
+        let settled = false;
+        try {
+          const player = new YT.Player(iframe, {
+            events: {
+              onReady: () => {
+                if (settled) return;
+                settled = true;
+                handlers.onReady?.(player);
+                resolve(player);
+              },
+              onStateChange: event => {
+                handlers.onStateChange?.(event.data, player);
+              },
+              onError: event => {
+                handlers.onError?.(event.data);
+                if (!settled) {
+                  settled = true;
+                  reject(new Error(`YouTube player error ${event.data}`));
+                }
+              },
+            },
+          });
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error('Failed to create YouTube player'));
+        }
+      }),
+  );
+}
+
+export function attachVimeoPlayer(
+  iframe: HTMLIFrameElement,
+  handlers: {
+    onReady?: (player: VimeoPlayerInstance) => void;
+    onTimeUpdate?: (seconds: number) => void;
+    onPlay?: () => void;
+    onPause?: () => void;
+    onEnded?: () => void;
+    onError?: (error: unknown) => void;
+  },
+): Promise<VimeoPlayerInstance> {
+  return loadVimeoPlayerApi().then(Vimeo => {
+    const player = new Vimeo.Player(iframe, { url: iframe.src });
+    const onTimeUpdate = (data?: { seconds?: number }) => {
+      if (typeof data?.seconds === 'number' && Number.isFinite(data.seconds)) {
+        handlers.onTimeUpdate?.(data.seconds);
+      }
+    };
+
+    player.on('timeupdate', onTimeUpdate);
+    player.on('play', () => handlers.onPlay?.());
+    player.on('pause', () => handlers.onPause?.());
+    player.on('ended', () => handlers.onEnded?.());
+    player.on('ready', () => handlers.onReady?.(player));
+
+    void player
+      .getCurrentTime()
+      .then(seconds => {
+        if (Number.isFinite(seconds)) handlers.onTimeUpdate?.(seconds);
+      })
+      .catch(error => handlers.onError?.(error));
+
+    return player;
+  });
 }
 
 export type { YouTubePlayer, VimeoPlayerInstance };
