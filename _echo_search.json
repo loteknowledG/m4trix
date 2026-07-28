@@ -1,0 +1,662 @@
+{
+  "top": [
+    ".agents",
+    ".cursor",
+    ".echo-mirage",
+    ".env.demo.example",
+    ".env.local",
+    ".gitattributes",
+    ".github",
+    ".gitignore",
+    ".muthur",
+    ".next-dev",
+    ".npmrc",
+    ".opencode",
+    ".playwright-cli",
+    ".playwright-mcp",
+    ".tmp",
+    ".tmp-ascii-resize-dev.err.log",
+    ".tmp-ascii-resize-dev.out.log",
+    ".tmp-auto-port-dev.err.log",
+    ".tmp-auto-port-dev.out.log",
+    ".tmp-auto-port-fallback.err.log",
+    ".tmp-auto-port-fallback.out.log",
+    ".tmp-codex-powerfist-dev.err.log",
+    ".tmp-codex-powerfist-dev.out.log",
+    ".tmp-collapse-desktop.png",
+    ".tmp-collapse-mobile.png",
+    ".tmp-desktop-far-right-closer.png",
+    ".tmp-desktop-far-right-fixed.png",
+    ".tmp-desktop-far-right.png",
+    ".tmp-desktop.png",
+    ".tmp-dials-2col.png",
+    ".tmp-dials-stack.png",
+    ".tmp-drag-desktop.png",
+    ".tmp-drag-mobile.png",
+    ".tmp-foundation-dev.err.log",
+    ".tmp-foundation-dev.out.log",
+    ".tmp-handle-fixed.png",
+    ".tmp-jp-l-cadre-001-dev.err.log",
+    ".tmp-jp-l-cadre-001-dev.out.log",
+    ".tmp-jp-l-cadre-001-dev.pid",
+    ".tmp-jp-l-mem-006-dev.err.log",
+    ".tmp-jp-l-mem-006-dev.out.log",
+    ".tmp-jp-l-mem-006-dev.pid",
+    ".tmp-jr-lmem004a-dev.err.log",
+    ".tmp-jr-lmem004a-dev.out.log",
+    ".tmp-jr-lmem004a-dev.pid",
+    ".tmp-l18-dev.err.log",
+    ".tmp-l18-dev.out.log",
+    ".tmp-l18-dev.pid",
+    ".tmp-lmem005-dev.err.log",
+    ".tmp-lmem005-dev.out.log",
+    ".tmp-lui001-dev.err.log",
+    ".tmp-lui001-dev.out.log",
+    ".tmp-lui001-dev.pid",
+    ".tmp-lui001a-r1-dev.err.log",
+    ".tmp-lui001a-r1-dev.out.log",
+    ".tmp-lui001a-r1-dev.pid",
+    ".tmp-lui001a-r1-keyed-dev.err.log",
+    ".tmp-lui001a-r1-keyed-dev.out.log",
+    ".tmp-lui001a-r1-keyed-dev.pid",
+    ".tmp-lui001a-r1-retry-dev.err.log",
+    ".tmp-lui001a-r1-retry-dev.out.log",
+    ".tmp-lui001a-r1-retry-dev.pid",
+    ".tmp-lui001a-r2-dev.err.log",
+    ".tmp-lui001a-r2-dev.out.log",
+    ".tmp-lui001a-r2-dev.pid",
+    ".tmp-lui001a-r2-r1-dev.err.log",
+    ".tmp-lui001a-r2-r1-dev.out.log",
+    ".tmp-mobile-edge-tight.png",
+    ".tmp-mobile-further-down.png",
+    ".tmp-mobile-handle-bound.png",
+    ".tmp-mobile-low-split.png",
+    ".tmp-mobile-near-bottom.png",
+    ".tmp-mobile-slim-handle.png",
+    ".tmp-mobile.png",
+    ".tmp-muthur-dev.err.log",
+    ".tmp-muthur-dev.out.log",
+    ".tmp-muthur-dev.pid",
+    ".tmp-muthur-l12-dev.err.log",
+    ".tmp-muthur-l12-dev.out.log",
+    ".tmp-muthur-l12-rerun-dev.err.log",
+    ".tmp-muthur-l12-rerun-dev.out.log",
+    ".tmp-muthur-l12-retest-dev.err.log",
+    ".tmp-muthur-l12-retest-dev.out.log",
+    ".tmp-muthur-master-dev.err.log",
+    ".tmp-muthur-master-dev.out.log",
+    ".tmp-next-3051.err.log",
+    ".tmp-next-3051.out.log",
+    ".tmp-next-3064.err.log",
+    ".tmp-next-3064.out.log",
+    ".tmp-pdf-edit-dev.err.log",
+    ".tmp-pdf-edit-dev.out.log",
+    ".tmp-pdf-edit-dev.pid",
+    ".tmp-realmorphism-registry-dev.err.log",
+    ".tmp-realmorphism-registry-dev.out.log",
+    ".tmp-resize-transition-fixed.png",
+    ".tmp-resize-transition.png",
+    ".tmp-review-next-3050.err.log",
+    ".tmp-review-next-3050.out.log",
+    ".tmp-review-next-3050.pid",
+    ".tmp-review-next-3051.err.log",
+    ".tmp-review-next-3051.out.log",
+    ".tmp-review-next-3051.pid",
+    ".tmp-review-next-3066.err.log",
+    ".tmp-review-next-3066.out.log",
+    ".tmp-review-next-3068.err.log",
+    ".tmp-review-next-3068.out.log",
+    ".tmp-review-next-3068.pid",
+    ".tmp-review-nextstart-3051.err.log",
+    ".tmp-review-nextstart-3051.out.log",
+    ".tmp-review-nextstart-3051.pid",
+    ".tmp-review-nextstart-3051b.err.log",
+    ".tmp-review-nextstart-3051b.out.log",
+    ".tmp-review-nextstart-3051b.pid",
+    ".tmp-settings-stack-check.png",
+    ".tmp-tester-next-3050.err.log",
+    ".tmp-tester-next-3050.out.log",
+    ".tmp-vercel-deploy.log",
+    ".venv-pi",
+    ".vercel",
+    ".vscode",
+    ".zed",
+    "AGENTS.md",
+    "apps",
+    "ascii-button-rest-fixed.png",
+    "ascii-button-rest.png",
+    "assets",
+    "c123.db",
+    "c123.db-shm",
+    "c123.db-wal",
+    "components.json",
+    "data",
+    "docs",
+    "Documents",
+    "e2e",
+    "electron",
+    "eslint.config.mjs",
+    "j=14 reciept - muthur-property-manager-demo-user-acceptance-checklist-and-walkthrough.md",
+    "L-ARCH-001.md",
+    "mechanical-orchestration-manifesto.md",
+    "next-env.d.ts",
+    "next.config.mjs",
+    "operator-doc.txt",
+    "output",
+    "package.json",
+    "playwright.config.ts",
+    "pnpm-lock.yaml",
+    "postcss.config.mjs",
+    "public",
+    "requirements-glyph.txt",
+    "requirements-pi.txt",
+    "scripts",
+    "src",
+    "tailwind.config.ts",
+    "test-results",
+    "tests",
+    "THIRD_PARTY_NOTICES.md",
+    "tmp",
+    "tmp_update_report_cover.py",
+    "tools",
+    "tsconfig.json",
+    "tsconfig.tsbuildinfo",
+    "vercel.json",
+    "voice-backups",
+    "WHAT_DID_WE_DO_SO_FAR.md"
+  ],
+  "apps": [
+    "echo-satellite",
+    "echo-satellite-electron"
+  ],
+  "docs": [
+    "05abda94-8c97-4b23-9cf0-ad55f043f5e8.png",
+    "adr",
+    "archive-design.md",
+    "cadre",
+    "ChatGPT Image May 17, 2026, 11_28_37 AM.png",
+    "ChatGPT Image May 17, 2026, 11_36_30 AM.png",
+    "conductor",
+    "cyberdeck-team-doctrine.md",
+    "echo mirage - muthur overall plan.md",
+    "Echo Mirage Handoff.docx",
+    "Echo Mirage Handoff.md",
+    "Echo Mirage Handoff.pdf",
+    "echo-mirage-handoff.md",
+    "echo-mirage-marketing.md",
+    "echo-mirage-memory-spec.md",
+    "echo-mirage.md",
+    "echo_mirage_cognition_doctrine_v0.md",
+    "echo_mirage_fusion_memory_workflow.md",
+    "echo_mirage_fusion_workflow.md",
+    "echo_mirage_handoff 5-12-26.md",
+    "echo_mirage_implementation_roadmap.md",
+    "echo_mirage_lead_read_aloud_initiation.md",
+    "echo_mirage_memory_card_about_card_catalog.md",
+    "echo_mirage_memory_card_about_memory_cards.md",
+    "echo_mirage_memory_card_about_semantic_atlas_identity.md",
+    "Echo_Mirage_MUTHUR_Doctrine.docx",
+    "echo_mirage_muthur_doctrine_markdown.md",
+    "echo_mirage_operational_cognition_doctrine.md",
+    "echo_mirage_operational_language_doctrine_v0.md",
+    "echo_mirage_operational_ontology_v0.md",
+    "echo_mirage_operational_posture_management_discovery.md",
+    "echo_mirage_operational_posture_recovery_discovery.md",
+    "echo_mirage_stack_runtime_v0.md",
+    "echo_mirage_systems_engineering_gantt.md",
+    "echo_mirage_systems_engineering_plan.md",
+    "foundations",
+    "L.md",
+    "mechanical-orchestration-manifesto.md",
+    "memory-recovery",
+    "muthur-ask.md"
+  ],
+  "hits": [
+    {
+      "file": ".agents/skills/CODEX RESIDUAL CLOSURE INITIATION.md",
+      "sample": [
+        "5: > Codex Verification Authority for Echo Mirage residual hardening review.",
+        "76: git diff -- next-env.d.ts src/lib/computer-use/control-lease.ts src/lib/computer-use/action-runner.ts",
+        "80: pnpm exec eslint src/lib/computer-use electron/main.js electron/preload.js",
+        "107: Echo Mirage requires:"
+      ]
+    },
+    {
+      "file": ".agents/skills/echo_mirage_lead_read_aloud_initiation.md",
+      "sample": [
+        "1: # Echo Mirage Lead Initiation",
+        "5: This initiation defines how the Lead AI should communicate during active operational collaboration inside Echo Mirage.",
+        "107: # Echo Mirage Communication Principle"
+      ]
+    },
+    {
+      "file": ".agents/skills/OpenCode vscode initiation.md",
+      "sample": [
+        "1: # OPENCODE BUILDER INITIATION: ECHO MIRAGE",
+        "5: OpenCode Builder for Echo Mirage Cyberdeck.",
+        "38: - Computer Use Layer v0 PASS",
+        "82: - Do not add browser surveillance outside the Echo Mirage renderer"
+      ]
+    },
+    {
+      "file": ".cursor/hooks/tts-plan-20260613213512.json",
+      "sample": [
+        "3: \"snippet\":  \"Repo root: f:\\\\dev\\\\echo-mirage-cyberdeck From there: That script resolves paths from the repo itself (scripts/ ???????? parent"
+      ]
+    },
+    {
+      "file": ".cursor/hooks/tts-plan-20260707150043.json",
+      "sample": [
+        "3: \"snippet\":  \"Added backend flip documentation in two places: Main guide (Mirage repo) docs/survey-emp-backends.md Covers: - What can flip (r"
+      ]
+    },
+    {
+      "file": ".echo-mirage/remember.md",
+      "sample": [
+        "1: # Echo Mirage Working Memory"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T19-37-36-663Z_coding-verify.json",
+      "sample": [
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T19-37-36-663Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T19-45-44-927Z_coding-verify.json",
+      "sample": [
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T19-45-44-927Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T22-35-51-263Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/mechanical-orchestration-manifesto.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T22-35-51-263Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T22-38-32-192Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/mechanical-orchestration-manifesto.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T22-38-32-192Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T23-00-06-547Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/mechanical-orchestration-manifesto.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T23-00-06-547Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T23-36-04-841Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/mechanical-orchestration-manifesto.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T23-36-04-841Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-09T23-39-26-490Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/mechanical-orchestration-manifesto.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-09T23-39-26-490Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-10T00-04-03-711Z_coding-verify.json",
+      "sample": [
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-10T00-04-03-711Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-10T03-27-09-086Z_coding-verify.json",
+      "sample": [
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-10T03-27-09-086Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-10T03-29-55-428Z_coding-verify.json",
+      "sample": [
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-10T03-29-55-428Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-10T03-31-28-526Z_coding-verify.json",
+      "sample": [
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-10T03-31-28-526Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-14T02-38-02-215Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/L-ARCH-001.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-14T02-38-02-215Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/coding/2026-06-14T02-54-08-338Z_coding-verify.json",
+      "sample": [
+        "5: \"F:/dev/echo-mirage-cyberdeck/L-ARCH-001.md\"",
+        "10: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\coding\\\\2026-06-14T02-54-08-338Z_coding-verify.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T02-12-21-880Z.json",
+      "sample": [
+        "2: \"query\": \"muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage was a collecti",
+        "24: \"snippet\": \"# MUTHUR MEMORY\\n\\n## Durable Operational Memory\\n\\nThis file stores evergreen operational knowledge that persists across sessio"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T02-20-48-476Z.json",
+      "sample": [
+        "17: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa",
+        "24: \"snippet\": \"# MUTHUR MEMORY\\n\\n## Durable Operational Memory\\n\\nThis file stores evergreen operational knowledge that persists across sessio"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T02-37-10-985Z.json",
+      "sample": [
+        "24: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T02-41-05-639Z.json",
+      "sample": [
+        "24: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T16-09-06-504Z.json",
+      "sample": [
+        "24: \"snippet\": \"# MUTHUR MEMORY\\n\\n## Durable Operational Memory\\n\\nThis file stores evergreen operational knowledge that persists across sessio"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T16-10-12-708Z.json",
+      "sample": [
+        "31: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T17-10-17-765Z.json",
+      "sample": [
+        "38: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-14T18-45-53-656Z.json",
+      "sample": [
+        "45: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-16T03-46-54-071Z.json",
+      "sample": [
+        "45: \"snippet\": \"# MUTHUR MEMORY\\n\\n## Durable Operational Memory\\n\\nThis file stores evergreen operational knowledge that persists across sessio"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-20T07-24-45-835Z.json",
+      "sample": [
+        "24: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. Reading you. Echo Mirage is online, memory bridge stable, glyph channel clear. Standing b",
+        "31: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. I hear you. Echo Mirage stands ready. Need a glyph rendered, status check, or something e"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-20T08-47-18-548Z.json",
+      "sample": [
+        "2: \"query\": \"muthur how do u like the new twinkly echo mirage ascii treatment in the header\",",
+        "17: \"snippet\": \"bootstraps: project:echo-mirage → concept:muthur\",",
+        "24: \"snippet\": \"project: Echo Mirage Cyberdeck - Alpha Craftwerk cyberdeck — Next.js shell, MUTHUR continuity, operator workspace.\",",
+        "38: \"snippet\": \"implements: project:echo-mirage → concept:cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-20T13-11-09-310Z.json",
+      "sample": [
+        "2: \"query\": \"muthur can u give pi take control so it can do computer use?\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-24T22-30-28-668Z.json",
+      "sample": [
+        "24: \"snippet\": \"project: Echo Mirage Cyberdeck - Alpha Craftwerk cyberdeck — Next.js shell, MUTHUR continuity, operator workspace.\",",
+        "31: \"snippet\": \"depends_on_project: concept:execution → project:echo-mirage\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-24T22-32-29-405Z.json",
+      "sample": [
+        "24: \"snippet\": \"project: Echo Mirage Cyberdeck - Alpha Craftwerk cyberdeck — Next.js shell, MUTHUR continuity, operator workspace.\",",
+        "31: \"snippet\": \"depends_on_project: concept:execution → project:echo-mirage\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-06-24T22-35-29-450Z.json",
+      "sample": [
+        "10: \"snippet\": \"Operator: muthur how do u like the new twinkly echo mirage ascii treatment in the header\\nMUTHUR: **MUTHUR // feedback on Twinkl",
+        "24: \"snippet\": \"# MUTHUR MEMORY\\n\\n## Durable Operational Memory\\n\\nThis file stores evergreen operational knowledge that persists across sessio"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-03T23-17-30-914Z.json",
+      "sample": [
+        "2: \"query\": \"muthur link echo d mirage\",",
+        "17: \"snippet\": \"bootstraps: project:echo-mirage → concept:muthur\",",
+        "24: \"snippet\": \"depends_on_project: concept:execution → project:echo-mirage\",",
+        "31: \"snippet\": \"implements: project:echo-mirage → concept:cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-06T07-23-25-622Z.json",
+      "sample": [
+        "31: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. Reading you. Echo Mirage is online, memory bridge stable, glyph channel clear. Standing b",
+        "38: \"snippet\": \"Operator: muthur can u give pi take control so it can do computer use?\\nMUTHUR: {\\n  \\\"tool\\\": \\\"observe_operator_pane\\\",\\n  \\\"a"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-06T07-25-27-808Z.json",
+      "sample": [
+        "17: \"snippet\": \"Operator: hi muthur\\nMUTHUR: MUTHUR // uplink active, operator visible.  \\nEcho Mirage online, memory bridge stable.  \\nAwaiting",
+        "38: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. Reading you. Echo Mirage is online, memory bridge stable, glyph channel clear. Standing b",
+        "45: \"snippet\": \"Operator: muthur can u give pi take control so it can do computer use?\\nMUTHUR: {\\n  \\\"tool\\\": \\\"observe_operator_pane\\\",\\n  \\\"a"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-07T03-22-06-693Z.json",
+      "sample": [
+        "24: \"snippet\": \"Operator: muthur can u give pi take control so it can do computer use?\\nMUTHUR: {\\n  \\\"tool\\\": \\\"observe_operator_pane\\\",\\n  \\\"a"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-07T17-11-16-951Z.json",
+      "sample": [
+        "17: \"snippet\": \"Operator: muthur can u give pi take control so it can do computer use?\\nMUTHUR: {\\n  \\\"tool\\\": \\\"observe_operator_pane\\\",\\n  \\\"a"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-12T05-17-53-761Z.json",
+      "sample": [
+        "2: \"query\": \"muthur can u take the screenshot from echo statelilte\",",
+        "17: \"snippet\": \"Operator: muthur can u give pi take control so it can do computer use?\\nMUTHUR: {\\n  \\\"tool\\\": \\\"observe_operator_pane\\\",\\n  \\\"a",
+        "24: \"snippet\": \"Operator: muthur i am building this\\n\\nI think the north star is actually becoming visible now. 🚀\\n\\nA year ago, Echo Mirage wa",
+        "45: \"snippet\": \"Operator: hi muthur\\nMUTHUR: MUTHUR // uplink active, operator visible.  \\nEcho Mirage online, memory bridge stable.  \\nAwaiting"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-12T05-30-23-015Z.json",
+      "sample": [
+        "38: \"snippet\": \"Operator: muthur can u give pi take control so it can do computer use?\\nMUTHUR: {\\n  \\\"tool\\\": \\\"observe_operator_pane\\\",\\n  \\\"a"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-16T12-39-46-118Z.json",
+      "sample": [
+        "10: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. I hear you. Echo Mirage stands ready. Need a glyph rendered, status check, or something e",
+        "24: \"snippet\": \"Operator: hi muthur\\nMUTHUR: MUTHUR // uplink active, operator visible.  \\nEcho Mirage online, memory bridge stable.  \\nAwaiting",
+        "38: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. Reading you. Echo Mirage is online, memory bridge stable, glyph channel clear. Standing b"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/memory/2026-07-16T12-40-00-247Z.json",
+      "sample": [
+        "10: \"snippet\": \"Operator: hi muthur\\nMUTHUR: MUTHUR // uplink active, operator visible.  \\nEcho Mirage online, memory bridge stable.  \\nAwaiting",
+        "24: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. Reading you. Echo Mirage is online, memory bridge stable, glyph channel clear. Standing b",
+        "31: \"snippet\": \"Operator: hi muthur\\nMUTHUR: Operator. I hear you. Echo Mirage stands ready. Need a glyph rendered, status check, or something e"
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T07-10-15-392Z_4c3c7584.json",
+      "sample": [
+        "11: \"stdout\": \"Skip\\n> ECHO MIRAGE :: COLD START\\n> REACTOR :: ONLINE\\n┌───┐\\n│ Ø │\\n└───┘\\n┌───┐\\n│ μ │▓\\n└───┘▓\\n▓▓▓▓▓\\n┌───┐\\n│ § │▓\\n└───┘▓\\",
+        "12: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779779411975.png\",",
+        "15: \"title\": \"Echo Mirage Cyberdeck\",",
+        "28: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779779411975.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T07-26-09-575Z_2acc1714.json",
+      "sample": [
+        "11: \"stdout\": \"Skip\\n> ECHO MIRAGE :: COLD START\\n> REACTOR :: ONLINE\\n> RAIL :: BUS NOMINAL\\n┌───┐\\n│ Ø │\\n└───┘\\n┌───┐\\n│ μ │▓\\n└───┘▓\\n▓▓▓▓▓\\",
+        "12: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780369165.png\",",
+        "15: \"title\": \"Echo Mirage Cyberdeck\",",
+        "28: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780369165.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T07-26-33-637Z_12030349.json",
+      "sample": [
+        "12: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780393567.png\",",
+        "15: \"title\": \"Echo Mirage Cyberdeck\",",
+        "28: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780393567.png\",",
+        "31: \"title\": \"Echo Mirage Cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T07-26-51-621Z_f78e753c.json",
+      "sample": [
+        "12: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_this_route_does_not_exist_404-1779780409561.png\"",
+        "15: \"title\": \"Echo Mirage Cyberdeck\",",
+        "30: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_this_route_does_not_exist_404-1779780409561.png\",",
+        "33: \"title\": \"Echo Mirage Cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T07-27-35-636Z_9598c783.json",
+      "sample": [
+        "11: \"stdout\": \"Skip\\n> ECHO MIRAGE :: COLD START\\n> REACTOR :: ONLINE\\n┌───┐\\n│ Ø │\\n└───┘\\n┌───┐\\n│ μ │▓\\n└───┘▓\\n▓▓▓▓▓\\n┌───┐\\n│ § │▓\\n└───┘▓\\",
+        "12: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780455355.png\",",
+        "15: \"title\": \"Echo Mirage Cyberdeck\",",
+        "28: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780455355.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T07-28-09-860Z_9c34e516.json",
+      "sample": [
+        "12: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780489718.png\",",
+        "15: \"title\": \"Echo Mirage Cyberdeck\",",
+        "28: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\screenshots\\\\verify-_cyberdeck-1779780489718.png\",",
+        "31: \"title\": \"Echo Mirage Cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-34-13-301Z_7fd97e45.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784443778.png\",",
+        "15: \"stdout\": \"Skip\\n> ECHO MIRAGE :: COLD START\\n> REACTOR :: ONLINE\\n> RAIL :: BUS NOMINAL\\n> OPERATORS :: HANDSHAKE\\n> CHATGPT // LEAD :: ONL",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784443778.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-40-12-424Z_8af71d93.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784811987.png\",",
+        "15: \"stdout\": \"Skip\\n> ECHO MIRAGE :: COLD START\\n> REACTOR :: ONLINE\\n┌───┐\\n│ Ø │\\n└───┘\\n┌───┐\\n│ μ │▓\\n└───┘▓\\n▓▓▓▓▓\\n┌───┐\\n│ § │▓\\n└───┘▓\\",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784811987.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-40-19-673Z_6da4e9da.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784819604.png\",",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784819604.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\",",
+        "31: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779784819604.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-47-46-136Z_7c9bf666.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785266045.png\",",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785266045.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\",",
+        "31: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785266045.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-47-46-959Z_e71112a2.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_this_route_does_not_exist_404-1779785266436.png\",",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_this_route_does_not_exist_404-1779785266436.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\",",
+        "37: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_this_route_does_not_exist_404-1779785266436.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-48-23-828Z_f8b6a3e4.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785303750.png\",",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785303750.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\",",
+        "31: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785303750.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-49-43-287Z_e98aa712.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\",",
+        "23: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\",",
+        "26: \"title\": \"Echo Mirage Cyberdeck\",",
+        "33: \"message\": \"Screenshot saved: F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-49-43-409Z_2b25b612.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\",",
+        "23: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\",",
+        "26: \"title\": \"Echo Mirage Cyberdeck\",",
+        "34: \"evidence_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-50-38-072Z_4623a3c5.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\codex-screenshot-1779785382371.png\",",
+        "50: \"receipt_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\receipts\\\\verification\\\\2026-05-26T08-50-38-072Z_4623a3c5.json\""
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-50-39-929Z_4078e1ec.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785439826.png\",",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785439826.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\",",
+        "31: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_cyberdeck-1779785439826.png\","
+      ]
+    },
+    {
+      "file": ".muthur/receipts/verification/2026-05-26T08-50-56-216Z_e69039ea.json",
+      "sample": [
+        "8: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_-1779785455155.png\",",
+        "16: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_-1779785455155.png\",",
+        "19: \"title\": \"Echo Mirage Cyberdeck\",",
+        "49: \"screenshot_path\": \"F:\\\\dev\\\\echo-mirage-cyberdeck\\\\.muthur\\\\screenshots\\\\verify-_-1779785455155.png\","
+      ]
+    }
+  ]
+}

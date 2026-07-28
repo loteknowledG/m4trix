@@ -1,6 +1,8 @@
 import { get, set } from 'idb-keyval';
 import { playlistEditorHref } from '@/lib/video-routes';
 import { getVideoThumbnail, VIDEO_PLACEHOLDER } from '@/lib/video-utils';
+import type { VideoTimedCue } from '@/lib/video-timed-cues';
+import type { VideoSkipSegment } from '@/lib/video-skip-segments';
 
 export type PlaylistMeta = {
   id: string;
@@ -15,6 +17,8 @@ export type PlaylistVideo = {
   src: string;
   name?: string;
   kind: 'url' | 'upload' | 'embed';
+  cues?: VideoTimedCue[];
+  skipSegments?: VideoSkipSegment[];
 };
 
 export function newPlaylistId() {
@@ -115,6 +119,22 @@ export async function removeVideoFromPlaylist(id: string, videoId: string) {
   const next = videos.filter(v => v.id !== videoId);
   await set(`playlist:${id}`, next);
   await syncPlaylistMeta(id, next);
+  dispatchPlaylistsUpdated({ id });
+  return next;
+}
+
+export async function updatePlaylistVideo(
+  id: string,
+  videoId: string,
+  patch: Partial<Pick<PlaylistVideo, 'name' | 'cues' | 'skipSegments'>>,
+) {
+  const videos = await getPlaylistVideos(id);
+  const idx = videos.findIndex(v => v.id === videoId);
+  if (idx === -1) return videos;
+
+  const next = [...videos];
+  next[idx] = { ...next[idx], ...patch };
+  await set(`playlist:${id}`, next);
   dispatchPlaylistsUpdated({ id });
   return next;
 }

@@ -89,6 +89,8 @@ body,
   .theme {
     --animate-rippling: rippling var(--duration) ease-out;
     --animate-shine: shine var(--duration) infinite linear;
+    --animate-blink-cursor: blink-cursor 1.2s step-end infinite;
+    --animate-line-shadow: line-shadow 15s linear infinite;
   }
 }
 
@@ -147,6 +149,22 @@ body,
     }
     to {
       background-position: 0% 0%;
+    }
+  }
+  @keyframes blink-cursor {
+  0%, 49% {
+    opacity: 1;
+    }
+  50%, 100% {
+    opacity: 0;
+    }
+  }
+  @keyframes line-shadow {
+  0% {
+    background-position: 0 0;
+    }
+  100% {
+    background-position: 100% -100%;
     }
   }
 }

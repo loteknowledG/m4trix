@@ -113,12 +113,17 @@ function applyEmbedPlayerParams(embedSrc: string, autoPlay: boolean, origin?: st
       url.searchParams.set('rel', '0');
       url.searchParams.set('playsinline', '1');
       url.searchParams.set('mute', '0');
+      url.searchParams.set('version', '3');
+      url.searchParams.set('fs', '0');
       if (origin) url.searchParams.set('origin', origin);
     }
 
     if (isVimeoHost(url.hostname) || parseVimeoId(embedSrc)) {
       url.searchParams.set('api', '1');
       url.searchParams.set('autopause', '0');
+      url.searchParams.set('byline', '0');
+      url.searchParams.set('title', '0');
+      url.searchParams.set('fullscreen', '0');
     }
 
     return url.toString();

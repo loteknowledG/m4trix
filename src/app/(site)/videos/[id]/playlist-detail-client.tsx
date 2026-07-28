@@ -28,9 +28,14 @@ import {
   newPlaylistId,
   renamePlaylist,
   removeVideoFromPlaylist,
+  updatePlaylistVideo,
   type PlaylistVideo,
 } from '@/lib/playlists';
 import { isValidVideoUrl, parseEmbedCode } from '@/lib/video-utils';
+import PlaylistVideoCueEditor from '@/components/playlist-video-cue-editor';
+import PlaylistVideoSkipSegmentEditor from '@/components/playlist-video-skip-segment-editor';
+import { normalizeVideoTimedCues, type VideoTimedCue } from '@/lib/video-timed-cues';
+import { normalizeVideoSkipSegments, type VideoSkipSegment } from '@/lib/video-skip-segments';
 import { dispatchVideoSelected } from '@/lib/video-playback-events';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +60,52 @@ function videoLabel(video: PlaylistVideo) {
   }
 }
 
+function PlaylistVideoNameField({
+  videoId,
+  value,
+  placeholder,
+  selected,
+  onCommit,
+}: {
+  videoId: string;
+  value: string;
+  placeholder: string;
+  selected: boolean;
+  onCommit: (name: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value, videoId]);
+
+  return (
+    <Input
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => onCommit(draft)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.currentTarget as HTMLInputElement).blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setDraft(value);
+          (e.currentTarget as HTMLInputElement).blur();
+        }
+      }}
+      onClick={e => e.stopPropagation()}
+      onPointerDown={e => e.stopPropagation()}
+      placeholder={placeholder}
+      aria-label="Edit video name"
+      className={cn(
+        'h-8 min-w-0 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-1',
+        selected ? 'focus-visible:ring-primary/40' : 'focus-visible:ring-border',
+      )}
+    />
+  );
+}
+
 export default function PlaylistDetailClient() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -74,10 +125,13 @@ export default function PlaylistDetailClient() {
   const [addingEmbed, setAddingEmbed] = useState(false);
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
   const [playbackArmed, setPlaybackArmed] = useState(false);
+  const [placementCueId, setPlacementCueId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedIndex = videos.findIndex(v => v.id === selectedVideoId);
   const selectedVideo = selectedIndex >= 0 ? videos[selectedIndex] : null;
+  const selectedVideoCues = normalizeVideoTimedCues(selectedVideo?.cues);
+  const selectedSkipSegments = normalizeVideoSkipSegments(selectedVideo?.skipSegments);
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) {
@@ -226,12 +280,76 @@ export default function PlaylistDetailClient() {
     }
   };
 
+  const handleRenameVideo = useCallback(
+    async (videoId: string, name: string) => {
+      if (!playlistId) return;
+      const trimmed = name.trim();
+      const nextName = trimmed || undefined;
+      const current = videos.find(v => v.id === videoId);
+      if ((current?.name ?? '') === (nextName ?? '')) return;
+
+      setVideos(prev =>
+        prev.map(v => (v.id === videoId ? { ...v, name: nextName } : v)),
+      );
+      try {
+        const next = await updatePlaylistVideo(playlistId, videoId, { name: nextName });
+        setVideos(next);
+      } catch (err) {
+        logger.error('Failed to rename playlist video', err);
+        void loadPlaylist();
+      }
+    },
+    [playlistId, videos, loadPlaylist],
+  );
+
+  const handleCuesChange = useCallback(
+    async (videoId: string, cues: VideoTimedCue[]) => {
+      if (!playlistId) return;
+      setVideos(prev => prev.map(v => (v.id === videoId ? { ...v, cues } : v)));
+      try {
+        const next = await updatePlaylistVideo(playlistId, videoId, { cues });
+        setVideos(next);
+      } catch (err) {
+        logger.error('Failed to save video dialogs', err);
+        void loadPlaylist();
+      }
+    },
+    [playlistId, loadPlaylist],
+  );
+
+  const handleSkipSegmentsChange = useCallback(
+    async (videoId: string, skipSegments: VideoSkipSegment[]) => {
+      if (!playlistId) return;
+      setVideos(prev => prev.map(v => (v.id === videoId ? { ...v, skipSegments } : v)));
+      try {
+        const next = await updatePlaylistVideo(playlistId, videoId, { skipSegments });
+        setVideos(next);
+      } catch (err) {
+        logger.error('Failed to save skip segments', err);
+        void loadPlaylist();
+      }
+    },
+    [playlistId, loadPlaylist],
+  );
+
+  const handleCueLayoutChange = useCallback(
+    (cueId: string, patch: Partial<Pick<VideoTimedCue, 'x' | 'y' | 'width' | 'fontScale'>>) => {
+      if (!selectedVideoId) return;
+      const nextCues = selectedVideoCues.map(cue =>
+        cue.id === cueId ? { ...cue, ...patch } : cue,
+      );
+      void handleCuesChange(selectedVideoId, nextCues);
+    },
+    [selectedVideoId, selectedVideoCues, handleCuesChange],
+  );
+
   const selectVideo = useCallback(
     (videoId: string, userInitiated = true) => {
       const video = videos.find(v => v.id === videoId);
       if (userInitiated) {
         setPlaybackArmed(true);
       }
+      setPlacementCueId(null);
       setSelectedVideoId(videoId);
       if (video) {
         dispatchVideoSelected({
@@ -347,12 +465,17 @@ export default function PlaylistDetailClient() {
                     </div>
 
                     <UniversalVideoPlayer
+                      key={selectedVideo?.id ?? 'playlist-empty'}
                       src={selectedVideo?.src ?? ''}
                       kind={selectedVideo?.kind ?? 'url'}
                       videoId={selectedVideo?.id}
                       autoPlay={autoPlayEnabled}
                       userActivated={playbackArmed}
                       onEnded={autoPlayEnabled ? advanceToNext : undefined}
+                      cues={selectedVideoCues}
+                      editCueId={placementCueId}
+                      onCueLayoutChange={handleCueLayoutChange}
+                      skipSegments={selectedSkipSegments}
                     />
                   </div>
 
@@ -387,28 +510,36 @@ export default function PlaylistDetailClient() {
                             </SelectContent>
                           </Select>
 
-                          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1">
+                          <ul className="max-h-48 overflow-y-auto rounded-lg border border-border/60 p-1">
                             {videos.map((video, index) => (
-                              <li key={video.id} className="flex items-stretch gap-1">
+                              <li
+                                key={video.id}
+                                className={cn(
+                                  'grid grid-cols-[2.25rem_minmax(0,1fr)_2rem] items-center gap-1 rounded-md',
+                                  selectedVideoId === video.id &&
+                                    'bg-primary/15 ring-1 ring-primary/30',
+                                )}
+                              >
                                 <button
                                   type="button"
                                   onClick={() => selectVideo(video.id)}
-                                  className={cn(
-                                    'min-w-0 flex-1 rounded-md px-3 py-2 text-left text-sm transition-colors',
-                                    selectedVideoId === video.id
-                                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                                      : 'hover:bg-accent/40'
-                                  )}
+                                  className="flex h-8 items-center justify-center text-xs tabular-nums text-muted-foreground transition-colors hover:text-foreground"
+                                  aria-label={`Play video ${index + 1}: ${videoLabel(video)}`}
+                                  title={`Play ${index + 1}`}
                                 >
-                                  <span className="mr-2 text-xs text-muted-foreground">
-                                    {index + 1}.
-                                  </span>
-                                  <span className="line-clamp-2">{videoLabel(video)}</span>
+                                  {index + 1}
                                 </button>
+                                <PlaylistVideoNameField
+                                  videoId={video.id}
+                                  value={video.name ?? ''}
+                                  placeholder={videoLabel(video)}
+                                  selected={selectedVideoId === video.id}
+                                  onCommit={name => void handleRenameVideo(video.id, name)}
+                                />
                                 <button
                                   type="button"
                                   onClick={() => void handleRemoveVideo(video.id)}
-                                  className="inline-flex shrink-0 items-center justify-center rounded-md px-2 text-destructive transition-colors hover:bg-destructive/10"
+                                  className="inline-flex h-8 shrink-0 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10"
                                   aria-label={`Remove ${videoLabel(video)}`}
                                   title="Remove from playlist"
                                 >
@@ -422,6 +553,23 @@ export default function PlaylistDetailClient() {
                         <p className="text-sm text-muted-foreground">No videos yet.</p>
                       )}
                     </div>
+
+                    {selectedVideo ? (
+                      <>
+                        <PlaylistVideoCueEditor
+                          cues={selectedVideoCues}
+                          onChange={cues => void handleCuesChange(selectedVideo.id, cues)}
+                          placementCueId={placementCueId}
+                          onPlacementCueIdChange={setPlacementCueId}
+                        />
+                        <PlaylistVideoSkipSegmentEditor
+                          segments={selectedSkipSegments}
+                          onChange={segments =>
+                            void handleSkipSegmentsChange(selectedVideo.id, segments)
+                          }
+                        />
+                      </>
+                    ) : null}
 
                     <div className="space-y-3 border-t border-border/60 pt-4">
                       <div className="text-sm font-medium">Add to playlist</div>

@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 const RESERVED = new Set(['list', 'chat', 'detail', 'new']);
 
 /** Legacy `/characters/:id` bookmarks → static-export-safe detail route. */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const match = request.nextUrl.pathname.match(/^\/characters\/([^/]+)\/?$/);
   if (!match) {
     return NextResponse.next();

@@ -19,6 +19,14 @@ type PlaylistRollerDeckProps = {
   className?: string;
 };
 
+function isEditableKeyTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  return Boolean(target.closest('[contenteditable="true"]'));
+}
+
 export default function PlaylistRollerDeck({
   videos,
   selectedId,
@@ -80,7 +88,7 @@ export default function PlaylistRollerDeck({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!api) return;
+      if (!api || isEditableKeyTarget(e.target)) return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         api.scrollPrev();
