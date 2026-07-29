@@ -8,15 +8,18 @@ import type { DialogTextEffect } from "@/lib/dialog-text-effects";
 import { logger } from "@/lib/logger";
 import {
   characterDialogSide,
+  characterPlacementZone,
   computeObjectContainLayout,
   defaultDialogLinePosition,
-  groupLinesBySide,
+  groupLinesByPlacementZone,
   scriptToChatMessages,
   shouldUseWideSideDialogLayout,
+  type DialogPlacementZone,
   type DialogSide,
   type ObjectContainLayout,
 } from "@/lib/moment-dialog-layout";
 import {
+  ensureCharacterPositions,
   loadMomentDialogScript,
   saveMomentDialogScript,
   scriptUsesFreePlacement,
@@ -218,6 +221,51 @@ function FreePlacementLayer({
   );
 }
 
+function SideOverlayColumn({
+  side,
+  width,
+  messages,
+  script,
+  momentId,
+}: {
+  side: "left" | "right";
+  width?: number;
+  messages: CustomChatMessage[];
+  script: MomentDialogScript;
+  momentId?: string | null;
+}) {
+  if (!messages.length) return null;
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-y-0 z-20 flex flex-col justify-end gap-3 overflow-y-auto px-2 py-20 sm:px-3",
+        side === "left" ? "left-0" : "right-0",
+      )}
+      style={width ? { width } : { width: "min(42%, 14rem)" }}
+      aria-label={side === "left" ? "Left dialog column" : "Right dialog column"}
+    >
+      {messages.map((message, index) => {
+        const line = script.lines.find((entry) => entry.id === message.id);
+        const characterIndex = line
+          ? script.characterOrder.indexOf(line.characterId)
+          : index;
+        return (
+          <VnDialogMessage
+            key={message.id}
+            message={message}
+            paletteIndex={Math.max(0, characterIndex)}
+            align={side === "right" ? "end" : "start"}
+            textEffect={line?.textEffect}
+            lineKey={message.id}
+            momentId={momentId}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function SideLetterboxColumn({
   side,
   width,
@@ -263,31 +311,49 @@ function SideLetterboxColumn({
   );
 }
 
-function CenterVnPanel({
+function NarratorZonePanel({
+  zone,
   messages,
   script,
   momentId,
+  layout,
+  useWideLayout,
 }: {
+  zone: Extract<DialogPlacementZone, "top" | "bottom">;
   messages: CustomChatMessage[];
   script: MomentDialogScript;
   momentId?: string | null;
+  layout?: ObjectContainLayout;
+  useWideLayout?: boolean;
 }) {
   if (!messages.length) return null;
 
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-4 pt-16 sm:px-6 sm:pb-6">
-      <div className="mx-auto flex max-h-[42vh] w-full max-w-4xl flex-col overflow-hidden rounded-sm border border-white/70 bg-black/55 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-[2px] sm:px-5 sm:py-4">
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+  if (useWideLayout && layout) {
+    return (
+      <div
+        className="pointer-events-none absolute z-20 px-3"
+        style={
+          zone === "top"
+            ? {
+                left: layout.offsetX,
+                top: layout.offsetY,
+                width: layout.renderedWidth,
+              }
+            : {
+                left: layout.offsetX,
+                top: layout.offsetY + layout.renderedHeight,
+                width: layout.renderedWidth,
+              }
+        }
+      >
+        <div className={cn("mx-auto max-w-3xl space-y-3", zone === "top" ? "pt-2" : "pb-4")}>
           {messages.map((message, index) => {
             const line = script.lines.find((entry) => entry.id === message.id);
-            const characterIndex = line
-              ? script.characterOrder.indexOf(line.characterId)
-              : index;
             return (
               <VnDialogMessage
                 key={message.id}
                 message={message}
-                paletteIndex={Math.max(0, characterIndex)}
+                paletteIndex={Math.max(0, script.characterOrder.length + index)}
                 textEffect={line?.textEffect}
                 lineKey={message.id}
                 momentId={momentId}
@@ -296,40 +362,29 @@ function CenterVnPanel({
           })}
         </div>
       </div>
-    </div>
-  );
-}
-
-function WideCenterNarratorStrip({
-  layout,
-  messages,
-  script,
-  momentId,
-}: {
-  layout: ObjectContainLayout;
-  messages: CustomChatMessage[];
-  script: MomentDialogScript;
-  momentId?: string | null;
-}) {
-  if (!messages.length) return null;
+    );
+  }
 
   return (
     <div
-      className="pointer-events-none absolute z-20 px-3 pb-4"
-      style={{
-        left: layout.offsetX,
-        top: layout.offsetY + layout.renderedHeight,
-        width: layout.renderedWidth,
-      }}
+      className={cn(
+        "pointer-events-none absolute inset-x-0 z-20 px-3 sm:px-6",
+        zone === "top"
+          ? "top-0 bg-gradient-to-b from-black/90 via-black/55 to-transparent pb-8 pt-4"
+          : "bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent pb-4 pt-16 sm:pb-6",
+      )}
     >
       <div className="mx-auto max-w-3xl space-y-3">
         {messages.map((message, index) => {
           const line = script.lines.find((entry) => entry.id === message.id);
+          const characterIndex = line
+            ? script.characterOrder.indexOf(line.characterId)
+            : index;
           return (
             <VnDialogMessage
               key={message.id}
               message={message}
-              paletteIndex={Math.max(0, script.characterOrder.length + index)}
+              paletteIndex={Math.max(0, characterIndex)}
               textEffect={line?.textEffect}
               lineKey={message.id}
               momentId={momentId}
@@ -337,6 +392,79 @@ function WideCenterNarratorStrip({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PositionedSceneDialogLayer({
+  script,
+  sceneCharacters,
+  momentId,
+  layout,
+  useWideLayout,
+}: {
+  script: MomentDialogScript;
+  sceneCharacters: SceneCharacter[];
+  momentId?: string | null;
+  layout: ObjectContainLayout;
+  useWideLayout: boolean;
+}) {
+  const grouped = useMemo(
+    () => groupLinesByPlacementZone(script, sceneCharacters),
+    [sceneCharacters, script],
+  );
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20">
+      <NarratorZonePanel
+        zone="top"
+        messages={grouped.top}
+        script={script}
+        momentId={momentId}
+        layout={layout}
+        useWideLayout={useWideLayout}
+      />
+      {useWideLayout ? (
+        <>
+          <SideLetterboxColumn
+            side="left"
+            width={layout.sideBarWidth}
+            messages={grouped.left}
+            script={script}
+            momentId={momentId}
+          />
+          <SideLetterboxColumn
+            side="right"
+            width={layout.sideBarWidth}
+            messages={grouped.right}
+            script={script}
+            momentId={momentId}
+          />
+        </>
+      ) : (
+        <>
+          <SideOverlayColumn
+            side="left"
+            messages={grouped.left}
+            script={script}
+            momentId={momentId}
+          />
+          <SideOverlayColumn
+            side="right"
+            messages={grouped.right}
+            script={script}
+            momentId={momentId}
+          />
+        </>
+      )}
+      <NarratorZonePanel
+        zone="bottom"
+        messages={grouped.bottom}
+        script={script}
+        momentId={momentId}
+        layout={layout}
+        useWideLayout={useWideLayout}
+      />
     </div>
   );
 }
@@ -391,10 +519,14 @@ export function MomentDialogDisplay({
         if (cancelled) return;
         setSceneCharacters(characters);
         const fallbackOrder = characters.map((character) => character.id);
-        return loadMomentDialogScript(momentId, storyId, fallbackOrder);
+        return loadMomentDialogScript(momentId, storyId, fallbackOrder).then((loaded) => ({
+          loaded,
+          characters,
+        }));
       })
-      .then((loaded) => {
-        if (!cancelled && loaded) setScript(loaded);
+      .then((result) => {
+        if (cancelled || !result) return;
+        setScript(ensureCharacterPositions(result.loaded, result.characters));
       })
       .catch((error) => {
         logger.error("Failed to load moment dialog display", error);
@@ -410,7 +542,7 @@ export function MomentDialogDisplay({
       if (!momentId) return;
       const fallbackOrder = sceneCharacters.map((character) => character.id);
       void loadMomentDialogScript(momentId, storyId, fallbackOrder)
-        .then(setScript)
+        .then((loaded) => setScript(ensureCharacterPositions(loaded, sceneCharacters)))
         .catch((error) => logger.error("Failed to refresh moment dialog display", error));
     };
 
@@ -448,25 +580,38 @@ export function MomentDialogDisplay({
     [momentId, storyId],
   );
 
-  const grouped = useMemo(
-    () => groupLinesBySide(script, sceneCharacters),
-    [sceneCharacters, script],
-  );
-
   const speakOrderMessages = useMemo(
     () => scriptToChatMessages(script, sceneCharacters),
     [sceneCharacters, script],
   );
 
   const placedEntries = useMemo((): PlacedDialogLine[] => {
-    const total = speakOrderMessages.length;
-    return speakOrderMessages.flatMap((message, index) => {
+    const grouped = groupLinesByPlacementZone(script, sceneCharacters);
+    return speakOrderMessages.flatMap((message) => {
       const line = script.lines.find((entry) => entry.id === message.id);
       if (!line) return [];
-      const side = characterDialogSide(line.characterId, script.characterOrder, sceneCharacters);
+      const zone = characterPlacementZone(
+        line.characterId,
+        sceneCharacters,
+        script.characterPositions,
+      );
+      const side = characterDialogSide(
+        line.characterId,
+        script.characterOrder,
+        sceneCharacters,
+        script.characterPositions,
+      );
       const paletteIndex = Math.max(0, script.characterOrder.indexOf(line.characterId));
+      const zoneMessages = grouped[zone];
+      const indexInZone = zoneMessages.findIndex((entry) => entry.id === message.id);
       const position =
-        line.pos ?? defaultDialogLinePosition(index, total, side);
+        line.pos ??
+        defaultDialogLinePosition(
+          Math.max(0, indexInZone),
+          zoneMessages.length,
+          side,
+          zone,
+        );
       return [{ message, line, side, paletteIndex, position }];
     });
   }, [sceneCharacters, script, speakOrderMessages]);
@@ -487,35 +632,14 @@ export function MomentDialogDisplay({
     );
   }
 
-  if (useWideLayout) {
-    return (
-      <div className="pointer-events-none absolute inset-0 z-20">
-        <SideLetterboxColumn
-          side="left"
-          width={layout.sideBarWidth}
-          messages={grouped.left}
-          script={script}
-          momentId={momentId}
-        />
-        <SideLetterboxColumn
-          side="right"
-          width={layout.sideBarWidth}
-          messages={grouped.right}
-          script={script}
-          momentId={momentId}
-        />
-        <WideCenterNarratorStrip
-          layout={layout}
-          messages={grouped.center}
-          script={script}
-          momentId={momentId}
-        />
-      </div>
-    );
-  }
-
   return (
-    <CenterVnPanel messages={speakOrderMessages} script={script} momentId={momentId} />
+    <PositionedSceneDialogLayer
+      script={script}
+      sceneCharacters={sceneCharacters}
+      momentId={momentId}
+      layout={layout}
+      useWideLayout={useWideLayout}
+    />
   );
 }
 
@@ -525,17 +649,35 @@ export async function seedDialogPlacementDefaults(
   sceneCharacters: SceneCharacter[],
 ): Promise<MomentDialogScript | null> {
   const fallbackOrder = sceneCharacters.map((character) => character.id);
-  const script = await loadMomentDialogScript(momentId, storyId, fallbackOrder);
+  const loaded = await loadMomentDialogScript(momentId, storyId, fallbackOrder);
+  const script = ensureCharacterPositions(loaded, sceneCharacters);
   const messages = scriptToChatMessages(script, sceneCharacters);
-  const total = messages.length;
+  const grouped = groupLinesByPlacementZone(script, sceneCharacters);
   let next = script;
   let changed = false;
 
-  messages.forEach((message, index) => {
+  messages.forEach((message) => {
     const line = next.lines.find((entry) => entry.id === message.id);
     if (!line || line.pos) return;
-    const side = characterDialogSide(line.characterId, next.characterOrder, sceneCharacters);
-    const pos = defaultDialogLinePosition(index, total, side);
+    const zone = characterPlacementZone(
+      line.characterId,
+      sceneCharacters,
+      next.characterPositions,
+    );
+    const side = characterDialogSide(
+      line.characterId,
+      next.characterOrder,
+      sceneCharacters,
+      next.characterPositions,
+    );
+    const zoneMessages = grouped[zone];
+    const indexInZone = zoneMessages.findIndex((entry) => entry.id === message.id);
+    const pos = defaultDialogLinePosition(
+      Math.max(0, indexInZone),
+      zoneMessages.length,
+      side,
+      zone,
+    );
     next = updateLinePositionInScript(next, line.id, pos);
     changed = true;
   });

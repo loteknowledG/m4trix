@@ -112,7 +112,7 @@ export default function MomentPage() {
                   <HiMiniChatBubbleLeftRight size={18} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={8}>
+              <TooltipContent side="top" sideOffset={14}>
                 <p>Dialog</p>
               </TooltipContent>
             </Tooltip>

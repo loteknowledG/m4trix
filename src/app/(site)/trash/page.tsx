@@ -173,8 +173,8 @@ export default function TrashPage() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={restoreSelected}
-                    title="Restore selected moments"
                     className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    aria-label="Restore to Heap"
                   >
                     <RotateCcw size={18} />
                   </button>
@@ -188,8 +188,8 @@ export default function TrashPage() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={deleteSelectedPermanently}
-                    title="Delete selected moments permanently"
                     className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
+                    aria-label="Delete permanently"
                   >
                     <Trash2 size={18} />
                   </button>

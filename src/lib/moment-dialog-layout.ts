@@ -1,9 +1,15 @@
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { NARRATOR_CHARACTER_ID } from "@/lib/game/narrator-agent";
-import type { DialogLinePosition, MomentDialogLine, MomentDialogScript } from "@/lib/moment-dialog";
+import type {
+  DialogLinePosition,
+  DialogSpeakerPosition,
+  MomentDialogLine,
+  MomentDialogScript,
+} from "@/lib/moment-dialog";
+import { resolveCharacterPosition } from "@/lib/moment-dialog";
 import type { SceneCharacter } from "@/lib/scene-characters";
-
 export type DialogSide = "left" | "right" | "center";
+export type DialogPlacementZone = "top" | "bottom" | "left" | "right";
 
 export type ObjectContainLayout = {
   renderedWidth: number;
@@ -75,11 +81,19 @@ export function characterDialogSide(
   characterId: string,
   characterOrder: string[],
   sceneCharacters: SceneCharacter[],
+  characterPositions?: Record<string, DialogSpeakerPosition>,
 ): DialogSide {
   const character = sceneCharacters.find((entry) => entry.id === characterId);
   if (!character || character.role === "narrator" || characterId === NARRATOR_CHARACTER_ID) {
     return "center";
   }
+
+  const position = resolveCharacterPosition(
+    { characterOrder, lines: [], characterPositions },
+    characterId,
+    character.role,
+  );
+  if (position === "left" || position === "right") return position;
 
   const ordered = nonNarratorCharacterOrder(characterOrder, sceneCharacters);
   const index = ordered.indexOf(characterId);
@@ -87,6 +101,27 @@ export function characterDialogSide(
   if (index === 0) return "left";
   if (index === 1) return "right";
   return index % 2 === 0 ? "left" : "right";
+}
+
+export function characterPlacementZone(
+  characterId: string,
+  sceneCharacters: SceneCharacter[],
+  characterPositions?: Record<string, DialogSpeakerPosition>,
+): DialogPlacementZone {
+  const character = sceneCharacters.find((entry) => entry.id === characterId);
+  if (!character) return "bottom";
+
+  const position = resolveCharacterPosition(
+    { characterOrder: [], lines: [], characterPositions },
+    characterId,
+    character.role,
+  );
+
+  if (character.role === "narrator" || characterId === NARRATOR_CHARACTER_ID) {
+    return position === "top" ? "top" : "bottom";
+  }
+
+  return position === "right" ? "right" : "left";
 }
 
 export function dialogLineToChatMessage(
@@ -141,9 +176,36 @@ export function groupLinesBySide(
   for (const message of scriptToChatMessages(script, sceneCharacters)) {
     const line = script.lines.find((entry) => entry.id === message.id);
     const side = line
-      ? characterDialogSide(line.characterId, script.characterOrder, sceneCharacters)
+      ? characterDialogSide(
+          line.characterId,
+          script.characterOrder,
+          sceneCharacters,
+          script.characterPositions,
+        )
       : "center";
     grouped[side].push(message);
+  }
+
+  return grouped;
+}
+
+export function groupLinesByPlacementZone(
+  script: MomentDialogScript,
+  sceneCharacters: SceneCharacter[],
+): Record<DialogPlacementZone, CustomChatMessage[]> {
+  const grouped: Record<DialogPlacementZone, CustomChatMessage[]> = {
+    top: [],
+    bottom: [],
+    left: [],
+    right: [],
+  };
+
+  for (const message of scriptToChatMessages(script, sceneCharacters)) {
+    const line = script.lines.find((entry) => entry.id === message.id);
+    const zone = line
+      ? characterPlacementZone(line.characterId, sceneCharacters, script.characterPositions)
+      : "bottom";
+    grouped[zone].push(message);
   }
 
   return grouped;
@@ -153,10 +215,21 @@ export function defaultDialogLinePosition(
   index: number,
   total: number,
   side: DialogSide,
+  placementZone?: DialogPlacementZone,
 ): DialogLinePosition {
+  const zone =
+    placementZone ??
+    (side === "left" ? "left" : side === "right" ? "right" : "bottom");
   const stackStep = total > 1 ? Math.min(0.12, 0.55 / (total - 1)) : 0;
-  const y = Math.min(0.9, 0.35 + index * stackStep);
-  if (side === "left") return { x: 0.12, y };
-  if (side === "right") return { x: 0.88, y };
-  return { x: 0.5, y: Math.min(0.88, 0.78 + index * 0.04) };
+
+  if (zone === "left") {
+    return { x: 0.12, y: Math.min(0.9, 0.35 + index * stackStep) };
+  }
+  if (zone === "right") {
+    return { x: 0.88, y: Math.min(0.9, 0.35 + index * stackStep) };
+  }
+  if (zone === "top") {
+    return { x: 0.5, y: Math.min(0.24, 0.1 + index * 0.05) };
+  }
+  return { x: 0.5, y: Math.min(0.92, 0.72 + index * 0.05) };
 }

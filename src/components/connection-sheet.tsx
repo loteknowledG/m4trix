@@ -903,8 +903,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                 size="sm"
                 type="submit"
                 className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                aria-label="Connect"
-                title={
+                aria-label={
                   activeProviderConnected
                     ? 'Provider connected — change provider to edit'
                     : 'Connect'

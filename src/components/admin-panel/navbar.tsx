@@ -141,8 +141,8 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onAction('move-to-heap')}
-                        title="Move to Heap"
                         className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        aria-label="Move to Heap"
                       >
                         <LayoutGrid size={18} />
                       </button>
@@ -156,8 +156,8 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onAction('move-to-chapter')}
-                        title="Move to Chapter"
                         className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        aria-label="Move to Chapter"
                       >
                         <SquarePen size={18} />
                       </button>
@@ -171,8 +171,8 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onAction('move-to-trash')}
-                        title="Move to Trash"
                         className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
+                        aria-label="Move to Trash"
                       >
                         <Trash2 size={18} />
                       </button>

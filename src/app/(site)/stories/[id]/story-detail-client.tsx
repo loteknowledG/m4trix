@@ -1186,15 +1186,23 @@ export default function StoryPage() {
         titleMarquee
         navLeft={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => router.push("/stories")}
-              className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              aria-label="Back to stories"
-              title="Back to stories"
-            >
-              <ChevronLeft size={16} />
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/stories")}
+                    className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    aria-label="Back to stories"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Back to stories</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <SelectionHeaderBar
               selectedIds={selectedIds || []}
               moments={moments}

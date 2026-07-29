@@ -14,14 +14,18 @@ import { logger } from "@/lib/logger";
 import {
   addLineForCharacter,
   clearLinePositionsInScript,
+  ensureCharacterPositions,
   loadMomentDialogScript,
   moveCharacterInOrder,
   moveLineForCharacter,
   orderedCharactersFromScript,
   removeLineFromScript,
+  resolveCharacterPosition,
   saveMomentDialogScript,
+  updateCharacterPositionInScript,
   updateLineEffectInScript,
   updateLineTextInScript,
+  type DialogSpeakerPosition,
   type MomentDialogScript,
 } from "@/lib/moment-dialog";
 import {
@@ -159,6 +163,8 @@ function ParticipantDialogCard({
   index,
   total,
   lines,
+  position,
+  onPositionChange,
   onMoveParticipant,
   onAddLine,
   onMoveLine,
@@ -170,6 +176,8 @@ function ParticipantDialogCard({
   index: number;
   total: number;
   lines: Array<{ id: string; text: string; textEffect?: DialogTextEffect }>;
+  position: DialogSpeakerPosition;
+  onPositionChange: (position: DialogSpeakerPosition) => void;
   onMoveParticipant: (direction: -1 | 1) => void;
   onAddLine: (text: string) => void;
   onMoveLine: (lineId: string, direction: -1 | 1) => void;
@@ -195,6 +203,29 @@ function ParticipantDialogCard({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{character.name}</div>
           <div className="text-[11px] text-muted-foreground">{character.roleLabel}</div>
+          <label className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="shrink-0">Position</span>
+            <select
+              value={position}
+              onChange={(event) =>
+                onPositionChange(event.target.value as DialogSpeakerPosition)
+              }
+              className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary"
+              aria-label={`${character.name} dialog position`}
+            >
+              {character.role === "narrator" ? (
+                <>
+                  <option value="top">Top</option>
+                  <option value="bottom">Bottom</option>
+                </>
+              ) : (
+                <>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                </>
+              )}
+            </select>
+          </label>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -308,7 +339,9 @@ export function MomentDialogModal({
     const fallbackOrder = sceneCharacters.map((character) => character.id);
     void loadMomentDialogScript(momentId, storyId, fallbackOrder)
       .then((loaded) => {
-        if (!cancelled) setScript(loaded);
+        if (!cancelled) {
+          setScript(ensureCharacterPositions(loaded, sceneCharacters));
+        }
       })
       .catch((error) => {
         logger.error("Failed to load moment dialog", error);
@@ -392,6 +425,21 @@ export function MomentDialogModal({
     [persistScript, script],
   );
 
+  const updateCharacterPosition = useCallback(
+    (characterId: string, role: OrderedCharacter["role"], position: DialogSpeakerPosition) => {
+      const validPosition =
+        role === "narrator"
+          ? position === "top" || position === "bottom"
+            ? position
+            : "bottom"
+          : position === "left" || position === "right"
+            ? position
+            : "left";
+      void persistScript(updateCharacterPositionInScript(script, characterId, validPosition));
+    },
+    [persistScript, script],
+  );
+
   const resetLayout = useCallback(() => {
     void persistScript(clearLinePositionsInScript(script));
   }, [persistScript, script]);
@@ -430,7 +478,8 @@ export function MomentDialogModal({
             ) : orderedCharacters.length ? (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Top to bottom is speak order. Pick a text effect per line, then place bubbles on the scene.
+                  Top to bottom is speak order. Set each speaker&apos;s scene position, pick a text
+                  effect per line, then place bubbles on the scene.
                 </p>
                 {orderedCharacters.map((character, index) => (
                   <ParticipantDialogCard
@@ -439,6 +488,10 @@ export function MomentDialogModal({
                     index={index}
                     total={orderedCharacters.length}
                     lines={script.lines.filter((line) => line.characterId === character.id)}
+                    position={resolveCharacterPosition(script, character.id, character.role)}
+                    onPositionChange={(position) =>
+                      updateCharacterPosition(character.id, character.role, position)
+                    }
                     onMoveParticipant={(direction) => moveCharacter(character.id, direction)}
                     onAddLine={(text) => addLine(character, text)}
                     onMoveLine={(lineId, direction) => moveLine(character.id, lineId, direction)}

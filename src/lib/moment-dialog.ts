@@ -7,6 +7,10 @@ export type DialogLinePosition = {
   y: number;
 };
 
+export type NarratorDialogPosition = "top" | "bottom";
+export type CharacterSidePosition = "left" | "right";
+export type DialogSpeakerPosition = NarratorDialogPosition | CharacterSidePosition;
+
 export type MomentDialogLine = {
   id: string;
   characterId: string;
@@ -19,6 +23,7 @@ export type MomentDialogLine = {
 export type MomentDialogScript = {
   characterOrder: string[];
   lines: MomentDialogLine[];
+  characterPositions?: Record<string, DialogSpeakerPosition>;
 };
 
 type MomentRecord = {
@@ -46,6 +51,71 @@ export function normalizeDialogLinePosition(value: unknown): DialogLinePosition 
   return {
     x: Math.min(1, Math.max(0, x)),
     y: Math.min(1, Math.max(0, y)),
+  };
+}
+
+function normalizeDialogSpeakerPosition(value: unknown): DialogSpeakerPosition | undefined {
+  if (value === "top" || value === "bottom" || value === "left" || value === "right") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeCharacterPositions(value: unknown): Record<string, DialogSpeakerPosition> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const next: Record<string, DialogSpeakerPosition> = {};
+  for (const [characterId, position] of Object.entries(value)) {
+    if (!characterId) continue;
+    const normalized = normalizeDialogSpeakerPosition(position);
+    if (normalized) next[characterId] = normalized;
+  }
+  return next;
+}
+
+export function defaultPositionForRole(
+  role: "player" | "npc" | "narrator",
+): DialogSpeakerPosition {
+  if (role === "narrator") return "bottom";
+  if (role === "player") return "left";
+  return "right";
+}
+
+export function resolveCharacterPosition(
+  script: MomentDialogScript,
+  characterId: string,
+  role: "player" | "npc" | "narrator",
+): DialogSpeakerPosition {
+  return script.characterPositions?.[characterId] ?? defaultPositionForRole(role);
+}
+
+export function ensureCharacterPositions(
+  script: MomentDialogScript,
+  characters: Array<{ id: string; role: "player" | "npc" | "narrator" }>,
+): MomentDialogScript {
+  const nextPositions = { ...(script.characterPositions ?? {}) };
+  let changed = false;
+
+  for (const character of characters) {
+    if (nextPositions[character.id]) continue;
+    nextPositions[character.id] = defaultPositionForRole(character.role);
+    changed = true;
+  }
+
+  if (!changed && script.characterPositions) return script;
+  return { ...script, characterPositions: nextPositions };
+}
+
+export function updateCharacterPositionInScript(
+  script: MomentDialogScript,
+  characterId: string,
+  position: DialogSpeakerPosition,
+): MomentDialogScript {
+  return {
+    ...script,
+    characterPositions: {
+      ...(script.characterPositions ?? {}),
+      [characterId]: position,
+    },
   };
 }
 
@@ -89,12 +159,13 @@ export function normalizeMomentDialogScript(
       ? record.characterOrder.filter((id): id is string => typeof id === "string")
       : [];
     const characterOrder = mergeCharacterOrder(rawOrder, lines, fallbackCharacterOrder);
-    return { characterOrder, lines };
+    const characterPositions = normalizeCharacterPositions(record.characterPositions);
+    return { characterOrder, lines, characterPositions };
   }
 
   const legacyLines = normalizeLegacyDialogLines(value);
   const characterOrder = mergeCharacterOrder([], legacyLines, fallbackCharacterOrder);
-  return { characterOrder, lines: legacyLines };
+  return { characterOrder, lines: legacyLines, characterPositions: {} };
 }
 
 function mergeCharacterOrder(

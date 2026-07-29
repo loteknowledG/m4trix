@@ -39,6 +39,12 @@ import PlaylistVideoSkipSegmentEditor from '@/components/playlist-video-skip-seg
 import StoryExperienceModeToggle, {
   type StoryExperienceMode,
 } from '@/components/story-experience-mode-toggle';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { normalizeVideoTimedCues, type VideoTimedCue } from '@/lib/video-timed-cues';
 import { normalizeVideoSkipSegments, type VideoSkipSegment } from '@/lib/video-skip-segments';
 import { dispatchVideoSelected } from '@/lib/video-playback-events';
@@ -494,15 +500,23 @@ export default function PlaylistDetailClient() {
       title={title.trim() ? title : 'Untitled'}
       titleMarquee
       navLeft={
-        <button
-          type="button"
-          onClick={() => router.push('/videos')}
-          className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
-          aria-label="Back to videos"
-          title="Back to videos"
-        >
-          <ChevronLeft size={16} />
-        </button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => router.push('/videos')}
+                className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                aria-label="Back to videos"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Back to videos</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       }
       navRight={
         <StoryExperienceModeToggle
@@ -742,7 +756,6 @@ export default function PlaylistDetailClient() {
                                   onClick={() => selectVideo(video.id)}
                                   className="flex h-8 items-center justify-center text-xs tabular-nums text-muted-foreground transition-colors hover:text-foreground"
                                   aria-label={`Play video ${index + 1}: ${videoLabel(video)}`}
-                                  title={`Play ${index + 1}`}
                                 >
                                   {index + 1}
                                 </button>
@@ -758,7 +771,6 @@ export default function PlaylistDetailClient() {
                                   onClick={() => void handleRemoveVideo(video.id)}
                                   className="inline-flex h-8 shrink-0 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10"
                                   aria-label={`Remove ${videoLabel(video)}`}
-                                  title="Remove from playlist"
                                 >
                                   <Trash2 size={16} />
                                 </button>

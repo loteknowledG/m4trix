@@ -151,8 +151,8 @@ export default function StoriesPage() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={moveSelectedToTrash}
-                    title="Move selected stories to trash"
                     className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
+                    aria-label="Move to Trash"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -235,17 +235,25 @@ export default function StoriesPage() {
           </div>
         </div>
 
-        <Button
-          onClick={() => void createNewStory()}
-          size="icon"
-          variant="default"
-          disabled={creating}
-          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
-          aria-label="New story"
-          title="New story"
-        >
-          <SquarePen className="h-5 w-5" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => void createNewStory()}
+                size="icon"
+                variant="default"
+                disabled={creating}
+                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
+                aria-label="New story"
+              >
+                <SquarePen className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>New story</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </ContentLayout>
     </>
   );

@@ -542,8 +542,7 @@ export default function CharactersPage() {
                     size="sm"
                     type="submit"
                     className="h-8 w-8 p-0 inline-flex items-center justify-center"
-                    aria-label="Connect"
-                    title={
+                    aria-label={
                       activeProviderConnected
                         ? 'Provider connected — change provider to edit'
                         : 'Connect'
@@ -891,15 +890,24 @@ export default function CharactersPage() {
           setCrop={setCrop}
           setIsHoveringEdge={setIsHoveringEdge}
         />
-        <Button
-          onClick={addAgent}
-          size="icon"
-          variant="default"
-          className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow"
-          title="Add New Character"
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={addAgent}
+                size="icon"
+                variant="default"
+                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow"
+                aria-label="Add New Character"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Add New Character</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         {(fileDragOverlay || dragOverId) && (
           <div
