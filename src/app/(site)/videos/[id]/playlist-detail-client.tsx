@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { set } from 'idb-keyval';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
@@ -36,6 +36,9 @@ import { isValidVideoUrl, parseEmbedCode } from '@/lib/video-utils';
 import { getIframeEmbedKind } from '@/lib/videojs-source';
 import PlaylistVideoCueEditor from '@/components/playlist-video-cue-editor';
 import PlaylistVideoSkipSegmentEditor from '@/components/playlist-video-skip-segment-editor';
+import StoryExperienceModeToggle, {
+  type StoryExperienceMode,
+} from '@/components/story-experience-mode-toggle';
 import { normalizeVideoTimedCues, type VideoTimedCue } from '@/lib/video-timed-cues';
 import { normalizeVideoSkipSegments, type VideoSkipSegment } from '@/lib/video-skip-segments';
 import { dispatchVideoSelected } from '@/lib/video-playback-events';
@@ -133,6 +136,7 @@ export default function PlaylistDetailClient() {
   const [placementCueId, setPlacementCueId] = useState<string | null>(null);
   const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0);
   const [timelineFollowEnabled, setTimelineFollowEnabled] = useState(false);
+  const [storyMode, setStoryMode] = useState<StoryExperienceMode>('view');
   const playbackControlsRef = useRef<VideoPlaybackControls | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +148,48 @@ export default function PlaylistDetailClient() {
     ? getIframeEmbedKind(selectedVideo.src, selectedVideo.kind)
     : null;
   const needsManualTimelineFollow = selectedIframeEmbedKind === 'direct';
+  const isEditMode = storyMode === 'edit';
+
+  const enterViewMode = useCallback(() => {
+    setStoryMode('view');
+    setPlacementCueId(null);
+    setPlaybackArmed(true);
+  }, []);
+
+  const enterEditMode = useCallback(() => {
+    setStoryMode('edit');
+  }, []);
+
+  const handleStoryModeChange = useCallback(
+    (mode: StoryExperienceMode) => {
+      if (mode === 'view') {
+        enterViewMode();
+        return;
+      }
+      enterEditMode();
+    },
+    [enterEditMode, enterViewMode],
+  );
+
+  useEffect(() => {
+    if (storyMode === 'view' && !loading && videos.length > 0) {
+      setPlaybackArmed(true);
+    }
+  }, [storyMode, loading, videos.length]);
+
+  const selectedCueIdsKey = useMemo(
+    () => selectedVideoCues.map(cue => cue.id).join(','),
+    [selectedVideoCues],
+  );
+
+  useEffect(() => {
+    if (!selectedVideoId || selectedVideoCues.length === 0) return;
+    setPlacementCueId(prev => {
+      if (prev && selectedVideoCues.some(cue => cue.id === prev)) return prev;
+      const first = [...selectedVideoCues].sort((a, b) => a.start - b.start)[0];
+      return first?.id ?? null;
+    });
+  }, [selectedVideoId, selectedCueIdsKey, selectedVideoCues]);
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) {
@@ -415,6 +461,26 @@ export default function PlaylistDetailClient() {
     selectVideo(nextId, false);
   }, [videos, selectedVideoId, selectVideo]);
 
+  const goToPreviousVideo = useCallback(() => {
+    if (selectedIndex <= 0) return;
+    const prevId = videos[selectedIndex - 1]?.id;
+    if (!prevId) return;
+    setPlaybackArmed(true);
+    selectVideo(prevId, true);
+  }, [selectedIndex, selectVideo, videos]);
+
+  const goToNextVideo = useCallback(() => {
+    if (videos.length === 0) return;
+    if (selectedIndex < 0 || selectedIndex >= videos.length - 1) {
+      advanceToNext();
+      return;
+    }
+    const nextId = videos[selectedIndex + 1]?.id;
+    if (!nextId) return;
+    setPlaybackArmed(true);
+    selectVideo(nextId, true);
+  }, [advanceToNext, selectVideo, selectedIndex, videos]);
+
   if (!playlistId) {
     return (
       <ContentLayout title="Videos">
@@ -438,60 +504,95 @@ export default function PlaylistDetailClient() {
           <ChevronLeft size={16} />
         </button>
       }
+      navRight={
+        <StoryExperienceModeToggle
+          mode={storyMode}
+          onModeChange={handleStoryModeChange}
+        />
+      }
     >
       <ErrorBoundary>
         <div
-          className="overflow-auto"
+          className={cn(
+            'overflow-auto',
+            !isEditMode && 'bg-gradient-to-b from-background via-background to-black/90',
+          )}
           style={{ height: 'calc(100vh - var(--app-header-height, 56px))' }}
         >
-          <div className="py-4">
-            <div className="mb-6">
-              {editingTitle ? (
-                <input
-                  autoFocus
-                  aria-label="Edit playlist title"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  onBlur={async () => {
-                    await saveTitle();
-                    setEditingTitle(false);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
+          <div
+            className={cn(
+              isEditMode
+                ? 'py-4'
+                : 'mx-auto flex min-h-full w-full max-w-5xl flex-col justify-center px-2 py-8 sm:px-4',
+            )}
+          >
+            {isEditMode ? (
+              <div className="mb-6">
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    aria-label="Edit playlist title"
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    onBlur={async () => {
+                      await saveTitle();
                       setEditingTitle(false);
-                    }
-                  }}
-                  className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setEditingTitle(true)}
-                  className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
-                  aria-label="Edit playlist title"
-                >
-                  <Marquee
-                    className="text-5xl font-light"
-                    duration="8s"
-                    gap="13rem"
-                    distance="200%"
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).blur();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setEditingTitle(false);
+                      }
+                    }}
+                    className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingTitle(true)}
+                    className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
+                    aria-label="Edit playlist title"
                   >
-                    {title.trim() ? title : 'Add a title'}
-                  </Marquee>
-                </button>
-              )}
-            </div>
+                    <Marquee
+                      className="text-5xl font-light"
+                      duration="8s"
+                      gap="13rem"
+                      distance="200%"
+                    >
+                      {title.trim() ? title : 'Add a title'}
+                    </Marquee>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="mb-5 text-center">
+                <h1 className="text-3xl font-light tracking-tight text-foreground sm:text-4xl">
+                  {title.trim() ? title : 'Untitled story'}
+                </h1>
+                {selectedVideo ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {videoLabel(selectedVideo)}
+                    {videos.length > 1
+                      ? ` · Part ${selectedIndex + 1} of ${videos.length}`
+                      : null}
+                  </p>
+                ) : null}
+              </div>
+            )}
 
             {loading ? (
               <div className="text-sm text-muted-foreground">Loading…</div>
             ) : (
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-                <div className="min-w-0 flex-1 space-y-6">
-                  <div className="space-y-3">
+              <div
+                className={cn(
+                  isEditMode ? 'flex flex-col gap-6 lg:flex-row lg:items-start' : 'space-y-4',
+                )}
+              >
+                <div className={cn('min-w-0 flex-1', isEditMode ? 'space-y-6' : 'space-y-4')}>
+                  <div className={cn('space-y-3', !isEditMode && 'overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10')}>
                     <UniversalVideoPlayer
                       key={selectedVideo?.id ?? 'playlist-empty'}
                       src={selectedVideo?.src ?? ''}
@@ -501,16 +602,18 @@ export default function PlaylistDetailClient() {
                       userActivated={playbackArmed}
                       onEnded={autoPlayEnabled ? advanceToNext : undefined}
                       cues={selectedVideoCues}
-                      editCueId={placementCueId}
-                      onCueLayoutChange={handleCueLayoutChange}
+                      editCueId={isEditMode ? placementCueId : null}
+                      onCueLayoutChange={isEditMode ? handleCueLayoutChange : undefined}
                       skipSegments={selectedSkipSegments}
-                      playbackDebugHud={playbackDebugHud}
-                      onPlaybackTimeChange={setPlaybackCurrentTime}
-                      onTimelineFollowChange={setTimelineFollowEnabled}
-                      playbackControlsRef={playbackControlsRef}
+                      playbackDebugHud={isEditMode && playbackDebugHud}
+                      onPlaybackTimeChange={isEditMode ? setPlaybackCurrentTime : undefined}
+                      onTimelineFollowChange={
+                        isEditMode ? setTimelineFollowEnabled : undefined
+                      }
+                      playbackControlsRef={isEditMode ? playbackControlsRef : undefined}
                     />
 
-                    {selectedVideo ? (
+                    {isEditMode && selectedVideo ? (
                       <VideoCueTimeline
                         cues={selectedVideoCues}
                         skipSegments={selectedSkipSegments}
@@ -526,43 +629,81 @@ export default function PlaylistDetailClient() {
                       />
                     ) : null}
 
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
-                      <div>
-                        <div className="text-sm font-medium">Autoplay</div>
-                        <div className="text-xs text-muted-foreground">
-                          Start each video automatically and continue to the next
+                    {isEditMode ? (
+                      <>
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
+                          <div>
+                            <div className="text-sm font-medium">Autoplay</div>
+                            <div className="text-xs text-muted-foreground">
+                              Start each video automatically and continue to the next
+                            </div>
+                          </div>
+                          <Switch
+                            checked={autoPlayEnabled}
+                            onCheckedChange={setAutoPlayEnabled}
+                            aria-label="Toggle autoplay"
+                          />
                         </div>
-                      </div>
-                      <Switch
-                        checked={autoPlayEnabled}
-                        onCheckedChange={setAutoPlayEnabled}
-                        aria-label="Toggle autoplay"
-                      />
-                    </div>
 
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
-                      <div>
-                        <div className="text-sm font-medium">Playback debugger</div>
-                        <div className="text-xs text-muted-foreground">
-                          Show current time, next mark, and manual clock controls
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
+                          <div>
+                            <div className="text-sm font-medium">Playback debugger</div>
+                            <div className="text-xs text-muted-foreground">
+                              Show current time, next mark, and manual clock controls
+                            </div>
+                          </div>
+                          <Switch
+                            checked={playbackDebugHud}
+                            onCheckedChange={setPlaybackDebugHud}
+                            aria-label="Toggle playback debugger"
+                          />
                         </div>
-                      </div>
-                      <Switch
-                        checked={playbackDebugHud}
-                        onCheckedChange={setPlaybackDebugHud}
-                        aria-label="Toggle playback debugger"
-                      />
-                    </div>
+                      </>
+                    ) : null}
                   </div>
 
-                  <PlaylistRollerDeck
-                    videos={videos}
-                    selectedId={selectedVideoId}
-                    onSelect={selectVideo}
-                  />
+                  {!isEditMode && videos.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border/70 bg-card/40 px-4 py-8 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        This story has no videos yet.
+                      </p>
+                      <Button type="button" className="mt-4" onClick={enterEditMode}>
+                        Switch to Edit to add videos
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {!isEditMode && videos.length > 1 ? (
+                    <div className="flex items-center justify-center gap-3 pt-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={selectedIndex <= 0}
+                        onClick={goToPreviousVideo}
+                      >
+                        Previous
+                      </Button>
+                      <span className="min-w-[5rem] text-center text-xs tabular-nums text-muted-foreground">
+                        {selectedIndex + 1} / {videos.length}
+                      </span>
+                      <Button type="button" variant="secondary" size="sm" onClick={goToNextVideo}>
+                        Next
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {isEditMode ? (
+                    <PlaylistRollerDeck
+                      videos={videos}
+                      selectedId={selectedVideoId}
+                      onSelect={selectVideo}
+                    />
+                  ) : null}
                 </div>
 
-                <aside className="w-full shrink-0 lg:w-80 xl:w-96">
+                {isEditMode ? (
+                  <aside className="w-full shrink-0 lg:w-80 xl:w-96">
                   <div className="sticky top-4 space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm">
                     <div className="space-y-2">
                       <label htmlFor="playlist-video-select" className="text-sm font-medium">
@@ -710,6 +851,7 @@ export default function PlaylistDetailClient() {
                     </div>
                   </div>
                 </aside>
+                ) : null}
               </div>
             )}
           </div>

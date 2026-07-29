@@ -27,6 +27,13 @@ type PlaylistVideoCueEditorProps = {
   currentTime?: number;
 };
 
+function cueSummaryLabel(cue: VideoTimedCue, index: number) {
+  if (cue.speaker?.trim()) return cue.speaker.trim();
+  const text = cue.text.trim();
+  if (text) return text.length > 28 ? `${text.slice(0, 28)}…` : text;
+  return `Dialog ${index + 1}`;
+}
+
 function CueTimeField({
   cueId,
   label,
@@ -92,6 +99,200 @@ function CueTimeField({
   );
 }
 
+function SelectedCueEditor({
+  cue,
+  index,
+  currentTime,
+  onUpdate,
+  onRemove,
+}: {
+  cue: VideoTimedCue;
+  index: number;
+  currentTime?: number;
+  onUpdate: (patch: Partial<VideoTimedCue>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3 ring-1 ring-primary/20">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">{cueSummaryLabel(cue, index)}</div>
+          <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            {formatCueTime(cue.start)} – {formatCueTime(cue.end)}
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+          onClick={onRemove}
+        >
+          Remove
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <CueTimeField
+          cueId={cue.id}
+          label="Start"
+          value={cue.start}
+          currentTime={currentTime}
+          onCommit={start => {
+            onUpdate(commitCueStartTime(start, cue.end));
+          }}
+        />
+        <CueTimeField
+          cueId={cue.id}
+          label="End"
+          value={cue.end}
+          currentTime={currentTime}
+          onCommit={end => {
+            onUpdate(commitCueEndTime(cue.start, end));
+          }}
+        />
+      </div>
+
+      <Input
+        value={cue.speaker ?? ''}
+        onChange={e => onUpdate({ speaker: e.target.value })}
+        placeholder="Speaker (optional)"
+        className="h-8 text-xs"
+      />
+
+      <Textarea
+        value={cue.text}
+        onChange={e => onUpdate({ text: e.target.value })}
+        placeholder="Dialog text"
+        rows={3}
+        className="resize-y text-xs"
+      />
+
+      <div className="space-y-2 rounded-md border border-border/50 bg-muted/20 p-2">
+        <div className="text-[11px] font-medium text-muted-foreground">Style</div>
+
+        <label className="grid gap-1">
+          <span className="text-[11px] text-muted-foreground">Text effect</span>
+          <select
+            value={cue.textEffect ?? 'none'}
+            onChange={e =>
+              onUpdate({
+                textEffect: e.target.value as VideoCueTextEffect,
+              })
+            }
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            {VIDEO_CUE_TEXT_EFFECTS.map(option => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="grid gap-1">
+          <span className="text-[11px] text-muted-foreground">Font</span>
+          <select
+            value={cue.font ?? 'system'}
+            onChange={e => onUpdate({ font: e.target.value as VideoCueFontId })}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            {VIDEO_CUE_FONT_OPTIONS.map(option => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="grid gap-1">
+          <span className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Font size</span>
+            <span>{Math.round((cue.fontScale ?? 0.04) * 1000) / 10}</span>
+          </span>
+          <input
+            type="range"
+            min={2}
+            max={12}
+            step={0.5}
+            value={(cue.fontScale ?? 0.04) * 100}
+            onChange={e => onUpdate({ fontScale: Number(e.target.value) / 100 })}
+            className="w-full"
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="grid gap-1">
+            <span className="text-[11px] text-muted-foreground">Text color</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={cue.color ?? '#ffffff'}
+                onChange={e =>
+                  onUpdate({
+                    color: normalizeCueColor(e.target.value, '#ffffff'),
+                  })
+                }
+                className="h-8 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
+                aria-label="Text color"
+              />
+              <Input
+                value={cue.color ?? '#ffffff'}
+                onChange={e =>
+                  onUpdate({
+                    color: normalizeCueColor(e.target.value, cue.color ?? '#ffffff'),
+                  })
+                }
+                className="h-8 font-mono text-xs"
+              />
+            </div>
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-[11px] text-muted-foreground">Shadow color</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={cue.shadowColor ?? '#000000'}
+                onChange={e =>
+                  onUpdate({
+                    shadowColor: normalizeCueColor(e.target.value, '#000000'),
+                  })
+                }
+                className="h-8 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
+                aria-label="Shadow color"
+              />
+              <Input
+                value={cue.shadowColor ?? '#000000'}
+                onChange={e =>
+                  onUpdate({
+                    shadowColor: normalizeCueColor(
+                      e.target.value,
+                      cue.shadowColor ?? '#000000',
+                    ),
+                  })
+                }
+                className="h-8 font-mono text-xs"
+              />
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        Drag the highlighted dialog on the video to move it. Use the corner handle to resize.
+      </p>
+
+      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+        <span>X {Math.round(cue.x * 100)}%</span>
+        <span>Y {Math.round(cue.y * 100)}%</span>
+        <span>Width {Math.round((cue.width ?? 0.72) * 100)}%</span>
+        <span>Size {Math.round((cue.fontScale ?? 0.04) * 1000) / 10}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PlaylistVideoCueEditor({
   cues,
   onChange,
@@ -104,6 +305,15 @@ export default function PlaylistVideoCueEditor({
     [cues],
   );
 
+  const selectedCue = useMemo(
+    () => sortedCues.find(cue => cue.id === placementCueId) ?? null,
+    [sortedCues, placementCueId],
+  );
+
+  const selectedIndex = selectedCue
+    ? sortedCues.findIndex(cue => cue.id === selectedCue.id)
+    : -1;
+
   const updateCue = useCallback(
     (cueId: string, patch: Partial<VideoTimedCue>) => {
       onChange(
@@ -115,8 +325,12 @@ export default function PlaylistVideoCueEditor({
 
   const removeCue = useCallback(
     (cueId: string) => {
-      onChange(cues.filter(cue => cue.id !== cueId));
-      if (placementCueId === cueId) onPlacementCueIdChange(null);
+      const next = cues.filter(cue => cue.id !== cueId);
+      onChange(next);
+      if (placementCueId === cueId) {
+        const sorted = [...next].sort((a, b) => a.start - b.start);
+        onPlacementCueIdChange(sorted[0]?.id ?? null);
+      }
     },
     [cues, onChange, placementCueId, onPlacementCueIdChange],
   );
@@ -134,7 +348,7 @@ export default function PlaylistVideoCueEditor({
         <div>
           <div className="text-sm font-medium">Timed dialogs</div>
           <div className="text-xs text-muted-foreground">
-            Use the timeline under the video, or type times below
+            Select a block on the timeline to edit one dialog at a time
           </div>
         </div>
         <Button type="button" size="sm" variant="secondary" onClick={addCue}>
@@ -147,206 +361,50 @@ export default function PlaylistVideoCueEditor({
           No dialogs yet. Add one, then drag it on the timeline under the video.
         </p>
       ) : (
-        <ul className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
-          {sortedCues.map((cue, index) => {
-            const placing = placementCueId === cue.id;
-            return (
-              <li
-                key={cue.id}
-                className={cn(
-                  'space-y-2 rounded-lg border border-border/60 p-2',
-                  placing && 'border-primary/50 ring-1 ring-primary/30',
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Dialog {index + 1}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={placing ? 'default' : 'outline'}
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onPlacementCueIdChange(placing ? null : cue.id)}
-                    >
-                      {placing ? 'Done' : 'Edit on video'}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => removeCue(cue.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <CueTimeField
-                    cueId={cue.id}
-                    label="Start"
-                    value={cue.start}
-                    currentTime={currentTime}
-                    onCommit={start => {
-                      const next = commitCueStartTime(start, cue.end);
-                      updateCue(cue.id, next);
-                    }}
-                  />
-                  <CueTimeField
-                    cueId={cue.id}
-                    label="End"
-                    value={cue.end}
-                    currentTime={currentTime}
-                    onCommit={end => {
-                      const next = commitCueEndTime(cue.start, end);
-                      updateCue(cue.id, next);
-                    }}
-                  />
-                </div>
-
-                <Input
-                  value={cue.speaker ?? ''}
-                  onChange={e => updateCue(cue.id, { speaker: e.target.value })}
-                  placeholder="Speaker (optional)"
-                  className="h-8 text-xs"
-                />
-
-                <Textarea
-                  value={cue.text}
-                  onChange={e => updateCue(cue.id, { text: e.target.value })}
-                  placeholder="Dialog text"
-                  rows={2}
-                  className="resize-y text-xs"
-                />
-
-                <div className="space-y-2 rounded-md border border-border/50 bg-muted/20 p-2">
-                  <div className="text-[11px] font-medium text-muted-foreground">Style</div>
-
-                  <label className="grid gap-1">
-                    <span className="text-[11px] text-muted-foreground">Text effect</span>
-                    <select
-                      value={cue.textEffect ?? 'none'}
-                      onChange={e =>
-                        updateCue(cue.id, {
-                          textEffect: e.target.value as VideoCueTextEffect,
-                        })
-                      }
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    >
-                      {VIDEO_CUE_TEXT_EFFECTS.map(option => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-[11px] text-muted-foreground">Font</span>
-                    <select
-                      value={cue.font ?? 'system'}
-                      onChange={e =>
-                        updateCue(cue.id, { font: e.target.value as VideoCueFontId })
-                      }
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    >
-                      {VIDEO_CUE_FONT_OPTIONS.map(option => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>Font size</span>
-                      <span>{Math.round((cue.fontScale ?? 0.04) * 1000) / 10}</span>
+        <>
+          <ul className="flex flex-wrap gap-1.5">
+            {sortedCues.map((cue, index) => {
+              const selected = placementCueId === cue.id;
+              return (
+                <li key={cue.id}>
+                  <button
+                    type="button"
+                    onClick={() => onPlacementCueIdChange(cue.id)}
+                    className={cn(
+                      'max-w-full rounded-md border px-2 py-1 text-left text-[11px] transition-colors',
+                      selected
+                        ? 'border-primary bg-primary/15 text-foreground ring-1 ring-primary/30'
+                        : 'border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                    )}
+                    title={`${cueSummaryLabel(cue, index)} (${formatCueTime(cue.start)}–${formatCueTime(cue.end)})`}
+                  >
+                    <span className="block truncate font-medium">
+                      {cueSummaryLabel(cue, index)}
                     </span>
-                    <input
-                      type="range"
-                      min={2}
-                      max={12}
-                      step={0.5}
-                      value={(cue.fontScale ?? 0.04) * 100}
-                      onChange={e =>
-                        updateCue(cue.id, { fontScale: Number(e.target.value) / 100 })
-                      }
-                      className="w-full"
-                    />
-                  </label>
+                    <span className="block font-mono tabular-nums opacity-80">
+                      {formatCueTime(cue.start)}–{formatCueTime(cue.end)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="grid gap-1">
-                      <span className="text-[11px] text-muted-foreground">Text color</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={cue.color ?? '#ffffff'}
-                          onChange={e =>
-                            updateCue(cue.id, {
-                              color: normalizeCueColor(e.target.value, '#ffffff'),
-                            })
-                          }
-                          className="h-8 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
-                          aria-label="Text color"
-                        />
-                        <Input
-                          value={cue.color ?? '#ffffff'}
-                          onChange={e =>
-                            updateCue(cue.id, {
-                              color: normalizeCueColor(e.target.value, cue.color ?? '#ffffff'),
-                            })
-                          }
-                          className="h-8 font-mono text-xs"
-                        />
-                      </div>
-                    </label>
-
-                    <label className="grid gap-1">
-                      <span className="text-[11px] text-muted-foreground">Shadow color</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={cue.shadowColor ?? '#000000'}
-                          onChange={e =>
-                            updateCue(cue.id, {
-                              shadowColor: normalizeCueColor(e.target.value, '#000000'),
-                            })
-                          }
-                          className="h-8 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
-                          aria-label="Shadow color"
-                        />
-                        <Input
-                          value={cue.shadowColor ?? '#000000'}
-                          onChange={e =>
-                            updateCue(cue.id, {
-                              shadowColor: normalizeCueColor(
-                                e.target.value,
-                                cue.shadowColor ?? '#000000',
-                              ),
-                            })
-                          }
-                          className="h-8 font-mono text-xs"
-                        />
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                  <span>X {Math.round(cue.x * 100)}%</span>
-                  <span>Y {Math.round(cue.y * 100)}%</span>
-                  <span>Width {Math.round((cue.width ?? 0.72) * 100)}%</span>
-                  <span>Size {Math.round((cue.fontScale ?? 0.04) * 1000) / 10}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+          {selectedCue ? (
+            <SelectedCueEditor
+              key={selectedCue.id}
+              cue={selectedCue}
+              index={selectedIndex}
+              currentTime={currentTime}
+              onUpdate={patch => updateCue(selectedCue.id, patch)}
+              onRemove={() => removeCue(selectedCue.id)}
+            />
+          ) : (
+            <p className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+              Select a dialog on the timeline or pick a chip above to edit its settings.
+            </p>
+          )}
+        </>
       )}
     </div>
   );
