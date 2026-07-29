@@ -463,6 +463,7 @@ function EmbedIframePlayer({
 
       if (playing) {
         if (!autoSyncTimelineRef.current) return;
+        lastEmbedTimeTickRef.current = Date.now();
         manualClockRef.current?.start();
         setManualClockRunning(true);
         timelineFollowRef.current = true;
@@ -473,6 +474,7 @@ function EmbedIframePlayer({
       if (!manualClockRef.current?.isRunning()) return;
       manualClockRef.current.pause();
       setManualClockRunning(false);
+      lastEmbedTimeTickRef.current = 0;
       onTimelineFollowChangeRef.current?.(false);
     },
     [embedKind],
@@ -795,7 +797,8 @@ function EmbedIframePlayer({
       window.setTimeout(() => {
         if (!isEmbedFocused() || !autoSyncTimelineRef.current) return;
         if (Date.now() - lastEmbedSignalRef.current < 300) return;
-        syncEmbedPlaybackState(!manualClockRef.current?.isRunning());
+        if (manualClockRef.current?.isRunning()) return;
+        syncEmbedPlaybackState(true);
       }, 0);
     };
 
@@ -980,11 +983,13 @@ function EmbedIframePlayer({
       }
 
       if (isEmbedPlayingMessage(event.origin, event.data)) {
+        lastEmbedSignalRef.current = Date.now();
         syncEmbedPlaybackState(true);
         setAwaitingUserStart(false);
       }
 
       if (isEmbedPausedMessage(event.origin, event.data)) {
+        lastEmbedSignalRef.current = Date.now();
         syncEmbedPlaybackState(false);
       }
 
