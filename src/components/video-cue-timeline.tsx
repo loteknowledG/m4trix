@@ -321,7 +321,7 @@ export default function VideoCueTimeline({
 
       <p className="text-[11px] leading-snug text-muted-foreground">
         {manualFollow
-          ? 'Click Follow video or press play in the embed — the timeline runs while the player is focused. Use Pause follow or click outside the video to stop.'
+          ? 'Play/pause in the embed syncs the timeline automatically. Pause follow stops auto-sync; scrubbing pauses the clock until you play again.'
           : 'Drag the red playhead or track to scrub (pauses video) · drag dialog blocks to move · drag edges to trim · amber dashes are skip segments'}
       </p>
     </div>

@@ -32,7 +32,8 @@ import {
   updatePlaylistVideo,
   type PlaylistVideo,
 } from '@/lib/playlists';
-import { isValidVideoUrl, parseEmbedCode, getVideoEmbedKind } from '@/lib/video-utils';
+import { isValidVideoUrl, parseEmbedCode } from '@/lib/video-utils';
+import { getIframeEmbedKind } from '@/lib/videojs-source';
 import PlaylistVideoCueEditor from '@/components/playlist-video-cue-editor';
 import PlaylistVideoSkipSegmentEditor from '@/components/playlist-video-skip-segment-editor';
 import { normalizeVideoTimedCues, type VideoTimedCue } from '@/lib/video-timed-cues';
@@ -139,11 +140,10 @@ export default function PlaylistDetailClient() {
   const selectedVideo = selectedIndex >= 0 ? videos[selectedIndex] : null;
   const selectedVideoCues = normalizeVideoTimedCues(selectedVideo?.cues);
   const selectedSkipSegments = normalizeVideoSkipSegments(selectedVideo?.skipSegments);
-  const selectedEmbedKind =
-    selectedVideo?.kind === 'embed' && selectedVideo.src
-      ? getVideoEmbedKind(selectedVideo.src)
-      : null;
-  const needsManualTimelineFollow = selectedEmbedKind === 'direct';
+  const selectedIframeEmbedKind = selectedVideo
+    ? getIframeEmbedKind(selectedVideo.src, selectedVideo.kind)
+    : null;
+  const needsManualTimelineFollow = selectedIframeEmbedKind === 'direct';
 
   const loadPlaylist = useCallback(async () => {
     if (!playlistId) {
@@ -373,8 +373,6 @@ export default function PlaylistDetailClient() {
 
   const handleTimelineScrubStart = useCallback(() => {
     playbackControlsRef.current?.pause();
-    playbackControlsRef.current?.setTimelineFollow(false);
-    setTimelineFollowEnabled(false);
   }, []);
 
   const handleTimelineFollowToggle = useCallback(() => {
@@ -508,9 +506,7 @@ export default function PlaylistDetailClient() {
                       skipSegments={selectedSkipSegments}
                       playbackDebugHud={playbackDebugHud}
                       onPlaybackTimeChange={setPlaybackCurrentTime}
-                      onTimelineFollowChange={running => {
-                        if (running) setTimelineFollowEnabled(true);
-                      }}
+                      onTimelineFollowChange={setTimelineFollowEnabled}
                       playbackControlsRef={playbackControlsRef}
                     />
 

@@ -254,8 +254,19 @@ function isGenericEmbedPlaying(data: unknown): boolean {
   }
   const payload = parseMessageData(data);
   if (!payload) return false;
-  const event = String(payload.event ?? payload.method ?? payload.type ?? payload.action ?? '').toLowerCase();
-  return event === 'play' || event === 'playing' || event === 'resume' || event === 'started';
+  const event = String(
+    payload.event ?? payload.method ?? payload.type ?? payload.action ?? payload.name ?? '',
+  ).toLowerCase();
+  const state = String(payload.state ?? payload.status ?? payload.playback ?? '').toLowerCase();
+  if (state === 'playing' || state === 'play') return true;
+  return (
+    event === 'play' ||
+    event === 'playing' ||
+    event === 'resume' ||
+    event === 'started' ||
+    event === 'video-play' ||
+    event.includes('playbackstarted')
+  );
 }
 
 function isGenericEmbedPaused(data: unknown): boolean {
@@ -265,8 +276,21 @@ function isGenericEmbedPaused(data: unknown): boolean {
   }
   const payload = parseMessageData(data);
   if (!payload) return false;
-  const event = String(payload.event ?? payload.method ?? payload.type ?? payload.action ?? '').toLowerCase();
-  return event.includes('pause') || event === 'paused' || event === 'stopped' || event === 'ended';
+  const event = String(
+    payload.event ?? payload.method ?? payload.type ?? payload.action ?? payload.name ?? '',
+  ).toLowerCase();
+  const state = String(payload.state ?? payload.status ?? payload.playback ?? '').toLowerCase();
+  if (state === 'paused' || state === 'pause' || state === 'stopped' || state === 'ended') {
+    return true;
+  }
+  return (
+    event.includes('pause') ||
+    event === 'paused' ||
+    event === 'stopped' ||
+    event === 'ended' ||
+    event === 'video-pause' ||
+    event.includes('playbackpaused')
+  );
 }
 
 function readGenericEmbedTime(data: unknown): number | null {
@@ -364,6 +388,10 @@ function EmbedIframePlayer({
   const vimeoSetupTokenRef = useRef(0);
   const manualClockRef = useRef<ManualPlaybackClock | null>(null);
   const timelineFollowRef = useRef(false);
+  const autoSyncTimelineRef = useRef(true);
+  const lastEmbedTimeTickRef = useRef(0);
+  const lastEmbedTimeValueRef = useRef(-1);
+  const lastEmbedSignalRef = useRef(0);
   const onTimelineFollowChangeRef = useRef(onTimelineFollowChange);
   onTimelineFollowChangeRef.current = onTimelineFollowChange;
   const [manualClockRunning, setManualClockRunning] = useState(false);
@@ -433,34 +461,68 @@ function EmbedIframePlayer({
       setEmbedPlaying(playing);
       if (embedKind !== 'direct') return;
 
-      const shouldRun = playing && timelineFollowRef.current;
-      const wasRunning = Boolean(manualClockRef.current?.isRunning());
-      if (shouldRun) {
-        if (!wasRunning) {
-          manualClockRef.current?.start();
-          setManualClockRunning(true);
-          onTimelineFollowChangeRef.current?.(true);
-        }
-      } else if (wasRunning) {
-        manualClockRef.current?.pause();
-        setManualClockRunning(false);
-        onTimelineFollowChangeRef.current?.(false);
+      if (playing) {
+        if (!autoSyncTimelineRef.current) return;
+        manualClockRef.current?.start();
+        setManualClockRunning(true);
+        timelineFollowRef.current = true;
+        onTimelineFollowChangeRef.current?.(true);
+        return;
       }
+
+      if (!manualClockRef.current?.isRunning()) return;
+      manualClockRef.current.pause();
+      setManualClockRunning(false);
+      onTimelineFollowChangeRef.current?.(false);
     },
     [embedKind],
   );
 
-  const setTimelineFollow = useCallback(
-    (enabled: boolean) => {
-      timelineFollowRef.current = enabled;
+  const noteDirectEmbedTime = useCallback(
+    (seconds: number) => {
       if (embedKind !== 'direct') return;
-      syncEmbedPlaybackState(enabled);
+      const now = Date.now();
+      const advancing =
+        lastEmbedTimeValueRef.current < 0 ||
+        seconds > lastEmbedTimeValueRef.current + 0.02;
+      lastEmbedTimeValueRef.current = seconds;
+      lastEmbedTimeTickRef.current = now;
+      if (advancing && autoSyncTimelineRef.current) {
+        syncEmbedPlaybackState(true);
+      }
     },
     [embedKind, syncEmbedPlaybackState],
   );
 
+  const startManualTimeline = useCallback(() => {
+    if (embedKind !== 'direct') return;
+    manualClockRef.current?.start();
+    setManualClockRunning(true);
+    onTimelineFollowChangeRef.current?.(true);
+  }, [embedKind]);
+
+  const stopManualTimeline = useCallback(() => {
+    manualClockRef.current?.pause();
+    setManualClockRunning(false);
+    onTimelineFollowChangeRef.current?.(false);
+  }, []);
+
+  const setTimelineFollow = useCallback(
+    (enabled: boolean) => {
+      autoSyncTimelineRef.current = enabled;
+      timelineFollowRef.current = enabled;
+      if (embedKind !== 'direct') return;
+      if (enabled) {
+        startManualTimeline();
+      } else {
+        stopManualTimeline();
+      }
+    },
+    [embedKind, startManualTimeline, stopManualTimeline],
+  );
+
   const isTimelineFollowEnabled = useCallback(
-    () => embedKind === 'direct' && timelineFollowRef.current,
+    () => embedKind === 'direct' && autoSyncTimelineRef.current,
     [embedKind],
   );
 
@@ -471,8 +533,7 @@ function EmbedIframePlayer({
 
   const pauseEmbed = useCallback(() => {
     if (embedKind === 'direct') {
-      timelineFollowRef.current = false;
-      syncEmbedPlaybackState(false);
+      stopManualTimeline();
       return;
     }
     if (embedKind === 'vimeo' && vimeoPlayerRef.current) {
@@ -503,7 +564,7 @@ function EmbedIframePlayer({
     if (!iframe) return;
     pauseEmbedPlayback(iframe, embedKind);
     syncEmbedPlaybackState(false);
-  }, [embedKind, syncEmbedPlaybackState]);
+  }, [embedKind, stopManualTimeline, syncEmbedPlaybackState]);
 
   useEffect(() => {
     if (!playbackControlsRef) return;
@@ -698,7 +759,7 @@ function EmbedIframePlayer({
       return;
     }
 
-    const clock = createManualPlaybackClock(updatePlaybackTime);
+    const clock = createManualPlaybackClock(time => updatePlaybackTimeRef.current(time));
     manualClockRef.current = clock;
     return () => {
       clock.dispose();
@@ -707,38 +768,58 @@ function EmbedIframePlayer({
       }
       setManualClockRunning(false);
     };
-  }, [embedKind, trackPlaybackTime, updatePlaybackTime, iframeSrc]);
+  }, [embedKind, trackPlaybackTime, iframeSrc]);
 
   useEffect(() => {
+    autoSyncTimelineRef.current = true;
     timelineFollowRef.current = false;
-    onTimelineFollowChangeRef.current?.(false);
-  }, [iframeSrc, embedKind]);
+    lastEmbedTimeTickRef.current = 0;
+    lastEmbedTimeValueRef.current = -1;
+    lastEmbedSignalRef.current = 0;
+    stopManualTimeline();
+  }, [iframeSrc, embedKind, stopManualTimeline]);
 
   useEffect(() => {
     if (embedKind !== 'direct' || !trackPlaybackTime) return;
 
     const isEmbedFocused = () => document.activeElement === iframeRef.current;
 
-    const onFocusIn = () => {
-      if (!isEmbedFocused()) return;
-      timelineFollowRef.current = true;
-      syncEmbedPlaybackState(true);
-    };
-
     const onFocusOut = () => {
       window.setTimeout(() => {
-        if (isEmbedFocused()) return;
+        if (isEmbedFocused() || !autoSyncTimelineRef.current) return;
         syncEmbedPlaybackState(false);
       }, 0);
     };
 
-    document.addEventListener('focusin', onFocusIn);
+    const onWindowBlur = () => {
+      window.setTimeout(() => {
+        if (!isEmbedFocused() || !autoSyncTimelineRef.current) return;
+        if (Date.now() - lastEmbedSignalRef.current < 300) return;
+        syncEmbedPlaybackState(!manualClockRef.current?.isRunning());
+      }, 0);
+    };
+
     document.addEventListener('focusout', onFocusOut);
+    window.addEventListener('blur', onWindowBlur);
 
     return () => {
-      document.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('focusout', onFocusOut);
+      window.removeEventListener('blur', onWindowBlur);
     };
+  }, [embedKind, syncEmbedPlaybackState, trackPlaybackTime, iframeSrc]);
+
+  useEffect(() => {
+    if (embedKind !== 'direct' || !trackPlaybackTime) return;
+
+    const watchPlaybackStall = window.setInterval(() => {
+      if (!manualClockRef.current?.isRunning()) return;
+      if (!autoSyncTimelineRef.current) return;
+      if (lastEmbedTimeTickRef.current <= 0) return;
+      if (Date.now() - lastEmbedTimeTickRef.current < 900) return;
+      syncEmbedPlaybackState(false);
+    }, 400);
+
+    return () => window.clearInterval(watchPlaybackStall);
   }, [embedKind, syncEmbedPlaybackState, trackPlaybackTime, iframeSrc]);
 
   const handleManualClockStart = useCallback(() => {
@@ -871,13 +952,18 @@ function EmbedIframePlayer({
     const handleMessage = (event: MessageEvent) => {
       if (embedKind === 'direct' && trackPlaybackTimeRef.current) {
         if (isGenericEmbedPaused(event.data)) {
+          lastEmbedSignalRef.current = Date.now();
           syncEmbedPlaybackState(false);
         } else if (isGenericEmbedPlaying(event.data)) {
+          lastEmbedSignalRef.current = Date.now();
           syncEmbedPlaybackState(true);
           setAwaitingUserStart(false);
         }
         const genericTime = readGenericEmbedTime(event.data);
-        if (genericTime != null) updatePlaybackTime(genericTime);
+        if (genericTime != null) {
+          noteDirectEmbedTime(genericTime);
+          updatePlaybackTime(genericTime);
+        }
       }
 
       if (!isYouTubeOrigin(event.origin) && !isVimeoOrigin(event.origin)) return;
@@ -921,7 +1007,7 @@ function EmbedIframePlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [embedKind, requestEmbedPlay, syncEmbedPlaybackState, updatePlaybackTime]);
+  }, [embedKind, noteDirectEmbedTime, requestEmbedPlay, syncEmbedPlaybackState, updatePlaybackTime]);
 
   useEffect(() => {
     if (!trackPlaybackTime || embedKind === 'direct') return;
@@ -1073,6 +1159,13 @@ export default function UniversalVideoPlayer({
     () => (typeof window !== 'undefined' ? window.location.origin : ''),
   );
 
+  const playback = useMemo(
+    () => resolveVideoJsPlayback(src, kind, autoPlay, embedOrigin || undefined),
+    [src, kind, autoPlay, embedOrigin],
+  );
+
+  const usesVideoJs = playback?.mode === 'videojs';
+
   const trackPlaybackTime =
     cues.length > 0 ||
     editCueId != null ||
@@ -1131,7 +1224,7 @@ export default function UniversalVideoPlayer({
   updatePlaybackTimeRef.current = updatePlaybackTime;
 
   useEffect(() => {
-    if (!playbackControlsRef) return;
+    if (!playbackControlsRef || playback?.mode === 'iframe') return;
     playbackControlsRef.current = {
       seek: (seconds: number) => {
         seekNative(seconds);
@@ -1146,14 +1239,7 @@ export default function UniversalVideoPlayer({
     return () => {
       playbackControlsRef.current = null;
     };
-  }, [pauseNative, playbackControlsRef, seekNative]);
-
-  const playback = useMemo(
-    () => resolveVideoJsPlayback(src, kind, autoPlay, embedOrigin || undefined),
-    [src, kind, autoPlay, embedOrigin]
-  );
-
-  const usesVideoJs = playback?.mode === 'videojs';
+  }, [pauseNative, playback?.mode, playbackControlsRef, seekNative]);
 
   useEffect(() => {
     setCurrentTime(0);

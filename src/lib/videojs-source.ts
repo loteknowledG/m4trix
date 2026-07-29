@@ -108,3 +108,13 @@ export function resolveVideoJsPlayback(
     },
   };
 }
+
+/** Iframe embed kind when the video plays as an embed, otherwise null. */
+export function getIframeEmbedKind(
+  src: string,
+  kind: PlaylistVideo['kind'],
+): VideoEmbedKind | null {
+  const playback = resolveVideoJsPlayback(src, kind, false);
+  if (!playback || playback.mode !== 'iframe') return null;
+  return playback.embedKind;
+}
