@@ -5,6 +5,10 @@ import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { DialogTextEffectView } from "@/components/text/dialog-text-effect-view";
 import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import type { DialogTextEffect } from "@/lib/dialog-text-effects";
+import {
+  buildCueTextShadow,
+  resolveVideoCueFontFamily,
+} from "@/lib/video-timed-cues";
 import { logger } from "@/lib/logger";
 import {
   characterDialogSide,
@@ -49,6 +53,7 @@ type PlacedDialogLine = {
 
 function VnDialogMessage({
   message,
+  line,
   paletteIndex,
   align = "start",
   textEffect,
@@ -57,6 +62,7 @@ function VnDialogMessage({
   compact = false,
 }: {
   message: CustomChatMessage;
+  line?: MomentDialogLine;
   paletteIndex: number;
   align?: "start" | "end";
   textEffect?: DialogTextEffect;
@@ -66,6 +72,14 @@ function VnDialogMessage({
 }) {
   const palette = getStagePalette(paletteIndex);
   const isNarrator = message.messageKind === "narrator" || message.name?.trim() === "Narrator";
+  const dialogColor = line?.color ?? palette.fg;
+  const speakerColor =
+    line?.speakerColor ??
+    (message.from === "user" ? "#7dd3fc" : isNarrator ? "#fcd34d" : "#a3e635");
+  const fontScale = line?.fontScale ?? 0.04;
+  const fontSize = compact
+    ? `${Math.max(0.65, fontScale * 14)}rem`
+    : `${Math.max(0.75, fontScale * 18)}rem`;
 
   return (
     <div className={cn("w-full", align === "end" ? "text-right" : "text-left")}>
@@ -73,27 +87,30 @@ function VnDialogMessage({
         className={cn(
           "mb-1 font-bold uppercase tracking-wide",
           compact ? "text-[10px]" : "text-xs",
-          message.from === "user" ? "text-sky-300" : isNarrator ? "text-amber-300" : "text-lime-400",
         )}
-        style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
+        style={{
+          color: speakerColor,
+          textShadow: line?.shadowColor
+            ? buildCueTextShadow(line.shadowColor)
+            : "0 1px 2px rgba(0,0,0,0.85)",
+        }}
       >
         {message.name}
       </div>
       <div
-        className={cn(
-          "rounded-lg border leading-relaxed",
-          compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm",
-        )}
+        className={cn("rounded-lg border leading-relaxed", compact ? "px-2 py-1.5" : "px-3 py-2")}
         style={{
           backgroundColor: `${palette.bg}dd`,
-          color: palette.fg,
+          color: dialogColor,
           borderColor: `${palette.fg}55`,
           boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+          fontFamily: resolveVideoCueFontFamily(line?.font),
+          fontSize,
         }}
       >
         <DialogTextEffectView
           text={message.text}
-          effect={textEffect}
+          effect={textEffect ?? line?.textEffect}
           lineKey={lineKey}
           replayKey={momentId ? `${momentId}-${lineKey}` : lineKey}
           className="text-inherit"
@@ -181,6 +198,7 @@ function DraggableDialogBubble({
     >
       <VnDialogMessage
         message={entry.message}
+        line={entry.line}
         paletteIndex={entry.paletteIndex}
         align={entry.side === "right" ? "end" : "start"}
         textEffect={entry.line.textEffect}
@@ -254,6 +272,7 @@ function SideOverlayColumn({
           <VnDialogMessage
             key={message.id}
             message={message}
+            line={line}
             paletteIndex={Math.max(0, characterIndex)}
             align={side === "right" ? "end" : "start"}
             textEffect={line?.textEffect}
@@ -299,6 +318,7 @@ function SideLetterboxColumn({
           <VnDialogMessage
             key={message.id}
             message={message}
+            line={line}
             paletteIndex={Math.max(0, characterIndex)}
             align={side === "right" ? "end" : "start"}
             textEffect={line?.textEffect}
@@ -353,6 +373,7 @@ function NarratorZonePanel({
               <VnDialogMessage
                 key={message.id}
                 message={message}
+                line={line}
                 paletteIndex={Math.max(0, script.characterOrder.length + index)}
                 textEffect={line?.textEffect}
                 lineKey={message.id}
@@ -384,6 +405,7 @@ function NarratorZonePanel({
             <VnDialogMessage
               key={message.id}
               message={message}
+              line={line}
               paletteIndex={Math.max(0, characterIndex)}
               textEffect={line?.textEffect}
               lineKey={message.id}

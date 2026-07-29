@@ -1,6 +1,11 @@
 import { get, set } from "idb-keyval";
 import { normalizeDialogTextEffect, type DialogTextEffect } from "@/lib/dialog-text-effects";
 import { isLikelyMomentSrc } from "@/lib/story-moments";
+import {
+  normalizeCueColor,
+  normalizeCueFont,
+  type VideoCueFontId,
+} from "@/lib/video-timed-cues";
 
 export type DialogLinePosition = {
   x: number;
@@ -18,6 +23,11 @@ export type MomentDialogLine = {
   text: string;
   textEffect?: DialogTextEffect;
   pos?: DialogLinePosition;
+  font?: VideoCueFontId;
+  fontScale?: number;
+  color?: string;
+  speakerColor?: string;
+  shadowColor?: string;
 };
 
 export type MomentDialogScript = {
@@ -141,6 +151,19 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
       text,
       textEffect: normalizeDialogTextEffect(record.textEffect),
     };
+    const font = normalizeCueFont(record.font);
+    if (font) entry.font = font;
+    if (typeof record.fontScale === "number" && Number.isFinite(record.fontScale)) {
+      entry.fontScale = Math.min(0.12, Math.max(0.02, record.fontScale));
+    }
+    const color = typeof record.color === "string" ? normalizeCueColor(record.color, "") : "";
+    if (color) entry.color = color;
+    const speakerColor =
+      typeof record.speakerColor === "string" ? normalizeCueColor(record.speakerColor, "") : "";
+    if (speakerColor) entry.speakerColor = speakerColor;
+    const shadowColor =
+      typeof record.shadowColor === "string" ? normalizeCueColor(record.shadowColor, "") : "";
+    if (shadowColor) entry.shadowColor = shadowColor;
     const pos = normalizeDialogLinePosition(record.pos);
     if (pos) entry.pos = pos;
     normalized.push(entry);
@@ -477,11 +500,28 @@ export function updateLineEffectInScript(
   lineId: string,
   textEffect: DialogTextEffect,
 ): MomentDialogScript {
+  return updateLineInScript(script, lineId, { textEffect });
+}
+
+export function updateLineInScript(
+  script: MomentDialogScript,
+  lineId: string,
+  patch: Partial<
+    Pick<
+      MomentDialogLine,
+      | "text"
+      | "textEffect"
+      | "font"
+      | "fontScale"
+      | "color"
+      | "speakerColor"
+      | "shadowColor"
+    >
+  >,
+): MomentDialogScript {
   return {
     ...script,
-    lines: script.lines.map((line) =>
-      line.id === lineId ? { ...line, textEffect } : line,
-    ),
+    lines: script.lines.map((line) => (line.id === lineId ? { ...line, ...patch } : line)),
   };
 }
 
