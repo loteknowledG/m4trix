@@ -1,6 +1,6 @@
 import { safeGet, safeSet } from "@/lib/storage-compat";
 import { NARRATOR_CHARACTER_ID } from "@/lib/game/narrator-agent";
-import { normalizePlayerMode, formatPlayerMemoryLabel, type PlayerMode } from "@/lib/player-mode";
+import { normalizePlayerMode, formatPlayerMemoryLabel, formatDialogModeLabel, type PlayerMode } from "@/lib/player-mode";
 import {
   normalizeMomentDialogTextEffect,
   type VideoCueTextEffect,
@@ -31,7 +31,7 @@ export type MomentDialogLine = {
   characterId: string;
   speaker: string;
   text: string;
-  /** Player say/do/think — only used when characterId is the story player. */
+  /** Say/do/think — used for player and NPC dialog lines. */
   playerMode?: PlayerMode;
   textEffect?: VideoCueTextEffect;
   /** Seconds when this line becomes visible */
@@ -103,6 +103,9 @@ export function resolveMomentDialogSpeakerName(
   const name = character?.name?.trim() || line.speaker?.trim() || "Unknown";
   if (character?.role === "player") {
     return formatPlayerMemoryLabel({ name }, npcKnowsPlayer, line.playerMode);
+  }
+  if (character?.role === "npc") {
+    return formatDialogModeLabel(name, line.playerMode);
   }
   return name;
 }
@@ -807,7 +810,7 @@ export function addLineForCharacter(
     pos: xy,
     ...DEFAULT_MOMENT_DIALOG_LINE_STYLE,
   };
-  if (character.role === "player") {
+  if (character.role === "player" || character.role === "npc") {
     newLine.playerMode = "say";
   }
   return {

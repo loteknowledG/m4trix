@@ -6,6 +6,18 @@ export function normalizePlayerMode(mode?: string | null): PlayerMode {
   return "say";
 }
 
+/** Say/do/think label for any named character (player or NPC). */
+export function formatDialogModeLabel(
+  name: string,
+  mode?: PlayerMode | string | null,
+): string {
+  const baseName = name.trim() || "Unknown";
+  const normalized = normalizePlayerMode(mode);
+  if (normalized === "do") return `${baseName} does`;
+  if (normalized === "think") return `${baseName} thinks`;
+  return `${baseName} says`;
+}
+
 export function formatPlayerMemoryLabel(
   player?: { name?: string } | null,
   npcKnowsPlayer = true,
@@ -13,8 +25,5 @@ export function formatPlayerMemoryLabel(
 ) {
   const baseName =
     npcKnowsPlayer === false ? "Stranger" : player?.name?.trim() || "Player";
-  const mode = normalizePlayerMode(playerMode);
-  if (mode === "do") return `${baseName} does`;
-  if (mode === "think") return `${baseName} thinks`;
-  return `${baseName} says`;
+  return formatDialogModeLabel(baseName, playerMode);
 }

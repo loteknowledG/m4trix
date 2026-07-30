@@ -196,14 +196,18 @@ function SelectedMomentLineEditor({
         </select>
       </label>
 
-      {character.role === 'player' ? (
+      {character.role === 'player' || character.role === 'npc' ? (
         <label className="grid gap-1">
-          <span className="text-[11px] text-muted-foreground">Player type</span>
+          <span className="text-[11px] text-muted-foreground">
+            {character.role === 'player' ? 'Player type' : 'AI type'}
+          </span>
           <select
             value={line.playerMode ?? 'say'}
             onChange={event => onPlayerModeChange(normalizePlayerMode(event.target.value))}
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-            aria-label="Player dialog type"
+            aria-label={
+              character.role === 'player' ? 'Player dialog type' : 'AI dialog type'
+            }
           >
             <option value="say">Say</option>
             <option value="do">Do</option>
@@ -521,7 +525,7 @@ export function MomentDialogModal({
           characterId: character.id,
           speaker: character.name,
         };
-        if (character.role === 'player') {
+        if (character.role === 'player' || character.role === 'npc') {
           patch.playerMode =
             current.lines.find(entry => entry.id === lineId)?.playerMode ?? 'say';
         } else {
