@@ -70,6 +70,8 @@ export default function CollectionOverlay() {
   const [dialogPlacementMode, setDialogPlacementMode] = useState(false);
   const [dialogEditLineId, setDialogEditLineId] = useState<string | null>(null);
   const dialogPlayback = useMomentDialogPlayback(isOpen ? currentId : null, storyId);
+  const dialogPlaybackRef = useRef(dialogPlayback);
+  dialogPlaybackRef.current = dialogPlayback;
   const editingRef = useRef(editing);
   const taggingRef = useRef(tagging);
   const dialogOpenRef = useRef(dialogOpen);
@@ -84,6 +86,29 @@ export default function CollectionOverlay() {
       setDialogEditLineId(null);
     }
   }, [dialogOpen]);
+
+  const prevDialogOpenRef = useRef(false);
+  useEffect(() => {
+    const wasOpen = prevDialogOpenRef.current;
+    prevDialogOpenRef.current = dialogOpen;
+    if (!wasOpen || dialogOpen) return;
+
+    try {
+      window.dispatchEvent(new CustomEvent('moments-updated'));
+    } catch {
+      /* ignore */
+    }
+
+    const playback = dialogPlaybackRef.current;
+    playback.setCurrentTime(0);
+    if (playback.hasLines) {
+      playback.setPlaying(true);
+    }
+  }, [dialogOpen]);
+
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setDialogOpen(open);
+  }, []);
 
   const [text, setText] = useState('');
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
@@ -958,7 +983,7 @@ export default function CollectionOverlay() {
 
       <MomentDialogModal
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={handleDialogOpenChange}
         momentId={currentId}
         storyId={storyId}
         currentTime={dialogPlayback.currentTime}

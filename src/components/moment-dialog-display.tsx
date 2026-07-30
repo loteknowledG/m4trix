@@ -548,8 +548,25 @@ export function MomentDialogDisplay({
     const applyDialogUpdate = (event: Event) => {
       const detail = (event as CustomEvent<MomentDialogUpdatedDetail>).detail;
       if (!momentDialogUpdateMatches(detail, momentId, storyId)) return;
-      const withPositions = ensureCharacterPositions(detail.script, sceneCharacters);
-      setScript(ensureTimedDialogScript(withPositions, sceneCharacters));
+
+      const applyWithCharacters = (characters: SceneCharacter[]) => {
+        const withPositions = ensureCharacterPositions(detail.script, characters);
+        setScript(ensureTimedDialogScript(withPositions, characters));
+      };
+
+      if (sceneCharacters.length > 0) {
+        applyWithCharacters(sceneCharacters);
+        return;
+      }
+
+      void loadStorySceneCharacters(storyId)
+        .then(characters => {
+          if (characters.length > 0) {
+            setSceneCharacters(characters);
+          }
+          applyWithCharacters(characters);
+        })
+        .catch(error => logger.error("Failed to refresh moment dialog display", error));
     };
 
     const reload = () => {

@@ -27,6 +27,7 @@ import {
   addLineForCharacter,
   clearLinePositionsInScript,
   computeMomentDialogDuration,
+  dispatchMomentDialogUpdated,
   ensureCharacterPositions,
   ensureTimedDialogScript,
   loadMomentDialogScript,
@@ -452,6 +453,7 @@ export function MomentDialogModal({
       if (!momentId) return;
       setScript(current => {
         const nextScript = typeof updater === 'function' ? updater(current) : updater;
+        dispatchMomentDialogUpdated({ momentId, storyId, script: nextScript });
         void saveMomentDialogScript(momentId, nextScript, storyId).catch(error => {
           logger.error('Failed to save moment dialog', error);
         });
