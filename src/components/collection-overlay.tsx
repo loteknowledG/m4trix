@@ -20,6 +20,7 @@ import { FaTags } from 'react-icons/fa';
 import { MdTitle, MdOutlinePhotoAlbum } from 'react-icons/md';
 import { MomentDialogModal } from '@/components/moment-dialog-modal';
 import { MomentDialogDisplay, seedDialogPlacementDefaults } from '@/components/moment-dialog-display';
+import { useMomentDialogPlayback } from '@/hooks/use-moment-dialog-playback';
 import { loadStorySceneCharacters } from '@/lib/scene-characters';
 
 const MomentClassifier = dynamic(
@@ -66,9 +67,8 @@ export default function CollectionOverlay() {
   const [tagging, setTagging] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogPlacementMode, setDialogPlacementMode] = useState(false);
-  const [dialogCurrentTime, setDialogCurrentTime] = useState(0);
-  const [dialogPlaying, setDialogPlaying] = useState(false);
   const [dialogEditLineId, setDialogEditLineId] = useState<string | null>(null);
+  const dialogPlayback = useMomentDialogPlayback(isOpen ? currentId : null, storyId);
   const editingRef = useRef(editing);
   const taggingRef = useRef(tagging);
   const dialogOpenRef = useRef(dialogOpen);
@@ -80,26 +80,9 @@ export default function CollectionOverlay() {
 
   useEffect(() => {
     if (!dialogOpen) {
-      setDialogCurrentTime(0);
-      setDialogPlaying(false);
       setDialogEditLineId(null);
     }
   }, [dialogOpen]);
-
-  useEffect(() => {
-    if (!dialogOpen || !dialogPlaying) return;
-    const id = window.setInterval(() => {
-      setDialogCurrentTime(previous => {
-        const next = previous + 0.1;
-        if (next >= 120) {
-          setDialogPlaying(false);
-          return 0;
-        }
-        return next;
-      });
-    }, 100);
-    return () => window.clearInterval(id);
-  }, [dialogOpen, dialogPlaying]);
 
   const [text, setText] = useState('');
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
@@ -674,7 +657,12 @@ export default function CollectionOverlay() {
             stageRef={stageRef}
             imageRef={imageRef}
             placementMode={dialogPlacementMode}
-            currentTime={dialogOpen || dialogPlacementMode ? dialogCurrentTime : undefined}
+            currentTime={
+              dialogPlayback.hasLines || dialogOpen || dialogPlacementMode
+                ? dialogPlayback.currentTime
+                : undefined
+            }
+            loopEpoch={dialogPlayback.loopEpoch}
             editLineId={dialogOpen ? dialogEditLineId : null}
           />
 
@@ -966,10 +954,10 @@ export default function CollectionOverlay() {
         onOpenChange={setDialogOpen}
         momentId={currentId}
         storyId={storyId}
-        currentTime={dialogCurrentTime}
-        onCurrentTimeChange={setDialogCurrentTime}
-        isPlaying={dialogPlaying}
-        onIsPlayingChange={setDialogPlaying}
+        currentTime={dialogPlayback.currentTime}
+        onCurrentTimeChange={dialogPlayback.setCurrentTime}
+        isPlaying={dialogPlayback.playing}
+        onIsPlayingChange={dialogPlayback.setPlaying}
         editLineId={dialogEditLineId}
         onEditLineIdChange={setDialogEditLineId}
         onStartPlacement={async () => {

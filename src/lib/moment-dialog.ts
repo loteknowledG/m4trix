@@ -127,6 +127,13 @@ export function computeMomentDialogDuration(script: MomentDialogScript): number 
   return Math.max(30, ...lineEnds, 0);
 }
 
+/** Duration for playback loop — ends shortly after the last dialog line. */
+export function computeMomentDialogLoopDuration(script: MomentDialogScript): number {
+  if (!script.lines.length) return 0;
+  const lineEnds = script.lines.map((line) => resolveMomentLineTiming(line).end);
+  return Math.max(0.5, Math.max(...lineEnds) + 0.35);
+}
+
 export function scriptUsesTimedLayout(script: MomentDialogScript): boolean {
   return script.lines.some(
     (line) =>

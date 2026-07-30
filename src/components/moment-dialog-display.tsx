@@ -43,6 +43,7 @@ type MomentDialogDisplayProps = {
   imageRef: React.RefObject<HTMLImageElement | null>;
   placementMode?: boolean;
   currentTime?: number;
+  loopEpoch?: number;
   editLineId?: string | null;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
 };
@@ -499,6 +500,7 @@ export function MomentDialogDisplay({
   imageRef,
   placementMode = false,
   currentTime,
+  loopEpoch = 0,
   editLineId = null,
   onLayoutChange,
 }: MomentDialogDisplayProps) {
@@ -584,6 +586,7 @@ export function MomentDialogDisplay({
       lines={overlayLines}
       currentTime={currentTime}
       momentId={momentId}
+      loopEpoch={loopEpoch}
       editLineId={activeEditLineId}
       onLayoutChange={persistLayout}
     />

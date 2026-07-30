@@ -28,6 +28,7 @@ type MomentDialogOverlayProps = {
   lines: MomentDialogOverlayLine[];
   currentTime?: number;
   momentId?: string | null;
+  loopEpoch?: number;
   className?: string;
   editLineId?: string | null;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
@@ -53,12 +54,14 @@ function MomentDialogBubble({
   speakerName,
   momentId,
   editable = false,
+  loopEpoch = 0,
   stageRef,
   onLayoutChange,
 }: {
   line: MomentDialogOverlayLine;
   speakerName: string;
   momentId?: string | null;
+  loopEpoch?: number;
   editable?: boolean;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (patch: MomentDialogLayoutPatch) => void;
@@ -215,7 +218,9 @@ function MomentDialogBubble({
               color={style.color}
               shadowColor={style.shadowColor}
               lineKey={line.id}
-              replayKey={momentId ? `${momentId}-${line.id}` : line.id}
+              replayKey={
+                momentId ? `${momentId}-${line.id}-${loopEpoch}` : `${line.id}-${loopEpoch}`
+              }
               className="text-inherit"
             />
           </div>
@@ -237,6 +242,7 @@ export function MomentDialogOverlay({
   lines,
   currentTime,
   momentId,
+  loopEpoch = 0,
   className,
   editLineId = null,
   onLayoutChange,
@@ -283,6 +289,7 @@ export function MomentDialogOverlay({
           line={line}
           speakerName={line.speakerName}
           momentId={momentId}
+          loopEpoch={loopEpoch}
         />
       ))}
 
@@ -292,6 +299,7 @@ export function MomentDialogOverlay({
           line={editingLine}
           speakerName={editingLine.speakerName}
           momentId={momentId}
+          loopEpoch={loopEpoch}
           editable
           stageRef={stageRef}
           onLayoutChange={(patch) => handleLayoutChange(editingLine.id, patch)}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight } from '@/components/icons';
 import { MomentDialogDisplay } from '@/components/moment-dialog-display';
+import { useMomentDialogPlayback } from '@/hooks/use-moment-dialog-playback';
 import { normalizeMomentSrc } from '@/lib/moments';
 import { safeGet } from '@/lib/storage-compat';
 import { cn } from '@/lib/utils';
@@ -101,6 +102,7 @@ export function StoryMomentsViewer({
 
   const moment = moments[currentIndex] ?? null;
   const hasMultiple = moments.length > 1;
+  const dialogPlayback = useMomentDialogPlayback(moment?.id ?? null, storyId);
 
   const goPrevious = useCallback(() => {
     if (moments.length === 0) return;
@@ -217,6 +219,8 @@ export function StoryMomentsViewer({
               storyId={storyId}
               stageRef={stageRef}
               imageRef={imageRef}
+              currentTime={dialogPlayback.hasLines ? dialogPlayback.currentTime : undefined}
+              loopEpoch={dialogPlayback.loopEpoch}
             />
 
             {overlay.text ? (
