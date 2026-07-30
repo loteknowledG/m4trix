@@ -25,6 +25,7 @@ import { logger } from '@/lib/logger';
 import {
   addVideoToPlaylist,
   getPlaylistMeta,
+  isEphemeralPlaylistVideo,
   loadPlaylistVideos,
   newPlaylistId,
   renamePlaylist,
@@ -52,17 +53,12 @@ import type { VideoPlaybackControls } from '@/lib/video-playback-controls';
 import { usePlaybackDebugHud } from '@/hooks/use-playback-debug-hud';
 import { cn } from '@/lib/utils';
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function videoLabel(video: PlaylistVideo) {
-  if (video.name?.trim()) return video.name.trim();
+  if (video.name?.trim()) {
+    const name = video.name.trim();
+    return video.kind === 'blob' ? `${name} (session)` : name;
+  }
+  if (video.kind === 'blob') return 'Local preview (session)';
   if (video.kind === 'upload') return 'Uploaded video';
   if (video.kind === 'embed') return 'Embedded video';
   try {
@@ -145,6 +141,7 @@ export default function PlaylistDetailClient() {
   const [storyMode, setStoryMode] = useState<StoryExperienceMode>('view');
   const playbackControlsRef = useRef<VideoPlaybackControls | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const blobRevokeRef = useRef<Map<string, () => void>>(new Map());
 
   const selectedIndex = videos.findIndex(v => v.id === selectedVideoId);
   const selectedVideo = selectedIndex >= 0 ? videos[selectedIndex] : null;
@@ -224,11 +221,22 @@ export default function PlaylistDetailClient() {
   }, [loadPlaylist]);
 
   useEffect(() => {
+    const revokeAll = blobRevokeRef.current;
+    return () => {
+      revokeAll.forEach(revoke => revoke());
+      revokeAll.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     const handler = async () => {
       if (!playlistId) return;
       try {
         const items = await loadPlaylistVideos(playlistId);
-        setVideos(items);
+        setVideos(prev => {
+          const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+          return [...items, ...sessionBlobs];
+        });
       } catch (err) {
         logger.error('Failed to refresh playlist videos', err);
       }
@@ -270,7 +278,10 @@ export default function PlaylistDetailClient() {
         kind: 'url',
       };
       const next = await addVideoToPlaylist(playlistId, video);
-      setVideos(next);
+      setVideos(prev => {
+        const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+        return [...next, ...sessionBlobs];
+      });
       selectVideo(video.id);
       setUrlInput('');
     } catch (err) {
@@ -299,7 +310,10 @@ export default function PlaylistDetailClient() {
         kind: 'embed',
       };
       const next = await addVideoToPlaylist(playlistId, video);
-      setVideos(next);
+      setVideos(prev => {
+        const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+        return [...next, ...sessionBlobs];
+      });
       selectVideo(video.id);
       setEmbedInput('');
     } catch (err) {
@@ -309,30 +323,46 @@ export default function PlaylistDetailClient() {
     }
   };
 
-  const handleUpload = async (file: File) => {
-    if (!playlistId) return;
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const video: PlaylistVideo = {
-        id: newPlaylistId(),
-        src: dataUrl,
-        name: file.name,
-        kind: 'upload',
-      };
-      const next = await addVideoToPlaylist(playlistId, video);
-      setVideos(next);
-      selectVideo(video.id);
-    } catch (err) {
-      logger.error('Failed to upload video', err);
-    }
+  const handlePreviewLocalFile = (file: File) => {
+    const src = URL.createObjectURL(file);
+    const video: PlaylistVideo = {
+      id: newPlaylistId(),
+      src,
+      name: file.name,
+      kind: 'blob',
+      mimeType: file.type || undefined,
+    };
+    blobRevokeRef.current.set(video.id, () => URL.revokeObjectURL(src));
+    setVideos(prev => [...prev, video]);
+    selectVideo(video.id);
   };
 
   const handleRemoveVideo = async (videoId: string) => {
-    if (!playlistId) return;
     const removedIndex = videos.findIndex(v => v.id === videoId);
+    const removed = videos[removedIndex];
+    if (removed && isEphemeralPlaylistVideo(removed)) {
+      blobRevokeRef.current.get(videoId)?.();
+      blobRevokeRef.current.delete(videoId);
+      setVideos(prev => {
+        const next = prev.filter(v => v.id !== videoId);
+        setSelectedVideoId(current => {
+          if (current !== videoId) return current;
+          if (next.length === 0) return null;
+          const nextIndex = Math.min(Math.max(removedIndex, 0), next.length - 1);
+          return next[nextIndex]?.id ?? null;
+        });
+        return next;
+      });
+      return;
+    }
+
+    if (!playlistId) return;
     try {
       const next = await removeVideoFromPlaylist(playlistId, videoId);
-      setVideos(next);
+      setVideos(prev => {
+        const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+        return [...next, ...sessionBlobs];
+      });
       setSelectedVideoId(prev => {
         if (prev !== videoId) return prev;
         if (next.length === 0) return null;
@@ -346,7 +376,6 @@ export default function PlaylistDetailClient() {
 
   const handleRenameVideo = useCallback(
     async (videoId: string, name: string) => {
-      if (!playlistId) return;
       const trimmed = name.trim();
       const nextName = trimmed || undefined;
       const current = videos.find(v => v.id === videoId);
@@ -355,9 +384,16 @@ export default function PlaylistDetailClient() {
       setVideos(prev =>
         prev.map(v => (v.id === videoId ? { ...v, name: nextName } : v)),
       );
+      if (current && isEphemeralPlaylistVideo(current)) return;
+
+      if (!playlistId) return;
       try {
         const next = await updatePlaylistVideo(playlistId, videoId, { name: nextName });
-        setVideos(next);
+        setVideos(prev => {
+          const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+          const persisted = next.filter(v => !isEphemeralPlaylistVideo(v));
+          return [...persisted, ...sessionBlobs];
+        });
       } catch (err) {
         logger.error('Failed to rename playlist video', err);
         void loadPlaylist();
@@ -368,32 +404,46 @@ export default function PlaylistDetailClient() {
 
   const handleCuesChange = useCallback(
     async (videoId: string, cues: VideoTimedCue[]) => {
-      if (!playlistId) return;
+      const current = videos.find(v => v.id === videoId);
       setVideos(prev => prev.map(v => (v.id === videoId ? { ...v, cues } : v)));
+      if (current && isEphemeralPlaylistVideo(current)) return;
+
+      if (!playlistId) return;
       try {
         const next = await updatePlaylistVideo(playlistId, videoId, { cues });
-        setVideos(next);
+        setVideos(prev => {
+          const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+          const persisted = next.filter(v => !isEphemeralPlaylistVideo(v));
+          return [...persisted, ...sessionBlobs];
+        });
       } catch (err) {
         logger.error('Failed to save video dialogs', err);
         void loadPlaylist();
       }
     },
-    [playlistId, loadPlaylist],
+    [playlistId, loadPlaylist, videos],
   );
 
   const handleSkipSegmentsChange = useCallback(
     async (videoId: string, skipSegments: VideoSkipSegment[]) => {
-      if (!playlistId) return;
+      const current = videos.find(v => v.id === videoId);
       setVideos(prev => prev.map(v => (v.id === videoId ? { ...v, skipSegments } : v)));
+      if (current && isEphemeralPlaylistVideo(current)) return;
+
+      if (!playlistId) return;
       try {
         const next = await updatePlaylistVideo(playlistId, videoId, { skipSegments });
-        setVideos(next);
+        setVideos(prev => {
+          const sessionBlobs = prev.filter(v => isEphemeralPlaylistVideo(v));
+          const persisted = next.filter(v => !isEphemeralPlaylistVideo(v));
+          return [...persisted, ...sessionBlobs];
+        });
       } catch (err) {
         logger.error('Failed to save skip segments', err);
         void loadPlaylist();
       }
     },
-    [playlistId, loadPlaylist],
+    [playlistId, loadPlaylist, videos],
   );
 
   const handleCueLayoutChange = useCallback(
@@ -611,6 +661,7 @@ export default function PlaylistDetailClient() {
                       key={selectedVideo?.id ?? 'playlist-empty'}
                       src={selectedVideo?.src ?? ''}
                       kind={selectedVideo?.kind ?? 'url'}
+                      mimeType={selectedVideo?.mimeType}
                       videoId={selectedVideo?.id}
                       autoPlay={autoPlayEnabled}
                       userActivated={playbackArmed}
@@ -847,7 +898,7 @@ export default function PlaylistDetailClient() {
                         className="hidden"
                         onChange={e => {
                           const file = e.target.files?.[0];
-                          if (file) void handleUpload(file);
+                          if (file) handlePreviewLocalFile(file);
                           e.target.value = '';
                         }}
                       />
@@ -858,8 +909,12 @@ export default function PlaylistDetailClient() {
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <Upload size={16} className="mr-2" />
-                        Choose local file
+                        Preview local file
                       </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Plays from a blob URL for this session only. Refreshing the page removes
+                        it.
+                      </p>
                     </div>
                   </div>
                 </aside>

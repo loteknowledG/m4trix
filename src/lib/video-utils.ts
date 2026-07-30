@@ -204,22 +204,25 @@ export function getEmbedUrl(src: string, autoPlay = true, origin?: string): stri
 
 export function getIframeSrc(
   src: string,
-  kind: 'url' | 'upload' | 'embed',
+  kind: 'url' | 'upload' | 'embed' | 'blob',
   autoPlay = true,
   origin?: string
 ): string | null {
-  if (kind === 'upload') return null;
+  if (kind === 'upload' || kind === 'blob') return null;
   if (kind === 'embed') return normalizeEmbedSrc(src, autoPlay, origin);
   const embedUrl = getEmbedUrl(src, autoPlay, origin);
   return embedUrl;
 }
 
-export function getVideoThumbnail(src: string, kind?: 'url' | 'upload' | 'embed'): string {
+export function getVideoThumbnail(
+  src: string,
+  kind?: 'url' | 'upload' | 'embed' | 'blob',
+): string {
   const youtubeId = parseYouTubeId(src);
   if (youtubeId) {
     return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
   }
-  if (kind === 'embed' || kind === 'url') {
+  if (kind === 'embed' || kind === 'url' || kind === 'blob') {
     return VIDEO_PLACEHOLDER;
   }
   if (src.startsWith('data:image/')) {

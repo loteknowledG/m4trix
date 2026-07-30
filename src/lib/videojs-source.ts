@@ -22,7 +22,7 @@ export type VideoJsPlayback =
 const NATIVE_VIDEO_PATTERN = /\.(mp4|webm|ogg|mov|m4v|m3u8)(\?|$)/i;
 
 function isNativeVideoSource(src: string, kind: PlaylistVideo['kind']): boolean {
-  if (kind === 'upload') return true;
+  if (kind === 'upload' || kind === 'blob') return true;
   if (src.startsWith('data:video/') || src.startsWith('blob:')) return true;
   try {
     return NATIVE_VIDEO_PATTERN.test(new URL(src).pathname);
@@ -31,7 +31,8 @@ function isNativeVideoSource(src: string, kind: PlaylistVideo['kind']): boolean 
   }
 }
 
-function guessVideoMime(src: string): string {
+function guessVideoMime(src: string, mimeType?: string): string {
+  if (mimeType?.startsWith('video/')) return mimeType;
   if (src.startsWith('data:video/')) {
     return src.slice(5).split(';')[0] || 'video/mp4';
   }
@@ -58,7 +59,8 @@ export function resolveVideoJsPlayback(
   src: string,
   kind: PlaylistVideo['kind'],
   autoPlay: boolean,
-  origin?: string
+  origin?: string,
+  mimeType?: string,
 ): VideoJsPlayback | null {
   if (!src) return null;
 
@@ -90,7 +92,7 @@ export function resolveVideoJsPlayback(
     return {
       mode: 'videojs',
       source: {
-        type: guessVideoMime(src),
+        type: guessVideoMime(src, mimeType),
         src,
       },
     };
@@ -103,7 +105,7 @@ export function resolveVideoJsPlayback(
   return {
     mode: 'videojs',
     source: {
-      type: guessVideoMime(src),
+      type: guessVideoMime(src, mimeType),
       src,
     },
   };

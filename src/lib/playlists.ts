@@ -16,10 +16,22 @@ export type PlaylistVideo = {
   id: string;
   src: string;
   name?: string;
-  kind: 'url' | 'upload' | 'embed';
+  kind: 'url' | 'upload' | 'embed' | 'blob';
+  /** MIME type for session blob previews (e.g. video/webm). */
+  mimeType?: string;
   cues?: VideoTimedCue[];
   skipSegments?: VideoSkipSegment[];
 };
+
+export function isEphemeralPlaylistVideo(
+  video: Pick<PlaylistVideo, 'kind' | 'src'>,
+): boolean {
+  return video.kind === 'blob' || video.src.startsWith('blob:');
+}
+
+function filterPersistedPlaylistVideos(videos: PlaylistVideo[]): PlaylistVideo[] {
+  return videos.filter(video => !isEphemeralPlaylistVideo(video));
+}
 
 export function newPlaylistId() {
   return `${Date.now()}-${Math.random()}`;
@@ -45,7 +57,8 @@ async function savePlaylistsList(list: PlaylistMeta[]) {
 
 async function getPlaylistVideos(id: string): Promise<PlaylistVideo[]> {
   const raw = await get<PlaylistVideo[]>(`playlist:${id}`);
-  return Array.isArray(raw) ? raw : [];
+  if (!Array.isArray(raw)) return [];
+  return filterPersistedPlaylistVideos(raw);
 }
 
 function resolveCoverSrc(videos: PlaylistVideo[], meta: PlaylistMeta): string | undefined {
@@ -106,6 +119,9 @@ export async function renamePlaylist(id: string, title: string) {
 }
 
 export async function addVideoToPlaylist(id: string, video: PlaylistVideo) {
+  if (isEphemeralPlaylistVideo(video)) {
+    throw new Error('Session blob videos cannot be saved to a playlist');
+  }
   const videos = await getPlaylistVideos(id);
   const next = [...videos, video];
   await set(`playlist:${id}`, next);

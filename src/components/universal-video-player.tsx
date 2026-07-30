@@ -42,6 +42,7 @@ import 'video.js/dist/video-js.css';
 export type UniversalVideoPlayerProps = {
   src: string;
   kind?: PlaylistVideo['kind'];
+  mimeType?: string;
   videoId?: string;
   autoPlay?: boolean;
   userActivated?: boolean;
@@ -1137,6 +1138,7 @@ function EmbedIframePlayer({
 export default function UniversalVideoPlayer({
   src,
   kind = 'url',
+  mimeType,
   videoId,
   autoPlay = false,
   userActivated = false,
@@ -1165,8 +1167,8 @@ export default function UniversalVideoPlayer({
   );
 
   const playback = useMemo(
-    () => resolveVideoJsPlayback(src, kind, autoPlay, embedOrigin || undefined),
-    [src, kind, autoPlay, embedOrigin],
+    () => resolveVideoJsPlayback(src, kind, autoPlay, embedOrigin || undefined, mimeType),
+    [src, kind, autoPlay, embedOrigin, mimeType],
   );
 
   const usesVideoJs = playback?.mode === 'videojs';
