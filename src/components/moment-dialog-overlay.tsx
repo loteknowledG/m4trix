@@ -33,6 +33,7 @@ type MomentDialogOverlayProps = {
   loopEpoch?: number;
   className?: string;
   editLineId?: string | null;
+  stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
 };
 
@@ -86,7 +87,7 @@ function MomentDialogBubble({
   }, []);
 
   const onStartDrag = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLElement>) => {
       if (!editable || !stageRef?.current || event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
@@ -178,7 +179,7 @@ function MomentDialogBubble({
     <div
       className={cn(
         'absolute min-w-0 max-w-none -translate-x-1/2 -translate-y-1/2 touch-none select-none',
-        editable ? 'pointer-events-auto z-30' : 'pointer-events-none z-20',
+        editable ? 'pointer-events-auto z-50' : 'pointer-events-none z-20',
       )}
       style={{
         left: `${layout.x * 100}%`,
@@ -190,16 +191,13 @@ function MomentDialogBubble({
     >
       <div
         className={cn(
-          'relative',
-          editable && 'ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent',
+          'relative touch-none',
+          editable && 'cursor-grab ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent active:cursor-grabbing',
         )}
+        onPointerDown={editable ? onStartDrag : undefined}
       >
         {editable ? (
-          <div
-            role="presentation"
-            onPointerDown={onStartDrag}
-            className="mb-1 flex cursor-grab items-center justify-center rounded-t-md bg-primary/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground active:cursor-grabbing"
-          >
+          <div className="mb-1 flex items-center justify-center rounded-t-md bg-primary/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground pointer-events-none">
             Drag
           </div>
         ) : null}
@@ -255,9 +253,11 @@ export function MomentDialogOverlay({
   loopEpoch = 0,
   className,
   editLineId = null,
+  stageRef: externalStageRef,
   onLayoutChange,
 }: MomentDialogOverlayProps) {
-  const stageRef = useRef<HTMLDivElement>(null);
+  const internalStageRef = useRef<HTMLDivElement>(null);
+  const layoutStageRef = externalStageRef ?? internalStageRef;
   const editMode = editLineId != null;
   const onLayoutChangeRef = useRef(onLayoutChange);
   onLayoutChangeRef.current = onLayoutChange;
@@ -290,7 +290,7 @@ export function MomentDialogOverlay({
 
   return (
     <div
-      ref={stageRef}
+      ref={internalStageRef}
       className={cn('pointer-events-none absolute inset-0 z-20 [container-type:size]', className)}
     >
       {playbackLines.map((line) => (
@@ -311,7 +311,7 @@ export function MomentDialogOverlay({
           momentId={momentId}
           loopEpoch={loopEpoch}
           editable
-          stageRef={stageRef}
+          stageRef={layoutStageRef}
           onLayoutChange={(patch) => handleLayoutChange(editingLine.id, patch)}
         />
       ) : null}

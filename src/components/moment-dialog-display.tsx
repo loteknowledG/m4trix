@@ -627,6 +627,7 @@ export function MomentDialogDisplay({
       momentId={momentId}
       loopEpoch={loopEpoch}
       editLineId={activeEditLineId}
+      stageRef={stageRef}
       onLayoutChange={persistLayout}
     />
   );

@@ -5,16 +5,8 @@ import { CueTimeField } from '@/components/cue-time-field';
 import VideoCueTimeline from '@/components/video-cue-timeline';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
-import { useDraggableOffset } from '@/hooks/use-draggable-offset';
 import {
   buildCueTextShadow,
   commitCueEndTime,
@@ -332,6 +324,7 @@ export function MomentDialogModal({
   const [loading, setLoading] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const initialLoadDoneRef = useRef(false);
+  const lastSeekLineRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -469,6 +462,7 @@ export function MomentDialogModal({
         const nextScript = addLineForCharacter(current, character);
         const added = nextScript.lines[nextScript.lines.length - 1];
         if (added?.id) {
+          lastSeekLineRef.current = null;
           setSelectedLineId(added.id);
         }
         return nextScript;
@@ -572,49 +566,66 @@ export function MomentDialogModal({
     persistScript(current => clearLinePositionsInScript(current));
   }, [persistScript]);
 
-  const { panelStyle, handleProps, dragging } = useDraggableOffset(open);
+  const selectLine = useCallback(
+    (lineId: string | null) => {
+      if (lineId) lastSeekLineRef.current = null;
+      setSelectedLineId(lineId);
+      if (!lineId) return;
+      const line = script.lines.find(entry => entry.id === lineId);
+      if (!line) return;
+      lastSeekLineRef.current = lineId;
+      onCurrentTimeChange?.(resolveMomentLineTiming(line).start);
+      onIsPlayingChange?.(false);
+    },
+    [onCurrentTimeChange, onIsPlayingChange, script.lines],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      lastSeekLineRef.current = null;
+      return;
+    }
+    if (!selectedLineId || lastSeekLineRef.current === selectedLineId) return;
+    lastSeekLineRef.current = selectedLineId;
+    const line = script.lines.find(entry => entry.id === selectedLineId);
+    if (!line) return;
+    onCurrentTimeChange?.(resolveMomentLineTiming(line).start);
+    onIsPlayingChange?.(false);
+  }, [open, onCurrentTimeChange, onIsPlayingChange, script.lines, selectedLineId]);
+
+  if (!open) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="z-[1300] max-w-2xl overflow-hidden p-0"
-        style={panelStyle}
-        aria-describedby="moment-dialog-description"
-        onClick={event => event.stopPropagation()}
-      >
-        <DialogHeader className="sr-only">
-          <DialogTitle>Dialog</DialogTitle>
-          <DialogDescription id="moment-dialog-description">
-            Add dialogs by speaker, edit one at a time on the timeline.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex max-h-[85vh] min-h-0 flex-col">
-          <div
-            className={cn(
-              'flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3 touch-none select-none',
-              dragging ? 'cursor-grabbing' : 'cursor-grab',
-            )}
-            {...handleProps}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="text-muted-foreground/70" aria-hidden="true">
-                ⋮⋮
-              </span>
-              <h3 className="text-sm font-medium">Dialog</h3>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                data-drag-cancel
-                onClick={() => onOpenChange(false)}
-                className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
-                aria-label="Close dialog editor"
-              >
-                ×
-              </button>
-            </div>
+    <div
+      className="fixed inset-y-0 right-0 z-[1300] flex w-[min(100vw,26rem)] max-w-full flex-col border-l border-border/60 bg-background shadow-2xl"
+      role="dialog"
+      aria-labelledby="moment-dialog-title"
+      aria-describedby="moment-dialog-description"
+      onClick={event => event.stopPropagation()}
+      onPointerDown={event => event.stopPropagation()}
+    >
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 id="moment-dialog-title" className="text-sm font-medium">
+              Dialog
+            </h3>
           </div>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
+            aria-label="Close dialog editor"
+          >
+            ×
+          </button>
+        </div>
+        <p id="moment-dialog-description" className="sr-only">
+          Add dialogs by speaker, edit one at a time on the timeline, then drag the highlighted
+          bubble on the moment to reposition it.
+        </p>
 
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {loading ? (
               <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
@@ -647,7 +658,7 @@ export function MomentDialogModal({
                           <li key={line.id}>
                             <button
                               type="button"
-                              onClick={() => setSelectedLineId(line.id)}
+                              onClick={() => selectLine(line.id)}
                               className={cn(
                                 'max-w-full rounded-md border px-2 py-1 text-left text-[11px] transition-colors',
                                 selected
@@ -752,7 +763,7 @@ export function MomentDialogModal({
                 selectedCueId={selectedLineId}
                 currentTime={currentTime}
                 videoDuration={sceneDuration}
-                onSelectCue={lineId => setSelectedLineId(lineId)}
+                onSelectCue={lineId => selectLine(lineId)}
                 onCueTimingChange={handleCueTimingChange}
                 onSeek={handleTimelineSeek}
                 onScrubStart={() => onIsPlayingChange?.(false)}
@@ -788,7 +799,7 @@ export function MomentDialogModal({
             </div>
           ) : null}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }

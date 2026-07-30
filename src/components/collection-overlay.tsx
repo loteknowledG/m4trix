@@ -654,7 +654,10 @@ export default function CollectionOverlay() {
       >
         <div
           ref={containerRef}
-          className="relative flex h-full w-full max-h-full max-w-full items-center justify-center"
+          className={cn(
+            'relative flex h-full w-full max-h-full max-w-full items-center justify-center',
+            dialogOpen && 'pointer-events-auto',
+          )}
         >
           <MomentMedia
             ref={imageRef}
@@ -672,7 +675,7 @@ export default function CollectionOverlay() {
           <MomentDialogDisplay
             momentId={currentId}
             storyId={storyId}
-            stageRef={stageRef}
+            stageRef={containerRef}
             imageRef={imageRef}
             placementMode={dialogPlacementMode}
             currentTime={
