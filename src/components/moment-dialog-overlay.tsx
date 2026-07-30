@@ -5,6 +5,7 @@ import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-
 import {
   resolveMomentDialogLineStyle,
   resolveMomentLineLayout,
+  isNarratorDialogLine,
   type MomentDialogLine,
 } from '@/lib/moment-dialog';
 import {
@@ -166,6 +167,7 @@ function MomentDialogBubble({
   const speakerColor =
     style.speakerColor ??
     (speakerName.trim() === 'Narrator' ? '#fcd34d' : '#a3e635');
+  const showSpeakerLabel = !isNarratorDialogLine(line, speakerName);
 
   return (
     <div
@@ -197,15 +199,17 @@ function MomentDialogBubble({
           </div>
         ) : null}
         <div className={editable ? 'px-0.5 pb-0.5' : undefined}>
-          <div
-            className="mb-1 text-[0.85em] font-bold uppercase tracking-wide"
-            style={{
-              color: speakerColor,
-              textShadow: buildCueTextShadow(style.shadowColor),
-            }}
-          >
-            {speakerName}
-          </div>
+          {showSpeakerLabel ? (
+            <div
+              className="mb-1 text-[0.85em] font-bold uppercase tracking-wide"
+              style={{
+                color: speakerColor,
+                textShadow: buildCueTextShadow(style.shadowColor),
+              }}
+            >
+              {speakerName}
+            </div>
+          ) : null}
           <div
             style={{
               color: style.color,

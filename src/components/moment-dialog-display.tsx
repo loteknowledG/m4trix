@@ -87,18 +87,20 @@ function VnDialogMessage({
 
   return (
     <div className={cn("w-full", align === "end" ? "text-right" : "text-left")}>
-      <div
-        className={cn(
-          "mb-1 font-bold uppercase tracking-wide",
-          compact ? "text-[10px]" : "text-xs",
-        )}
-        style={{
-          color: speakerColor,
-          textShadow: buildCueTextShadow(style.shadowColor),
-        }}
-      >
-        {message.name}
-      </div>
+      {!isNarrator ? (
+        <div
+          className={cn(
+            "mb-1 font-bold uppercase tracking-wide",
+            compact ? "text-[10px]" : "text-xs",
+          )}
+          style={{
+            color: speakerColor,
+            textShadow: buildCueTextShadow(style.shadowColor),
+          }}
+        >
+          {message.name}
+        </div>
+      ) : null}
       <div
         className={cn("leading-relaxed", compact ? "px-0 py-0.5" : "px-0 py-1")}
         style={{

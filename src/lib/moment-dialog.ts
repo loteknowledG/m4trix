@@ -1,4 +1,5 @@
 import { safeGet, safeSet } from "@/lib/storage-compat";
+import { NARRATOR_CHARACTER_ID } from "@/lib/game/narrator-agent";
 import {
   normalizeMomentDialogTextEffect,
   type VideoCueTextEffect,
@@ -58,6 +59,15 @@ export type MomentDialogScript = {
 };
 
 export const DEFAULT_MOMENT_LINE_DURATION = 5;
+
+export function isNarratorDialogLine(
+  line: Pick<MomentDialogLine, "characterId" | "speaker">,
+  speakerName?: string,
+): boolean {
+  if (line.characterId === NARRATOR_CHARACTER_ID) return true;
+  const label = (speakerName ?? line.speaker ?? "").trim().toLowerCase();
+  return label === "narrator";
+}
 
 export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
   textEffect: "none" as VideoCueTextEffect,
