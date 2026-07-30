@@ -58,7 +58,7 @@ export function VideoCueTextEffectView({
 }: VideoCueTextEffectViewProps) {
   const textEffect = normalizeVideoCueTextEffect(effect);
   const animationKey = replayKey ?? lineKey;
-  const displayText = text.trim() || '…';
+  const displayText = !text || !text.trim() ? '…' : text;
 
   if (textEffect === 'lineShadowText') {
     return (

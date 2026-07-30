@@ -6,7 +6,7 @@ import type {
   MomentDialogLine,
   MomentDialogScript,
 } from "@/lib/moment-dialog";
-import { resolveCharacterPosition } from "@/lib/moment-dialog";
+import { resolveCharacterPosition, resolveMomentDialogSpeakerName } from "@/lib/moment-dialog";
 import type { SceneCharacter } from "@/lib/scene-characters";
 export type DialogSide = "left" | "right" | "center";
 export type DialogPlacementZone = "top" | "bottom" | "left" | "right";
@@ -137,7 +137,7 @@ export function dialogLineToChatMessage(
     id: line.id,
     from: isPlayer ? "user" : "agent",
     text: line.text,
-    name: line.speaker || character?.name || "Unknown",
+    name: resolveMomentDialogSpeakerName(line, sceneCharacters),
     messageKind: isNarrator ? "narrator" : "npc",
   };
 }

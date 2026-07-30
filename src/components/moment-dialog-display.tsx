@@ -28,6 +28,7 @@ import {
   momentDialogUpdateMatches,
   MOMENT_DIALOG_UPDATED,
   resolveMomentDialogLineStyle,
+  resolveMomentDialogSpeakerName,
   type MomentDialogUpdatedDetail,
   saveMomentDialogScript,
   updateLineLayoutInScript,
@@ -586,11 +587,14 @@ export function MomentDialogDisplay({
   );
 
   const overlayLines = useMemo(() => {
-    const names = new Map(sceneCharacters.map((character) => [character.id, character.name]));
-    return script.lines.map((line) => ({
-      ...line,
-      speakerName: names.get(line.characterId) || line.speaker || "Unknown",
-    }));
+    return script.lines.map((line) => {
+      const character = sceneCharacters.find((entry) => entry.id === line.characterId);
+      return {
+        ...line,
+        speakerName: resolveMomentDialogSpeakerName(line, sceneCharacters),
+        isPlayerLine: character?.role === "player",
+      };
+    });
   }, [sceneCharacters, script.lines]);
 
   const activeEditLineId = editLineId ?? (placementMode ? overlayLines[0]?.id ?? null : null);

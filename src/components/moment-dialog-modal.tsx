@@ -35,6 +35,7 @@ import {
   removeLineFromScript,
   resolveCharacterPosition,
   resolveMomentDialogLineStyle,
+  resolveMomentDialogSpeakerName,
   resolveMomentLineTiming,
   saveMomentDialogScript,
   updateCharacterPositionInScript,
@@ -45,6 +46,7 @@ import {
   type MomentDialogScript,
 } from '@/lib/moment-dialog';
 import { loadStorySceneCharacters, type SceneCharacter } from '@/lib/scene-characters';
+import { normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 import { cn } from '@/lib/utils';
 
 type MomentDialogModalProps = {
@@ -67,8 +69,13 @@ function momentLineSummaryLabel(
   line: MomentDialogLine,
   characterName: string,
   index: number,
+  sceneCharacters: SceneCharacter[] = [],
 ) {
-  if (characterName.trim()) return characterName.trim();
+  const speakerLabel =
+    sceneCharacters.length > 0
+      ? resolveMomentDialogSpeakerName(line, sceneCharacters)
+      : characterName.trim();
+  if (speakerLabel) return speakerLabel;
   const text = line.text.trim();
   if (text) return text.length > 28 ? `${text.slice(0, 28)}…` : text;
   return `Dialog ${index + 1}`;
@@ -131,6 +138,7 @@ function SelectedMomentLineEditor({
   onUpdate,
   onUpdateTiming,
   onSpeakerChange,
+  onPlayerModeChange,
   onPositionChange,
   onRemove,
 }: {
@@ -143,6 +151,7 @@ function SelectedMomentLineEditor({
   onUpdate: (patch: Partial<MomentDialogLine>) => void;
   onUpdateTiming: (patch: { start?: number; end?: number }) => void;
   onSpeakerChange: (character: OrderedCharacter) => void;
+  onPlayerModeChange: (mode: PlayerMode) => void;
   onPositionChange: (position: DialogSpeakerPosition) => void;
   onRemove: () => void;
 }) {
@@ -155,7 +164,7 @@ function SelectedMomentLineEditor({
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium">
-            {momentLineSummaryLabel(line, character.name, lineIndex)}
+            {momentLineSummaryLabel(line, character.name, lineIndex, characters)}
           </div>
           <div className="text-[11px] text-muted-foreground">
             {character.roleLabel} ·{' '}
@@ -193,6 +202,22 @@ function SelectedMomentLineEditor({
           ))}
         </select>
       </label>
+
+      {character.role === 'player' ? (
+        <label className="grid gap-1">
+          <span className="text-[11px] text-muted-foreground">Player type</span>
+          <select
+            value={line.playerMode ?? 'say'}
+            onChange={event => onPlayerModeChange(normalizePlayerMode(event.target.value))}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            aria-label="Player dialog type"
+          >
+            <option value="say">Say</option>
+            <option value="do">Do</option>
+            <option value="think">Think</option>
+          </select>
+        </label>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2">
         <CueTimeField
@@ -261,7 +286,7 @@ function SelectedMomentLineEditor({
 
       {line.text.trim() ? (
         <div
-          className="rounded-lg px-3 py-2 text-sm"
+          className="rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
           style={{
             color: style.color,
             textShadow: buildCueTextShadow(style.shadowColor),
@@ -270,7 +295,7 @@ function SelectedMomentLineEditor({
           }}
         >
           <VideoCueTextEffectView
-            text={line.text.trim()}
+            text={line.text}
             effect={effect}
             color={style.color}
             shadowColor={style.shadowColor}
@@ -495,12 +520,26 @@ export function MomentDialogModal({
 
   const changeLineSpeaker = useCallback(
     (lineId: string, character: OrderedCharacter) => {
-      persistScript(current =>
-        updateLineInScript(current, lineId, {
+      persistScript(current => {
+        const patch: Partial<MomentDialogLine> = {
           characterId: character.id,
           speaker: character.name,
-        }),
-      );
+        };
+        if (character.role === 'player') {
+          patch.playerMode =
+            current.lines.find(entry => entry.id === lineId)?.playerMode ?? 'say';
+        } else {
+          patch.playerMode = undefined;
+        }
+        return updateLineInScript(current, lineId, patch);
+      });
+    },
+    [persistScript],
+  );
+
+  const changeLinePlayerMode = useCallback(
+    (lineId: string, playerMode: PlayerMode) => {
+      persistScript(current => updateLineInScript(current, lineId, { playerMode }));
     },
     [persistScript],
   );
@@ -613,10 +652,10 @@ export function MomentDialogModal({
                                   ? 'border-primary bg-primary/15 text-foreground ring-1 ring-primary/30'
                                   : 'border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
                               )}
-                              title={`${momentLineSummaryLabel(line, characterName, index)} (${formatCueTime(timing.start)}–${formatCueTime(timing.end)})`}
+                              title={`${momentLineSummaryLabel(line, characterName, index, orderedCharacters)} (${formatCueTime(timing.start)}–${formatCueTime(timing.end)})`}
                             >
                               <span className="block truncate font-medium">
-                                {momentLineSummaryLabel(line, characterName, index)}
+                                {momentLineSummaryLabel(line, characterName, index, orderedCharacters)}
                               </span>
                               <span className="block font-mono tabular-nums opacity-80">
                                 {formatCueTime(timing.start)}–{formatCueTime(timing.end)}
@@ -644,6 +683,9 @@ export function MomentDialogModal({
                         onUpdateTiming={patch => updateLineTiming(selectedLine.id, patch)}
                         onSpeakerChange={character =>
                           changeLineSpeaker(selectedLine.id, character)
+                        }
+                        onPlayerModeChange={mode =>
+                          changeLinePlayerMode(selectedLine.id, mode)
                         }
                         onPositionChange={position =>
                           updateCharacterPosition(

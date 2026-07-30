@@ -1,5 +1,6 @@
 import { safeGet, safeSet } from "@/lib/storage-compat";
 import { NARRATOR_CHARACTER_ID } from "@/lib/game/narrator-agent";
+import { normalizePlayerMode, formatPlayerMemoryLabel, type PlayerMode } from "@/lib/player-mode";
 import {
   normalizeMomentDialogTextEffect,
   type VideoCueTextEffect,
@@ -30,6 +31,8 @@ export type MomentDialogLine = {
   characterId: string;
   speaker: string;
   text: string;
+  /** Player say/do/think — only used when characterId is the story player. */
+  playerMode?: PlayerMode;
   textEffect?: VideoCueTextEffect;
   /** Seconds when this line becomes visible */
   start?: number;
@@ -89,6 +92,19 @@ export function isNarratorDialogLine(
   if (line.characterId === NARRATOR_CHARACTER_ID) return true;
   const label = (speakerName ?? line.speaker ?? "").trim().toLowerCase();
   return label === "narrator";
+}
+
+export function resolveMomentDialogSpeakerName(
+  line: Pick<MomentDialogLine, "characterId" | "speaker" | "playerMode">,
+  sceneCharacters: Array<{ id: string; name: string; role: "player" | "npc" | "narrator" }>,
+  npcKnowsPlayer = true,
+): string {
+  const character = sceneCharacters.find((entry) => entry.id === line.characterId);
+  const name = character?.name?.trim() || line.speaker?.trim() || "Unknown";
+  if (character?.role === "player") {
+    return formatPlayerMemoryLabel({ name }, npcKnowsPlayer, line.playerMode);
+  }
+  return name;
 }
 
 export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
@@ -250,18 +266,22 @@ export function ensureTimedDialogScript(
 
 export function momentLinesToTimelineCues(
   script: MomentDialogScript,
-  characters: Array<{ id: string; name: string }>,
+  characters: Array<{ id: string; name: string; role?: "player" | "npc" | "narrator" }>,
 ): VideoTimedCue[] {
+  const hasRoles = characters.some((character) => character.role != null);
   const names = new Map(characters.map((character) => [character.id, character.name]));
   return scriptPreviewLines(script, characters).map((line) => {
     const layout = resolveMomentLineLayout(line);
     const timing = resolveMomentLineTiming(line);
+    const speaker = hasRoles
+      ? resolveMomentDialogSpeakerName(line, characters as Array<{ id: string; name: string; role: "player" | "npc" | "narrator" }>)
+      : names.get(line.characterId) || line.speaker;
     return {
       id: line.id,
       start: timing.start,
       end: timing.end,
       text: line.text,
-      speaker: names.get(line.characterId) || line.speaker,
+      speaker,
       x: layout.x,
       y: layout.y,
       width: layout.width,
@@ -378,8 +398,8 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
   for (const line of value) {
     if (!line || typeof line !== "object") continue;
     const record = line as Record<string, unknown>;
-    const text = typeof record.text === "string" ? record.text.trim() : "";
-    if (!text) continue;
+    const text = typeof record.text === "string" ? record.text : "";
+    if (!text.trim()) continue;
     const characterId =
       typeof record.characterId === "string" ? record.characterId.trim() : "";
     const speaker = typeof record.speaker === "string" ? record.speaker.trim() : "";
@@ -390,6 +410,12 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
       text,
       textEffect: normalizeMomentDialogTextEffect(record.textEffect),
     };
+    const playerMode = normalizePlayerMode(
+      typeof record.playerMode === "string" ? record.playerMode : null,
+    );
+    if (typeof record.playerMode === "string") {
+      entry.playerMode = playerMode;
+    }
     const font = normalizeCueFont(record.font);
     if (font) entry.font = font;
     if (typeof record.fontScale === "number" && Number.isFinite(record.fontScale)) {
@@ -768,24 +794,25 @@ export function addLineForCharacter(
     character.role ?? "npc",
   );
   const xy = defaultXYForSpeakerZone(zone);
+  const newLine: MomentDialogLine = {
+    id: newMomentDialogLineId(),
+    characterId: character.id,
+    speaker: character.name,
+    text: trimmed,
+    start,
+    end,
+    x: xy.x,
+    y: xy.y,
+    width: 0.72,
+    pos: xy,
+    ...DEFAULT_MOMENT_DIALOG_LINE_STYLE,
+  };
+  if (character.role === "player") {
+    newLine.playerMode = "say";
+  }
   return {
     characterOrder,
-    lines: [
-      ...script.lines,
-      {
-        id: newMomentDialogLineId(),
-        characterId: character.id,
-        speaker: character.name,
-        text: trimmed,
-        start,
-        end,
-        x: xy.x,
-        y: xy.y,
-        width: 0.72,
-        pos: xy,
-        ...DEFAULT_MOMENT_DIALOG_LINE_STYLE,
-      },
-    ],
+    lines: [...script.lines, newLine],
   };
 }
 
@@ -808,7 +835,7 @@ export function updateLineTextInScript(
   return {
     ...script,
     lines: script.lines.map((line) =>
-      line.id === lineId ? { ...line, text: trimmed } : line,
+      line.id === lineId ? { ...line, text } : line,
     ),
   };
 }
@@ -853,6 +880,7 @@ export function updateLineInScript(
       | "textEffect"
       | "characterId"
       | "speaker"
+      | "playerMode"
       | "font"
       | "fontScale"
       | "color"

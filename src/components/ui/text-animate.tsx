@@ -429,7 +429,7 @@ const TextAnimateBase = ({
             className={cn(
               by === "line" ? "block" : "inline-block whitespace-pre",
               by === "character" && "",
-              segmentClassName
+              /^\s+$/.test(segment) ? null : segmentClassName,
             )}
             aria-hidden={accessible ? true : undefined}
           >

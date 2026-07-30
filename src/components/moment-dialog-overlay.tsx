@@ -23,6 +23,7 @@ export type MomentDialogLayoutPatch = Partial<{
 
 type MomentDialogOverlayLine = MomentDialogLine & {
   speakerName: string;
+  isPlayerLine?: boolean;
 };
 
 type MomentDialogOverlayProps = {
@@ -166,7 +167,11 @@ function MomentDialogBubble({
 
   const speakerColor =
     style.speakerColor ??
-    (speakerName.trim() === 'Narrator' ? '#fcd34d' : '#a3e635');
+    (isNarratorDialogLine(line, speakerName)
+      ? '#fcd34d'
+      : line.isPlayerLine
+        ? '#7dd3fc'
+        : '#a3e635');
   const showSpeakerLabel = !isNarratorDialogLine(line, speakerName);
 
   return (
@@ -211,6 +216,7 @@ function MomentDialogBubble({
             </div>
           ) : null}
           <div
+            className="whitespace-pre-wrap"
             style={{
               color: style.color,
               textShadow: buildCueTextShadow(style.shadowColor),
