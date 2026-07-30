@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   computeMomentDialogDuration,
   computeMomentDialogLoopDuration,
+  dispatchMomentDialogUpdated,
   ensureCharacterPositions,
   ensureTimedDialogScript,
   loadMomentDialogScript,
@@ -84,17 +85,43 @@ export function useMomentDialogPlayback(
   );
 
   const syncFromDetail = useCallback(
-    (detail: MomentDialogUpdatedDetail, cancelled: () => boolean) => {
+    (detail: MomentDialogUpdatedDetail, cancelled: () => boolean, restart = false) => {
+      const linesExist = detail.script.lines.length > 0;
+      if (!linesExist) {
+        setHasLines(false);
+        setPlaying(false);
+      } else {
+        setHasLines(true);
+        setDuration(computeMomentDialogDuration(detail.script));
+        setLoopDuration(Math.max(0.5, computeMomentDialogLoopDuration(detail.script)));
+      }
+
       void loadStorySceneCharacters(storyId).then(characters => {
         if (cancelled()) return;
         const script = ensureTimedDialogScript(
           ensureCharacterPositions(detail.script, characters),
           characters,
         );
-        applyScript(script, cancelled, { bumpLoop: true });
+        applyScript(script, cancelled, restart ? { restart: true } : { bumpLoop: true });
       });
     },
     [applyScript, storyId],
+  );
+
+  const refreshPlayback = useCallback(
+    async (restart = false) => {
+      if (!momentId) return;
+      const characters = await loadStorySceneCharacters(storyId);
+      const fallbackOrder = characters.map(character => character.id);
+      const loaded = await loadMomentDialogScript(momentId, storyId, fallbackOrder);
+      const script = ensureTimedDialogScript(
+        ensureCharacterPositions(loaded, characters),
+        characters,
+      );
+      applyScript(script, () => false, { restart });
+      dispatchMomentDialogUpdated({ momentId, storyId, script });
+    },
+    [applyScript, momentId, storyId],
   );
 
   useEffect(() => {
@@ -163,5 +190,6 @@ export function useMomentDialogPlayback(
     hasLines,
     duration,
     loopEpoch,
+    refreshPlayback,
   };
 }

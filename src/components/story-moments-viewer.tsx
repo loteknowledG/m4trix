@@ -177,12 +177,11 @@ export function StoryMomentsViewer({
   if (!moment) return null;
 
   return (
-    <div className={cn('relative mx-auto w-full max-w-5xl', className)}>
-      <div className="overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/10">
-        <div
-          ref={stageRef}
-          className="relative flex min-h-[min(72vh,820px)] items-center justify-center bg-black"
-        >
+    <div className={cn('relative flex h-full w-full min-h-0', className)}>
+      <div
+        ref={stageRef}
+        className="relative flex h-full min-h-0 w-full items-center justify-center bg-black"
+      >
           {hasMultiple ? (
             <>
               <button
@@ -206,13 +205,13 @@ export function StoryMomentsViewer({
 
           <div
             ref={containerRef}
-            className="relative flex h-full w-full max-h-[min(72vh,820px)] items-center justify-center"
+            className="relative flex h-full w-full max-h-full max-w-full items-center justify-center"
           >
             <MomentMedia
               ref={imageRef}
               src={moment.src}
               alt={moment.name || 'Story moment'}
-              className="h-full max-h-[min(72vh,820px)] w-full object-contain"
+              className="h-full max-h-full w-full max-w-full object-contain"
               autoPlay
               controls={isMomentVideoSrc(moment.src)}
             />
@@ -252,15 +251,16 @@ export function StoryMomentsViewer({
             ) : null}
           </div>
         </div>
-      </div>
 
       {hasMultiple ? (
-        <p className="mt-3 text-center text-xs tabular-nums text-muted-foreground">
+        <p className="pointer-events-none absolute inset-x-0 bottom-3 z-40 text-center text-xs tabular-nums text-white/70">
           {currentIndex + 1} / {moments.length}
           {moment.name?.trim() ? ` · ${moment.name.trim()}` : ''}
         </p>
       ) : moment.name?.trim() ? (
-        <p className="mt-3 text-center text-xs text-muted-foreground">{moment.name.trim()}</p>
+        <p className="pointer-events-none absolute inset-x-0 bottom-3 z-40 text-center text-xs text-white/70">
+          {moment.name.trim()}
+        </p>
       ) : null}
     </div>
   );

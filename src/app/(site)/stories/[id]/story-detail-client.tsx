@@ -1242,7 +1242,8 @@ export default function StoryPage() {
     <>
       <ContentLayout
         title={title || "Stories"}
-        titleMarquee
+        titleMarquee={isEditMode}
+        fullBleed={!isEditMode}
         navLeft={
           <div className="flex items-center gap-2">
             <TooltipProvider>
@@ -1420,16 +1421,16 @@ export default function StoryPage() {
         <ErrorBoundary>
           <div
             className={cn(
-              "overflow-auto h-[calc(100vh_-_var(--app-header-height,56px))]",
-              !isEditMode && "bg-gradient-to-b from-background via-background to-black/90",
+              "h-[calc(100vh_-_var(--app-header-height,56px))]",
+              isEditMode ? "overflow-auto" : "overflow-hidden bg-black",
             )}
             onDragOver={isEditMode ? (e) => e.preventDefault() : undefined}
             onDrop={isEditMode ? handleExternalDrop : undefined}
           >
-            <div className={cn(isEditMode ? "py-4" : "mx-auto flex min-h-full w-full max-w-6xl flex-col justify-center px-2 py-8 sm:px-4")}>
-              <div className={cn(isEditMode ? "mb-6" : "mb-5 text-center")}>
-                {isEditMode ? (
-                  editingTitle ? (
+            {isEditMode ? (
+              <div className="py-4">
+                <div className="mb-6">
+                  {editingTitle ? (
                     <input
                       autoFocus
                       aria-label="Edit story title"
@@ -1466,24 +1467,9 @@ export default function StoryPage() {
                         {title.trim() ? title : "Add a title"}
                       </Marquee>
                     </button>
-                  )
-                ) : (
-                  <>
-                    <h1 className="text-3xl font-light tracking-tight text-foreground sm:text-4xl">
-                      {title.trim() ? title : "Untitled story"}
-                    </h1>
-                    {viewMoments.length > 0 ? (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {viewMoments[viewMomentIndex]?.name?.trim() || "Story moment"}
-                        {viewMoments.length > 1
-                          ? ` · Part ${viewMomentIndex + 1} of ${viewMoments.length}`
-                          : null}
-                      </p>
-                    ) : null}
-                  </>
-                )}
-              </div>
-              {loading ? (
+                  )}
+                </div>
+                {loading ? (
                 <div className="text-sm text-muted-foreground">Loading…</div>
               ) : moments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
@@ -1510,9 +1496,9 @@ export default function StoryPage() {
                       Delete story
                     </button>
                   </div>
-                </div>
-              ) : isEditMode ? (
-                <MomentsProvider collection={moments}>
+                  </div>
+                ) : (
+                  <MomentsProvider collection={moments}>
                   <>
                       {populatedStageNumbers.map((stageNumber) => {
                         const stageMoments = getStageMoments(stageNumber);
@@ -1591,15 +1577,29 @@ export default function StoryPage() {
                     </>
                   <CollectionOverlay />
                 </MomentsProvider>
-              ) : (
-                <StoryMomentsViewer
-                  moments={viewMoments}
-                  currentIndex={viewMomentIndex}
-                  onIndexChange={setViewMomentIndex}
-                  storyId={id ?? null}
-                />
-              )}
-            </div>
+                )}
+              </div>
+            ) : loading ? (
+              <div className="flex h-full items-center justify-center text-sm text-white/70">
+                Loading…
+              </div>
+            ) : moments.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center px-6 text-center text-white/70">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Upload size={16} />
+                  <div className="font-medium">No moments yet</div>
+                </div>
+                <div className="text-sm">Switch to Edit to add moments to this story.</div>
+              </div>
+            ) : (
+              <StoryMomentsViewer
+                moments={viewMoments}
+                currentIndex={viewMomentIndex}
+                onIndexChange={setViewMomentIndex}
+                storyId={id ?? null}
+                className="h-full w-full"
+              />
+            )}
           </div>
         </ErrorBoundary>
       </ContentLayout>{" "}

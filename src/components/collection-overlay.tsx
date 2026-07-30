@@ -93,17 +93,7 @@ export default function CollectionOverlay() {
     prevDialogOpenRef.current = dialogOpen;
     if (!wasOpen || dialogOpen) return;
 
-    try {
-      window.dispatchEvent(new CustomEvent('moments-updated'));
-    } catch {
-      /* ignore */
-    }
-
-    const playback = dialogPlaybackRef.current;
-    playback.setCurrentTime(0);
-    if (playback.hasLines) {
-      playback.setPlaying(true);
-    }
+    void dialogPlaybackRef.current.refreshPlayback(true);
   }, [dialogOpen]);
 
   const handleDialogOpenChange = useCallback((open: boolean) => {

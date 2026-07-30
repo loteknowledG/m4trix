@@ -22,6 +22,7 @@ import {
   type ObjectContainLayout,
 } from "@/lib/moment-dialog-layout";
 import {
+  dispatchMomentDialogUpdated,
   ensureCharacterPositions,
   ensureTimedDialogScript,
   loadMomentDialogScript,
@@ -593,6 +594,7 @@ export function MomentDialogDisplay({
       if (!momentId) return;
       setScript((current) => {
         const next = updateLineLayoutInScript(current, lineId, patch);
+        dispatchMomentDialogUpdated({ momentId, storyId, script: next });
         void saveMomentDialogScript(momentId, next, storyId).catch((error) => {
           logger.error("Failed to save dialog line layout", error);
         });
