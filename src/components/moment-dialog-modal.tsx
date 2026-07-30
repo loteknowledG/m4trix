@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
+import { useDraggableOffset } from '@/hooks/use-draggable-offset';
 import { getStagePalette } from '@/lib/game/story-arc-palettes';
 import { buildCueTextShadow, resolveVideoCueFontFamily } from '@/lib/video-timed-cues';
 import { logger } from '@/lib/logger';
@@ -489,10 +490,13 @@ export function MomentDialogModal({
     void persistScript(clearLinePositionsInScript(script));
   }, [persistScript, script]);
 
+  const { panelStyle, handleProps, dragging } = useDraggableOffset(open);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="z-[1300] max-w-2xl overflow-hidden p-0"
+        style={panelStyle}
         aria-describedby="moment-dialog-description"
         onClick={event => event.stopPropagation()}
       >
@@ -503,12 +507,24 @@ export function MomentDialogModal({
           </DialogDescription>
         </DialogHeader>
         <div className="flex max-h-[85vh] min-h-0 flex-col">
-          <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
-            <h3 className="text-sm font-medium">Dialog</h3>
+          <div
+            className={cn(
+              'flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3 touch-none select-none',
+              dragging ? 'cursor-grabbing' : 'cursor-grab',
+            )}
+            {...handleProps}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-muted-foreground/70" aria-hidden="true">
+                ⋮⋮
+              </span>
+              <h3 className="text-sm font-medium">Dialog</h3>
+            </div>
             <button
               type="button"
+              data-drag-cancel
               onClick={() => onOpenChange(false)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
+              className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
               aria-label="Close dialog editor"
             >
               ×
