@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { DialogTextEffectView } from "@/components/text/dialog-text-effect-view";
-import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import type { DialogTextEffect } from "@/lib/dialog-text-effects";
 import {
   buildCueTextShadow,
@@ -25,6 +24,7 @@ import {
 import {
   ensureCharacterPositions,
   loadMomentDialogScript,
+  resolveMomentDialogLineStyle,
   saveMomentDialogScript,
   scriptUsesFreePlacement,
   updateLinePositionInScript,
@@ -54,7 +54,7 @@ type PlacedDialogLine = {
 function VnDialogMessage({
   message,
   line,
-  paletteIndex,
+  paletteIndex: _paletteIndex,
   align = "start",
   textEffect,
   lineKey,
@@ -70,16 +70,15 @@ function VnDialogMessage({
   momentId?: string | null;
   compact?: boolean;
 }) {
-  const palette = getStagePalette(paletteIndex);
   const isNarrator = message.messageKind === "narrator" || message.name?.trim() === "Narrator";
-  const dialogColor = line?.color ?? palette.fg;
+  const style = resolveMomentDialogLineStyle(line ?? {});
+  const dialogColor = style.color;
   const speakerColor =
-    line?.speakerColor ??
+    style.speakerColor ??
     (message.from === "user" ? "#7dd3fc" : isNarrator ? "#fcd34d" : "#a3e635");
-  const fontScale = line?.fontScale ?? 0.04;
   const fontSize = compact
-    ? `${Math.max(0.65, fontScale * 14)}rem`
-    : `${Math.max(0.75, fontScale * 18)}rem`;
+    ? `${Math.max(0.65, style.fontScale * 14)}rem`
+    : `${Math.max(0.75, style.fontScale * 18)}rem`;
 
   return (
     <div className={cn("w-full", align === "end" ? "text-right" : "text-left")}>
@@ -90,9 +89,7 @@ function VnDialogMessage({
         )}
         style={{
           color: speakerColor,
-          textShadow: line?.shadowColor
-            ? buildCueTextShadow(line.shadowColor)
-            : "0 1px 2px rgba(0,0,0,0.85)",
+          textShadow: buildCueTextShadow(style.shadowColor),
         }}
       >
         {message.name}
@@ -101,16 +98,14 @@ function VnDialogMessage({
         className={cn("leading-relaxed", compact ? "px-0 py-0.5" : "px-0 py-1")}
         style={{
           color: dialogColor,
-          textShadow: line?.shadowColor
-            ? buildCueTextShadow(line.shadowColor)
-            : "0 1px 3px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.65)",
-          fontFamily: resolveVideoCueFontFamily(line?.font),
+          textShadow: buildCueTextShadow(style.shadowColor),
+          fontFamily: resolveVideoCueFontFamily(style.font),
           fontSize,
         }}
       >
         <DialogTextEffectView
           text={message.text}
-          effect={textEffect ?? line?.textEffect}
+          effect={textEffect ?? style.textEffect}
           lineKey={lineKey}
           replayKey={momentId ? `${momentId}-${lineKey}` : lineKey}
           className="text-inherit"

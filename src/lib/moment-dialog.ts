@@ -36,6 +36,25 @@ export type MomentDialogScript = {
   characterPositions?: Record<string, DialogSpeakerPosition>;
 };
 
+export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
+  textEffect: "none" as DialogTextEffect,
+  font: "system" as VideoCueFontId,
+  fontScale: 0.04,
+  color: "#ffffff",
+  shadowColor: "#000000",
+};
+
+export function resolveMomentDialogLineStyle(line: Partial<MomentDialogLine>) {
+  return {
+    textEffect: normalizeDialogTextEffect(line.textEffect),
+    font: line.font ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.font,
+    fontScale: line.fontScale ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.fontScale,
+    color: line.color ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.color,
+    shadowColor: line.shadowColor ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.shadowColor,
+    speakerColor: line.speakerColor,
+  };
+}
+
 type MomentRecord = {
   id: string;
   src: string;
@@ -466,6 +485,7 @@ export function addLineForCharacter(
         characterId: character.id,
         speaker: character.name,
         text: trimmed,
+        ...DEFAULT_MOMENT_DIALOG_LINE_STYLE,
       },
     ],
   };

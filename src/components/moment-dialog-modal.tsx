@@ -13,9 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
-import { getStagePalette } from '@/lib/game/story-arc-palettes';
-import { normalizeDialogTextEffect } from '@/lib/dialog-text-effects';
-import { buildCueTextShadow } from '@/lib/video-timed-cues';
+import { buildCueTextShadow, resolveVideoCueFontFamily } from '@/lib/video-timed-cues';
 import { logger } from '@/lib/logger';
 import {
   addLineForCharacter,
@@ -27,6 +25,7 @@ import {
   orderedCharactersFromScript,
   removeLineFromScript,
   resolveCharacterPosition,
+  resolveMomentDialogLineStyle,
   saveMomentDialogScript,
   scriptPreviewLines,
   updateCharacterPositionInScript,
@@ -58,19 +57,17 @@ function lineChipLabel(line: MomentDialogLine) {
 function SelectedMomentLineEditor({
   line,
   characterName,
-  paletteIndex,
   onUpdate,
   onRemove,
 }: {
   line: MomentDialogLine;
   characterName: string;
-  paletteIndex: number;
   onUpdate: (patch: Partial<MomentDialogLine>) => void;
   onRemove: () => void;
 }) {
   const [draft, setDraft] = useState(line.text);
-  const effect = normalizeDialogTextEffect(line.textEffect);
-  const palette = getStagePalette(paletteIndex);
+  const style = resolveMomentDialogLineStyle(line);
+  const effect = style.textEffect;
 
   useEffect(() => {
     setDraft(line.text);
@@ -116,12 +113,12 @@ function SelectedMomentLineEditor({
 
       <DialogLineStyleEditor
         values={{
-          textEffect: line.textEffect,
-          font: line.font,
-          fontScale: line.fontScale,
-          color: line.color,
-          shadowColor: line.shadowColor,
-          speakerColor: line.speakerColor,
+          textEffect: style.textEffect,
+          font: style.font,
+          fontScale: style.fontScale,
+          color: style.color,
+          shadowColor: style.shadowColor,
+          speakerColor: style.speakerColor,
         }}
         onChange={onUpdate}
       />
@@ -130,10 +127,10 @@ function SelectedMomentLineEditor({
         <div
           className="rounded-lg px-3 py-2 text-sm"
           style={{
-            color: line.color ?? palette.fg,
-            textShadow: line.shadowColor
-              ? buildCueTextShadow(line.shadowColor)
-              : '0 1px 3px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.65)',
+            color: style.color,
+            textShadow: buildCueTextShadow(style.shadowColor),
+            fontFamily: resolveVideoCueFontFamily(style.font),
+            fontSize: `${Math.max(0.75, style.fontScale * 18)}rem`,
           }}
         >
           <DialogTextEffectView
@@ -547,25 +544,6 @@ export function MomentDialogModal({
                   />
                 ))}
 
-                {script.lines.length > 0 ? (
-                  selectedLine && selectedCharacter ? (
-                    <SelectedMomentLineEditor
-                      key={selectedLine.id}
-                      line={selectedLine}
-                      characterName={selectedCharacter.name}
-                      paletteIndex={Math.max(
-                        0,
-                        script.characterOrder.indexOf(selectedLine.characterId),
-                      )}
-                      onUpdate={patch => updateLine(selectedLine.id, patch)}
-                      onRemove={() => removeLine(selectedLine.id)}
-                    />
-                  ) : (
-                    <p className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-                      Select a dialog chip above to edit text and style.
-                    </p>
-                  )
-                ) : null}
               </div>
             ) : storyId ? (
               <p className="text-xs text-muted-foreground">
@@ -577,6 +555,26 @@ export function MomentDialogModal({
               </p>
             )}
           </div>
+
+          {script.lines.length > 0 ? (
+            selectedLine && selectedCharacter ? (
+              <div className="max-h-[min(42vh,420px)] shrink-0 overflow-y-auto border-t border-border/60 p-4">
+                <SelectedMomentLineEditor
+                  key={selectedLine.id}
+                  line={selectedLine}
+                  characterName={selectedCharacter.name}
+                  onUpdate={patch => updateLine(selectedLine.id, patch)}
+                  onRemove={() => removeLine(selectedLine.id)}
+                />
+              </div>
+            ) : (
+              <div className="shrink-0 border-t border-border/60 px-4 py-3">
+                <p className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                  Select a dialog chip above to edit text and style.
+                </p>
+              </div>
+            )
+          ) : null}
 
           {script.lines.length > 0 ? (
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
