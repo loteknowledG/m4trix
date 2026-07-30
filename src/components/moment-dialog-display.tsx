@@ -98,12 +98,12 @@ function VnDialogMessage({
         {message.name}
       </div>
       <div
-        className={cn("rounded-lg border leading-relaxed", compact ? "px-2 py-1.5" : "px-3 py-2")}
+        className={cn("leading-relaxed", compact ? "px-0 py-0.5" : "px-0 py-1")}
         style={{
-          backgroundColor: `${palette.bg}dd`,
           color: dialogColor,
-          borderColor: `${palette.fg}55`,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+          textShadow: line?.shadowColor
+            ? buildCueTextShadow(line.shadowColor)
+            : "0 1px 3px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.65)",
           fontFamily: resolveVideoCueFontFamily(line?.font),
           fontSize,
         }}

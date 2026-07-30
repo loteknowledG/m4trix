@@ -15,6 +15,7 @@ import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
 import { getStagePalette } from '@/lib/game/story-arc-palettes';
 import { normalizeDialogTextEffect } from '@/lib/dialog-text-effects';
+import { buildCueTextShadow } from '@/lib/video-timed-cues';
 import { logger } from '@/lib/logger';
 import {
   addLineForCharacter,
@@ -127,11 +128,12 @@ function SelectedMomentLineEditor({
 
       {draft.trim() ? (
         <div
-          className="rounded-lg border px-3 py-2 text-sm"
+          className="rounded-lg px-3 py-2 text-sm"
           style={{
-            backgroundColor: `${palette.bg}dd`,
             color: line.color ?? palette.fg,
-            borderColor: `${palette.fg}55`,
+            textShadow: line.shadowColor
+              ? buildCueTextShadow(line.shadowColor)
+              : '0 1px 3px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.65)',
           }}
         >
           <DialogTextEffectView
