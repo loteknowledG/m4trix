@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
+import { getStagePalette } from '@/lib/game/story-arc-palettes';
 import { buildCueTextShadow, resolveVideoCueFontFamily } from '@/lib/video-timed-cues';
 import { logger } from '@/lib/logger';
 import {
