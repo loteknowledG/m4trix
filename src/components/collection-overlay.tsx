@@ -23,6 +23,7 @@ import { MomentDialogModal } from '@/components/moment-dialog-modal';
 import { MomentDialogDisplay, seedDialogPlacementDefaults } from '@/components/moment-dialog-display';
 import { useMomentDialogPlayback } from '@/hooks/use-moment-dialog-playback';
 import { loadStorySceneCharacters } from '@/lib/scene-characters';
+import { cn } from '@/lib/utils';
 
 const MomentClassifier = dynamic(
   () => import('@/components/ai/moment-classifier'),
