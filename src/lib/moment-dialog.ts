@@ -5,6 +5,7 @@ import {
   normalizeCueColor,
   normalizeCueFont,
   type VideoCueFontId,
+  type VideoTimedCue,
 } from "@/lib/video-timed-cues";
 
 export type DialogLinePosition = {
@@ -22,6 +23,17 @@ export type MomentDialogLine = {
   speaker: string;
   text: string;
   textEffect?: DialogTextEffect;
+  /** Seconds when this line becomes visible */
+  start?: number;
+  /** Seconds when this line hides */
+  end?: number;
+  /** Horizontal center, 0–1 on the moment frame */
+  x?: number;
+  /** Vertical center, 0–1 on the moment frame */
+  y?: number;
+  /** Max width as a fraction of the frame (default 0.72) */
+  width?: number;
+  /** @deprecated use x/y — kept for legacy scripts */
   pos?: DialogLinePosition;
   font?: VideoCueFontId;
   fontScale?: number;
@@ -34,7 +46,11 @@ export type MomentDialogScript = {
   characterOrder: string[];
   lines: MomentDialogLine[];
   characterPositions?: Record<string, DialogSpeakerPosition>;
+  /** Scene duration for the dialog timeline (seconds) */
+  duration?: number;
 };
+
+export const DEFAULT_MOMENT_LINE_DURATION = 5;
 
 export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
   textEffect: "none" as DialogTextEffect,
@@ -53,6 +69,163 @@ export function resolveMomentDialogLineStyle(line: Partial<MomentDialogLine>) {
     shadowColor: line.shadowColor ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.shadowColor,
     speakerColor: line.speakerColor,
   };
+}
+
+export function defaultXYForSpeakerZone(zone: DialogSpeakerPosition): DialogLinePosition {
+  switch (zone) {
+    case "top":
+      return { x: 0.5, y: 0.14 };
+    case "bottom":
+      return { x: 0.5, y: 0.86 };
+    case "left":
+      return { x: 0.18, y: 0.72 };
+    case "right":
+      return { x: 0.82, y: 0.72 };
+  }
+}
+
+export function resolveMomentLineLayout(line: MomentDialogLine) {
+  const x = line.x ?? line.pos?.x ?? 0.5;
+  const y = line.y ?? line.pos?.y ?? 0.82;
+  return {
+    x: Math.min(1, Math.max(0, x)),
+    y: Math.min(1, Math.max(0, y)),
+    width: Math.min(1, Math.max(0.2, line.width ?? 0.72)),
+    fontScale: line.fontScale ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.fontScale,
+  };
+}
+
+export function resolveMomentLineTiming(line: MomentDialogLine) {
+  const start = Math.max(0, line.start ?? 0);
+  const end = Math.max(start + 0.5, line.end ?? start + DEFAULT_MOMENT_LINE_DURATION);
+  return { start, end };
+}
+
+export function getActiveMomentDialogLines(
+  lines: MomentDialogLine[],
+  currentTime: number,
+): MomentDialogLine[] {
+  const t = Math.max(0, currentTime);
+  return lines.filter((line) => {
+    const { start, end } = resolveMomentLineTiming(line);
+    return t >= start - 0.02 && t < end;
+  });
+}
+
+export function computeMomentDialogDuration(script: MomentDialogScript): number {
+  if (typeof script.duration === "number" && script.duration > 0) {
+    return script.duration;
+  }
+  const lineEnds = script.lines.map((line) => resolveMomentLineTiming(line).end);
+  return Math.max(30, ...lineEnds, 0);
+}
+
+export function scriptUsesTimedLayout(script: MomentDialogScript): boolean {
+  return script.lines.some(
+    (line) =>
+      typeof line.start === "number" ||
+      typeof line.x === "number" ||
+      line.pos != null,
+  );
+}
+
+export function ensureTimedDialogScript(
+  script: MomentDialogScript,
+  sceneCharacters: Array<{ id: string; name: string; role?: "player" | "npc" | "narrator" }>,
+): MomentDialogScript {
+  if (!script.lines.length) return script;
+
+  const names = sceneCharacters.map((character) => ({
+    id: character.id,
+    name: character.name,
+  }));
+  const ordered = scriptPreviewLines(script, names);
+  const byId = new Map(script.lines.map((line) => [line.id, { ...line }]));
+  let timeCursor = 0;
+
+  for (const previewLine of ordered) {
+    const line = byId.get(previewLine.id);
+    if (!line) continue;
+
+    if (typeof line.start !== "number" || typeof line.end !== "number") {
+      line.start = timeCursor;
+      line.end = timeCursor + DEFAULT_MOMENT_LINE_DURATION;
+    }
+    timeCursor = Math.max(timeCursor, resolveMomentLineTiming(line).end);
+
+    if (typeof line.x !== "number" || typeof line.y !== "number") {
+      if (line.pos) {
+        line.x = line.pos.x;
+        line.y = line.pos.y;
+      } else {
+        const character = sceneCharacters.find((entry) => entry.id === line.characterId);
+        const zone = resolveCharacterPosition(
+          script,
+          line.characterId,
+          character?.role ?? "npc",
+        );
+        const xy = defaultXYForSpeakerZone(zone);
+        line.x = xy.x;
+        line.y = xy.y;
+      }
+    }
+
+    if (typeof line.width !== "number") {
+      line.width = 0.72;
+    }
+
+    line.pos = {
+      x: line.x ?? 0.5,
+      y: line.y ?? 0.82,
+    };
+  }
+
+  for (const line of byId.values()) {
+    if (typeof line.start !== "number" || typeof line.end !== "number") {
+      line.start = timeCursor;
+      line.end = timeCursor + DEFAULT_MOMENT_LINE_DURATION;
+      timeCursor = line.end;
+    }
+    if (typeof line.x !== "number" || typeof line.y !== "number") {
+      line.x = line.pos?.x ?? 0.5;
+      line.y = line.pos?.y ?? 0.82;
+    }
+    if (typeof line.width !== "number") line.width = 0.72;
+    line.pos = { x: line.x, y: line.y };
+  }
+
+  const duration = Math.max(computeMomentDialogDuration(script), timeCursor + 8);
+  return {
+    ...script,
+    lines: script.lines.map((line) => byId.get(line.id) ?? line),
+    duration,
+  };
+}
+
+export function momentLinesToTimelineCues(
+  script: MomentDialogScript,
+  characters: Array<{ id: string; name: string }>,
+): VideoTimedCue[] {
+  const names = new Map(characters.map((character) => [character.id, character.name]));
+  return scriptPreviewLines(script, characters).map((line) => {
+    const layout = resolveMomentLineLayout(line);
+    const timing = resolveMomentLineTiming(line);
+    return {
+      id: line.id,
+      start: timing.start,
+      end: timing.end,
+      text: line.text,
+      speaker: names.get(line.characterId) || line.speaker,
+      x: layout.x,
+      y: layout.y,
+      width: layout.width,
+      fontScale: layout.fontScale,
+      font: line.font,
+      color: line.color,
+      speakerColor: line.speakerColor,
+      shadowColor: line.shadowColor,
+    };
+  });
 }
 
 type MomentRecord = {
@@ -185,6 +358,21 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
     if (shadowColor) entry.shadowColor = shadowColor;
     const pos = normalizeDialogLinePosition(record.pos);
     if (pos) entry.pos = pos;
+    if (typeof record.start === "number" && Number.isFinite(record.start)) {
+      entry.start = Math.max(0, record.start);
+    }
+    if (typeof record.end === "number" && Number.isFinite(record.end)) {
+      entry.end = Math.max(0, record.end);
+    }
+    if (typeof record.x === "number" && Number.isFinite(record.x)) {
+      entry.x = Math.min(1, Math.max(0, record.x));
+    }
+    if (typeof record.y === "number" && Number.isFinite(record.y)) {
+      entry.y = Math.min(1, Math.max(0, record.y));
+    }
+    if (typeof record.width === "number" && Number.isFinite(record.width)) {
+      entry.width = Math.min(1, Math.max(0.2, record.width));
+    }
     normalized.push(entry);
   }
   return normalized;
@@ -202,7 +390,11 @@ export function normalizeMomentDialogScript(
       : [];
     const characterOrder = mergeCharacterOrder(rawOrder, lines, fallbackCharacterOrder);
     const characterPositions = normalizeCharacterPositions(record.characterPositions);
-    return { characterOrder, lines, characterPositions };
+    const duration =
+      typeof record.duration === "number" && Number.isFinite(record.duration)
+        ? Math.max(1, record.duration)
+        : undefined;
+    return { characterOrder, lines, characterPositions, duration };
   }
 
   const legacyLines = normalizeLegacyDialogLines(value);
@@ -468,7 +660,7 @@ export function moveCharacterInOrder(order: string[], characterId: string, direc
 
 export function addLineForCharacter(
   script: MomentDialogScript,
-  character: { id: string; name: string },
+  character: { id: string; name: string; role?: "player" | "npc" | "narrator" },
   text: string,
 ): MomentDialogScript {
   const trimmed = text.trim();
@@ -476,6 +668,15 @@ export function addLineForCharacter(
   const characterOrder = script.characterOrder.includes(character.id)
     ? script.characterOrder
     : [...script.characterOrder, character.id];
+  const maxEnd = Math.max(0, ...script.lines.map((line) => resolveMomentLineTiming(line).end));
+  const start = maxEnd;
+  const end = start + DEFAULT_MOMENT_LINE_DURATION;
+  const zone = resolveCharacterPosition(
+    script,
+    character.id,
+    character.role ?? "npc",
+  );
+  const xy = defaultXYForSpeakerZone(zone);
   return {
     characterOrder,
     lines: [
@@ -485,6 +686,12 @@ export function addLineForCharacter(
         characterId: character.id,
         speaker: character.name,
         text: trimmed,
+        start,
+        end,
+        x: xy.x,
+        y: xy.y,
+        width: 0.72,
+        pos: xy,
         ...DEFAULT_MOMENT_DIALOG_LINE_STYLE,
       },
     ],
@@ -523,6 +730,28 @@ export function updateLineEffectInScript(
   return updateLineInScript(script, lineId, { textEffect });
 }
 
+export function updateLineTimingInScript(
+  script: MomentDialogScript,
+  lineId: string,
+  patch: { start?: number; end?: number },
+): MomentDialogScript {
+  return {
+    ...script,
+    lines: script.lines.map((line) => {
+      if (line.id !== lineId) return line;
+      const timing = resolveMomentLineTiming(line);
+      const start = patch.start != null ? Math.max(0, patch.start) : timing.start;
+      const end =
+        patch.end != null
+          ? Math.max(start + 0.5, patch.end)
+          : patch.start != null && patch.end == null
+            ? Math.max(start + 0.5, timing.end)
+            : timing.end;
+      return { ...line, start, end };
+    }),
+  };
+}
+
 export function updateLineInScript(
   script: MomentDialogScript,
   lineId: string,
@@ -536,6 +765,11 @@ export function updateLineInScript(
       | "color"
       | "speakerColor"
       | "shadowColor"
+      | "start"
+      | "end"
+      | "x"
+      | "y"
+      | "width"
     >
   >,
 ): MomentDialogScript {
@@ -545,25 +779,51 @@ export function updateLineInScript(
   };
 }
 
+export function updateLineLayoutInScript(
+  script: MomentDialogScript,
+  lineId: string,
+  patch: Partial<Pick<MomentDialogLine, "x" | "y" | "width" | "fontScale">>,
+): MomentDialogScript {
+  return {
+    ...script,
+    lines: script.lines.map((line) => {
+      if (line.id !== lineId) return line;
+      const next = { ...line, ...patch };
+      const x = next.x ?? line.x ?? line.pos?.x ?? 0.5;
+      const y = next.y ?? line.y ?? line.pos?.y ?? 0.82;
+      next.x = Math.min(1, Math.max(0, x));
+      next.y = Math.min(1, Math.max(0, y));
+      if (patch.width != null) {
+        next.width = Math.min(1, Math.max(0.2, patch.width));
+      }
+      next.pos = { x: next.x, y: next.y };
+      return next;
+    }),
+  };
+}
+
 export function updateLinePositionInScript(
   script: MomentDialogScript,
   lineId: string,
   pos: DialogLinePosition,
 ): MomentDialogScript {
-  return {
-    ...script,
-    lines: script.lines.map((line) =>
-      line.id === lineId
-        ? { ...line, pos: normalizeDialogLinePosition(pos) ?? pos }
-        : line,
-    ),
-  };
+  const normalized = normalizeDialogLinePosition(pos) ?? pos;
+  return updateLineLayoutInScript(script, lineId, { x: normalized.x, y: normalized.y });
 }
 
 export function clearLinePositionsInScript(script: MomentDialogScript): MomentDialogScript {
   return {
     ...script,
-    lines: script.lines.map(({ pos: _pos, ...line }) => line),
+    lines: script.lines.map((line) => {
+      const zone = defaultXYForSpeakerZone("bottom");
+      return {
+        ...line,
+        x: zone.x,
+        y: zone.y,
+        width: 0.72,
+        pos: zone,
+      };
+    }),
   };
 }
 

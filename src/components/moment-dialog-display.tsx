@@ -23,17 +23,17 @@ import {
 } from "@/lib/moment-dialog-layout";
 import {
   ensureCharacterPositions,
+  ensureTimedDialogScript,
   loadMomentDialogScript,
   resolveMomentDialogLineStyle,
   saveMomentDialogScript,
-  scriptUsesFreePlacement,
-  updateLinePositionInScript,
-  type DialogLinePosition,
+  updateLineLayoutInScript,
   type MomentDialogLine,
   type MomentDialogScript,
 } from "@/lib/moment-dialog";
 import { loadStorySceneCharacters, type SceneCharacter } from "@/lib/scene-characters";
 import { cn } from "@/lib/utils";
+import { MomentDialogOverlay, type MomentDialogLayoutPatch } from "@/components/moment-dialog-overlay";
 
 type MomentDialogDisplayProps = {
   momentId: string | null;
@@ -41,6 +41,9 @@ type MomentDialogDisplayProps = {
   stageRef: React.RefObject<HTMLElement | null>;
   imageRef: React.RefObject<HTMLImageElement | null>;
   placementMode?: boolean;
+  currentTime?: number;
+  editLineId?: string | null;
+  onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
 };
 
 type PlacedDialogLine = {
@@ -492,37 +495,12 @@ export function MomentDialogDisplay({
   stageRef,
   imageRef,
   placementMode = false,
+  currentTime,
+  editLineId = null,
+  onLayoutChange,
 }: MomentDialogDisplayProps) {
   const [script, setScript] = useState<MomentDialogScript>({ characterOrder: [], lines: [] });
   const [sceneCharacters, setSceneCharacters] = useState<SceneCharacter[]>([]);
-  const [layout, setLayout] = useState<ObjectContainLayout>({
-    renderedWidth: 0,
-    renderedHeight: 0,
-    offsetX: 0,
-    offsetY: 0,
-    sideBarWidth: 0,
-  });
-  const [useWideLayout, setUseWideLayout] = useState(false);
-
-  const recomputeLayout = useCallback(() => {
-    const stage = stageRef.current;
-    const image = imageRef.current;
-    if (!stage || !image) return;
-
-    const rect = stage.getBoundingClientRect();
-    const naturalWidth = image.naturalWidth;
-    const naturalHeight = image.naturalHeight;
-    const nextLayout = computeObjectContainLayout(
-      rect.width,
-      rect.height,
-      naturalWidth,
-      naturalHeight,
-    );
-    setLayout(nextLayout);
-    setUseWideLayout(
-      shouldUseWideSideDialogLayout(rect.width, rect.height, naturalWidth, naturalHeight),
-    );
-  }, [imageRef, stageRef]);
 
   useEffect(() => {
     if (!momentId) {
@@ -543,7 +521,8 @@ export function MomentDialogDisplay({
       })
       .then((result) => {
         if (cancelled || !result) return;
-        setScript(ensureCharacterPositions(result.loaded, result.characters));
+        const withPositions = ensureCharacterPositions(result.loaded, result.characters);
+        setScript(ensureTimedDialogScript(withPositions, result.characters));
       })
       .catch((error) => {
         logger.error("Failed to load moment dialog display", error);
@@ -559,7 +538,10 @@ export function MomentDialogDisplay({
       if (!momentId) return;
       const fallbackOrder = sceneCharacters.map((character) => character.id);
       void loadMomentDialogScript(momentId, storyId, fallbackOrder)
-        .then((loaded) => setScript(ensureCharacterPositions(loaded, sceneCharacters)))
+        .then((loaded) => {
+          const withPositions = ensureCharacterPositions(loaded, sceneCharacters);
+          setScript(ensureTimedDialogScript(withPositions, sceneCharacters));
+        })
         .catch((error) => logger.error("Failed to refresh moment dialog display", error));
     };
 
@@ -567,95 +549,40 @@ export function MomentDialogDisplay({
     return () => window.removeEventListener("moments-updated", reload);
   }, [momentId, sceneCharacters, storyId]);
 
-  useEffect(() => {
-    recomputeLayout();
-    const stage = stageRef.current;
-    const image = imageRef.current;
-    if (!stage) return;
-
-    const observer = new ResizeObserver(() => recomputeLayout());
-    observer.observe(stage);
-    image?.addEventListener("load", recomputeLayout);
-
-    return () => {
-      observer.disconnect();
-      image?.removeEventListener("load", recomputeLayout);
-    };
-  }, [imageRef, momentId, recomputeLayout, stageRef]);
-
-  const persistPosition = useCallback(
-    (lineId: string, pos: DialogLinePosition) => {
+  const persistLayout = useCallback(
+    (lineId: string, patch: MomentDialogLayoutPatch) => {
       if (!momentId) return;
       setScript((current) => {
-        const next = updateLinePositionInScript(current, lineId, pos);
+        const next = updateLineLayoutInScript(current, lineId, patch);
         void saveMomentDialogScript(momentId, next, storyId).catch((error) => {
-          logger.error("Failed to save dialog line position", error);
+          logger.error("Failed to save dialog line layout", error);
         });
         return next;
       });
+      onLayoutChange?.(lineId, patch);
     },
-    [momentId, storyId],
+    [momentId, onLayoutChange, storyId],
   );
 
-  const speakOrderMessages = useMemo(
-    () => scriptToChatMessages(script, sceneCharacters),
-    [sceneCharacters, script],
-  );
+  const overlayLines = useMemo(() => {
+    const names = new Map(sceneCharacters.map((character) => [character.id, character.name]));
+    return script.lines.map((line) => ({
+      ...line,
+      speakerName: names.get(line.characterId) || line.speaker || "Unknown",
+    }));
+  }, [sceneCharacters, script.lines]);
 
-  const placedEntries = useMemo((): PlacedDialogLine[] => {
-    const grouped = groupLinesByPlacementZone(script, sceneCharacters);
-    return speakOrderMessages.flatMap((message) => {
-      const line = script.lines.find((entry) => entry.id === message.id);
-      if (!line) return [];
-      const zone = characterPlacementZone(
-        line.characterId,
-        sceneCharacters,
-        script.characterPositions,
-      );
-      const side = characterDialogSide(
-        line.characterId,
-        script.characterOrder,
-        sceneCharacters,
-        script.characterPositions,
-      );
-      const paletteIndex = Math.max(0, script.characterOrder.indexOf(line.characterId));
-      const zoneMessages = grouped[zone];
-      const indexInZone = zoneMessages.findIndex((entry) => entry.id === message.id);
-      const position =
-        line.pos ??
-        defaultDialogLinePosition(
-          Math.max(0, indexInZone),
-          zoneMessages.length,
-          side,
-          zone,
-        );
-      return [{ message, line, side, paletteIndex, position }];
-    });
-  }, [sceneCharacters, script, speakOrderMessages]);
-
-  const useFreePlacement = placementMode || scriptUsesFreePlacement(script);
+  const activeEditLineId = editLineId ?? (placementMode ? overlayLines[0]?.id ?? null : null);
 
   if (!script.lines.length) return null;
 
-  if (useFreePlacement) {
-    return (
-      <FreePlacementLayer
-        entries={placedEntries}
-        placementMode={placementMode}
-        stageRef={stageRef}
-        momentId={momentId}
-        onPositionChange={persistPosition}
-      />
-    );
-  }
-
   return (
-    <PositionedSceneDialogLayer
-      script={script}
-      sceneCharacters={sceneCharacters}
+    <MomentDialogOverlay
+      lines={overlayLines}
+      currentTime={currentTime}
       momentId={momentId}
-      layout={layout}
-      useWideLayout={useWideLayout}
+      editLineId={activeEditLineId}
+      onLayoutChange={persistLayout}
     />
   );
 }
@@ -667,39 +594,8 @@ export async function seedDialogPlacementDefaults(
 ): Promise<MomentDialogScript | null> {
   const fallbackOrder = sceneCharacters.map((character) => character.id);
   const loaded = await loadMomentDialogScript(momentId, storyId, fallbackOrder);
-  const script = ensureCharacterPositions(loaded, sceneCharacters);
-  const messages = scriptToChatMessages(script, sceneCharacters);
-  const grouped = groupLinesByPlacementZone(script, sceneCharacters);
-  let next = script;
-  let changed = false;
-
-  messages.forEach((message) => {
-    const line = next.lines.find((entry) => entry.id === message.id);
-    if (!line || line.pos) return;
-    const zone = characterPlacementZone(
-      line.characterId,
-      sceneCharacters,
-      next.characterPositions,
-    );
-    const side = characterDialogSide(
-      line.characterId,
-      next.characterOrder,
-      sceneCharacters,
-      next.characterPositions,
-    );
-    const zoneMessages = grouped[zone];
-    const indexInZone = zoneMessages.findIndex((entry) => entry.id === message.id);
-    const pos = defaultDialogLinePosition(
-      Math.max(0, indexInZone),
-      zoneMessages.length,
-      side,
-      zone,
-    );
-    next = updateLinePositionInScript(next, line.id, pos);
-    changed = true;
-  });
-
-  if (!changed) return script;
+  const withPositions = ensureCharacterPositions(loaded, sceneCharacters);
+  const next = ensureTimedDialogScript(withPositions, sceneCharacters);
   await saveMomentDialogScript(momentId, next, storyId);
   return next;
 }

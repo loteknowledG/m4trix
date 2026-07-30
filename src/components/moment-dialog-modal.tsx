@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from '@/components/icons';
+import { CueTimeField } from '@/components/cue-time-field';
+import VideoCueTimeline from '@/components/video-cue-timeline';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -15,24 +17,34 @@ import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
 import { useDraggableOffset } from '@/hooks/use-draggable-offset';
 import { getStagePalette } from '@/lib/game/story-arc-palettes';
-import { buildCueTextShadow, resolveVideoCueFontFamily } from '@/lib/video-timed-cues';
+import {
+  buildCueTextShadow,
+  commitCueEndTime,
+  commitCueStartTime,
+  resolveVideoCueFontFamily,
+} from '@/lib/video-timed-cues';
 import { logger } from '@/lib/logger';
 import {
   addLineForCharacter,
   clearLinePositionsInScript,
+  computeMomentDialogDuration,
   ensureCharacterPositions,
+  ensureTimedDialogScript,
   loadMomentDialogScript,
+  momentLinesToTimelineCues,
   moveCharacterInOrder,
   moveLineForCharacter,
   orderedCharactersFromScript,
   removeLineFromScript,
   resolveCharacterPosition,
   resolveMomentDialogLineStyle,
+  resolveMomentLineTiming,
   saveMomentDialogScript,
   scriptPreviewLines,
   updateCharacterPositionInScript,
   updateLineInScript,
   updateLineTextInScript,
+  updateLineTimingInScript,
   type DialogSpeakerPosition,
   type MomentDialogLine,
   type MomentDialogScript,
@@ -45,6 +57,12 @@ type MomentDialogModalProps = {
   onOpenChange: (open: boolean) => void;
   momentId: string | null;
   storyId?: string | null;
+  currentTime?: number;
+  onCurrentTimeChange?: (time: number) => void;
+  isPlaying?: boolean;
+  onIsPlayingChange?: (playing: boolean) => void;
+  editLineId?: string | null;
+  onEditLineIdChange?: (lineId: string | null) => void;
   onStartPlacement?: () => void | Promise<void>;
 };
 
@@ -59,17 +77,22 @@ function lineChipLabel(line: MomentDialogLine) {
 function SelectedMomentLineEditor({
   line,
   characterName,
+  currentTime,
   onUpdate,
+  onUpdateTiming,
   onRemove,
 }: {
   line: MomentDialogLine;
   characterName: string;
+  currentTime?: number;
   onUpdate: (patch: Partial<MomentDialogLine>) => void;
+  onUpdateTiming: (patch: { start?: number; end?: number }) => void;
   onRemove: () => void;
 }) {
   const [draft, setDraft] = useState(line.text);
   const style = resolveMomentDialogLineStyle(line);
   const effect = style.textEffect;
+  const timing = resolveMomentLineTiming(line);
 
   useEffect(() => {
     setDraft(line.text);
@@ -91,6 +114,27 @@ function SelectedMomentLineEditor({
         >
           Remove
         </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <CueTimeField
+          fieldId={`${line.id}-start`}
+          label="Start"
+          value={timing.start}
+          currentTime={currentTime}
+          onCommit={start => {
+            onUpdateTiming(commitCueStartTime(start, timing.end));
+          }}
+        />
+        <CueTimeField
+          fieldId={`${line.id}-end`}
+          label="End"
+          value={timing.end}
+          currentTime={currentTime}
+          onCommit={end => {
+            onUpdateTiming(commitCueEndTime(timing.start, end));
+          }}
+        />
       </div>
 
       <Textarea
@@ -146,7 +190,8 @@ function SelectedMomentLineEditor({
       ) : null}
 
       <p className="text-[11px] text-muted-foreground">
-        Use Place on scene to drag this bubble, or rely on the speaker position setting.
+        Drag the dialog on the moment to move it · use the corner handle to resize width and text
+        size.
       </p>
     </div>
   );
@@ -328,6 +373,12 @@ export function MomentDialogModal({
   onOpenChange,
   momentId,
   storyId,
+  currentTime = 0,
+  onCurrentTimeChange,
+  isPlaying = false,
+  onIsPlayingChange,
+  editLineId = null,
+  onEditLineIdChange,
   onStartPlacement,
 }: MomentDialogModalProps) {
   const [script, setScript] = useState<MomentDialogScript>({ characterOrder: [], lines: [] });
@@ -338,8 +389,16 @@ export function MomentDialogModal({
   useEffect(() => {
     if (!open) {
       setSelectedLineId(null);
+      onEditLineIdChange?.(null);
+      onIsPlayingChange?.(false);
     }
-  }, [open]);
+  }, [open, onEditLineIdChange, onIsPlayingChange]);
+
+  useEffect(() => {
+    if (selectedLineId) {
+      onEditLineIdChange?.(selectedLineId);
+    }
+  }, [onEditLineIdChange, selectedLineId]);
 
   useEffect(() => {
     if (!open) return;
@@ -365,7 +424,10 @@ export function MomentDialogModal({
     void loadMomentDialogScript(momentId, storyId, fallbackOrder)
       .then(loaded => {
         if (!cancelled) {
-          const next = ensureCharacterPositions(loaded, sceneCharacters);
+          const next = ensureTimedDialogScript(
+            ensureCharacterPositions(loaded, sceneCharacters),
+            sceneCharacters,
+          );
           setScript(next);
           setSelectedLineId(prev =>
             prev && next.lines.some(line => line.id === prev) ? prev : next.lines[0]?.id ?? null,
@@ -413,6 +475,7 @@ export function MomentDialogModal({
       setScript(nextScript);
       try {
         await saveMomentDialogScript(momentId, nextScript, storyId);
+        window.dispatchEvent(new CustomEvent('moments-updated'));
       } catch (error) {
         logger.error('Failed to save moment dialog', error);
       }
@@ -484,6 +547,35 @@ export function MomentDialogModal({
       void persistScript(updateCharacterPositionInScript(script, characterId, validPosition));
     },
     [persistScript, script],
+  );
+
+  const timelineCues = useMemo(
+    () => momentLinesToTimelineCues(script, orderedCharacters),
+    [orderedCharacters, script],
+  );
+
+  const sceneDuration = useMemo(() => computeMomentDialogDuration(script), [script]);
+
+  const updateLineTiming = useCallback(
+    (lineId: string, patch: { start?: number; end?: number }) => {
+      void persistScript(updateLineTimingInScript(script, lineId, patch));
+    },
+    [persistScript, script],
+  );
+
+  const handleTimelineSeek = useCallback(
+    (time: number) => {
+      onCurrentTimeChange?.(time);
+      onIsPlayingChange?.(false);
+    },
+    [onCurrentTimeChange, onIsPlayingChange],
+  );
+
+  const handleCueTimingChange = useCallback(
+    (lineId: string, patch: { start?: number; end?: number }) => {
+      updateLineTiming(lineId, patch);
+    },
+    [updateLineTiming],
   );
 
   const resetLayout = useCallback(() => {
@@ -580,7 +672,9 @@ export function MomentDialogModal({
                   key={selectedLine.id}
                   line={selectedLine}
                   characterName={selectedCharacter.name}
+                  currentTime={currentTime}
                   onUpdate={patch => updateLine(selectedLine.id, patch)}
+                  onUpdateTiming={patch => updateLineTiming(selectedLine.id, patch)}
                   onRemove={() => removeLine(selectedLine.id)}
                 />
               </div>
@@ -591,6 +685,49 @@ export function MomentDialogModal({
                 </p>
               </div>
             )
+          ) : null}
+
+          {script.lines.length > 0 ? (
+            <div className="shrink-0 space-y-2 border-t border-border/60 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  Timeline · {Math.floor(currentTime)}s / {sceneDuration}s
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      onCurrentTimeChange?.(0);
+                      onIsPlayingChange?.(false);
+                    }}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={isPlaying ? 'secondary' : 'default'}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onIsPlayingChange?.(!isPlaying)}
+                  >
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </Button>
+                </div>
+              </div>
+              <VideoCueTimeline
+                cues={timelineCues}
+                selectedCueId={selectedLineId}
+                currentTime={currentTime}
+                videoDuration={sceneDuration}
+                onSelectCue={lineId => setSelectedLineId(lineId)}
+                onCueTimingChange={handleCueTimingChange}
+                onSeek={handleTimelineSeek}
+                onScrubStart={() => onIsPlayingChange?.(false)}
+              />
+            </div>
           ) : null}
 
           {script.lines.length > 0 ? (
@@ -608,9 +745,9 @@ export function MomentDialogModal({
                   onClick={() => {
                     void onStartPlacement();
                   }}
-                  className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90"
+                  className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent/20"
                 >
-                  Place on scene
+                  Seed positions
                 </button>
               ) : null}
             </div>

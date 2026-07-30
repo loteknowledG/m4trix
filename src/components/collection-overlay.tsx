@@ -66,6 +66,9 @@ export default function CollectionOverlay() {
   const [tagging, setTagging] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogPlacementMode, setDialogPlacementMode] = useState(false);
+  const [dialogCurrentTime, setDialogCurrentTime] = useState(0);
+  const [dialogPlaying, setDialogPlaying] = useState(false);
+  const [dialogEditLineId, setDialogEditLineId] = useState<string | null>(null);
   const editingRef = useRef(editing);
   const taggingRef = useRef(tagging);
   const dialogOpenRef = useRef(dialogOpen);
@@ -74,6 +77,30 @@ export default function CollectionOverlay() {
   taggingRef.current = tagging;
   dialogOpenRef.current = dialogOpen;
   dialogPlacementModeRef.current = dialogPlacementMode;
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      setDialogCurrentTime(0);
+      setDialogPlaying(false);
+      setDialogEditLineId(null);
+    }
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (!dialogOpen || !dialogPlaying) return;
+    const id = window.setInterval(() => {
+      setDialogCurrentTime(previous => {
+        const next = previous + 0.1;
+        if (next >= 120) {
+          setDialogPlaying(false);
+          return 0;
+        }
+        return next;
+      });
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [dialogOpen, dialogPlaying]);
+
   const [text, setText] = useState('');
   const [pos, setPos] = useState({ x: 0.5, y: 0.5 });
   const [font, setFont] = useState('system');
@@ -647,6 +674,8 @@ export default function CollectionOverlay() {
             stageRef={stageRef}
             imageRef={imageRef}
             placementMode={dialogPlacementMode}
+            currentTime={dialogOpen || dialogPlacementMode ? dialogCurrentTime : undefined}
+            editLineId={dialogOpen ? dialogEditLineId : null}
           />
 
           {dialogPlacementMode ? (
@@ -937,12 +966,16 @@ export default function CollectionOverlay() {
         onOpenChange={setDialogOpen}
         momentId={currentId}
         storyId={storyId}
+        currentTime={dialogCurrentTime}
+        onCurrentTimeChange={setDialogCurrentTime}
+        isPlaying={dialogPlaying}
+        onIsPlayingChange={setDialogPlaying}
+        editLineId={dialogEditLineId}
+        onEditLineIdChange={setDialogEditLineId}
         onStartPlacement={async () => {
           if (!currentId) return;
           const characters = await loadStorySceneCharacters(storyId);
           await seedDialogPlacementDefaults(currentId, storyId, characters);
-          setDialogOpen(false);
-          setDialogPlacementMode(true);
           try {
             window.dispatchEvent(new CustomEvent('moments-updated'));
           } catch (e) {
