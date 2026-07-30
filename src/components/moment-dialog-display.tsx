@@ -28,6 +28,7 @@ import {
   resolveMomentDialogLineStyle,
   saveMomentDialogScript,
   updateLineLayoutInScript,
+  type DialogLinePosition,
   type MomentDialogLine,
   type MomentDialogScript,
 } from "@/lib/moment-dialog";
