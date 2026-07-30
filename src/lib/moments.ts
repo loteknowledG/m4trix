@@ -1,3 +1,46 @@
+const MOMENT_VIDEO_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i;
+
+export function isMomentVideoSrc(src: string | undefined | null): boolean {
+  if (!src) return false;
+  const s = String(src).trim();
+  if (s.startsWith('data:video/')) return true;
+  const base = s.split('?')[0] ?? s;
+  if (MOMENT_VIDEO_PATTERN.test(base)) return true;
+  try {
+    return MOMENT_VIDEO_PATTERN.test(new URL(s).pathname);
+  } catch {
+    return MOMENT_VIDEO_PATTERN.test(s);
+  }
+}
+
+export function isMomentMediaFile(file: File): boolean {
+  if (!file || file.size === 0) return false;
+  if (file.type.startsWith('image/')) return true;
+  if (file.type === 'video/mp4' || file.type.startsWith('video/')) return true;
+  const lower = file.name.toLowerCase();
+  return (
+    lower.endsWith('.gif') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.png') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.mp4')
+  );
+}
+
+export function isMomentMediaUrl(url: string): boolean {
+  const clean = url.trim();
+  if (!clean) return false;
+  if (clean.startsWith('data:image/') || clean.startsWith('data:video/')) return true;
+  if (clean.startsWith('/api/img?u=')) return true;
+  const base = clean.split('?')[0];
+  const hasExt = ['.gif', '.jpg', '.jpeg', '.png', '.webp', '.mp4'].some(ext =>
+    base.toLowerCase().endsWith(ext),
+  );
+  const isGoogleContent = /googleusercontent\.com/.test(clean);
+  return hasExt || isGoogleContent;
+}
+
 export function normalizeMomentSrc(src: string | undefined | null): string {
   if (!src) return '';
   const s = String(src);
@@ -30,9 +73,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
         resolve(result);
         return;
       }
-      reject(new Error('Failed to encode image as data URL'));
+      reject(new Error('Failed to encode media as data URL'));
     };
-    reader.onerror = () => reject(reader.error || new Error('Failed to read image blob'));
+    reader.onerror = () => reject(reader.error || new Error('Failed to read media blob'));
     reader.readAsDataURL(blob);
   });
 }
@@ -63,7 +106,11 @@ export async function materializeMomentSrc(src: string | undefined | null): Prom
     const res = await fetch(fetchUrl);
     if (!res.ok) return original;
     const blob = await res.blob();
-    if (!blob.type.startsWith('image/') && blob.type !== 'application/octet-stream') {
+    if (
+      !blob.type.startsWith('image/') &&
+      !blob.type.startsWith('video/') &&
+      blob.type !== 'application/octet-stream'
+    ) {
       // Still try — some proxies omit content-type.
     }
     return await blobToDataUrl(blob);

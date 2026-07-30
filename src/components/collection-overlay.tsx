@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
-import { normalizeMomentSrc } from '@/lib/moments';
+import { normalizeMomentSrc, isMomentVideoSrc } from '@/lib/moments';
+import { MomentMedia } from '@/components/moment-media';
 import { storyIdFromPathname } from '@/lib/story-routes';
 import { safeDel, safeGet, safeKeys, safeSet } from '@/lib/storage-compat';
 import { X, ArrowLeft, ArrowRight } from '@/components/icons';
@@ -103,7 +104,7 @@ export default function CollectionOverlay() {
   const posRef = useRef(pos);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const draggingRef = useRef(false);
   const skipPersistRef = useRef(false);
 
@@ -640,11 +641,13 @@ export default function CollectionOverlay() {
           ref={containerRef}
           className="relative flex h-full w-full max-h-full max-w-full items-center justify-center"
         >
-          <img
+          <MomentMedia
             ref={imageRef}
-            src={normalizeMomentSrc(item.src)}
+            src={item.src}
             alt={item.name || 'Moment preview'}
             className="h-full max-h-screen w-full max-w-full object-contain rounded"
+            controls={isMomentVideoSrc(item.src)}
+            autoPlay={isMomentVideoSrc(item.src)}
             onClick={e => {
               e.stopPropagation();
               e.preventDefault();
@@ -938,12 +941,16 @@ export default function CollectionOverlay() {
 
             <div className="mt-6 border-t border-white/10 pt-4">
               <h4 className="text-xs text-white/70 mb-2">Auto-tag</h4>
-              <MomentClassifier
-                imageSrc={normalizeMomentSrc(item.src)}
-                onAddTags={newTags => {
-                  setTags(prev => Array.from(new Set([...prev, ...newTags])));
-                }}
-              />
+              {isMomentVideoSrc(item.src) ? (
+                <p className="text-xs text-white/60">Auto-tag is available for image moments only.</p>
+              ) : (
+                <MomentClassifier
+                  imageSrc={normalizeMomentSrc(item.src)}
+                  onAddTags={newTags => {
+                    setTags(prev => Array.from(new Set([...prev, ...newTags])));
+                  }}
+                />
+              )}
             </div>
           </div>
         </DialogContent>

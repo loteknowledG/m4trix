@@ -58,6 +58,28 @@ export type MomentDialogScript = {
   duration?: number;
 };
 
+export type MomentDialogUpdatedDetail = {
+  momentId: string;
+  storyId?: string | null;
+  script: MomentDialogScript;
+};
+
+export const MOMENT_DIALOG_UPDATED = "moment-dialog-updated";
+
+export function momentDialogUpdateMatches(
+  detail: MomentDialogUpdatedDetail | null | undefined,
+  momentId: string | null,
+  storyId?: string | null,
+): boolean {
+  if (!detail || !momentId || detail.momentId !== momentId) return false;
+  if (detail.storyId && storyId && detail.storyId !== storyId) return false;
+  return true;
+}
+
+export function dispatchMomentDialogUpdated(detail: MomentDialogUpdatedDetail) {
+  window.dispatchEvent(new CustomEvent(MOMENT_DIALOG_UPDATED, { detail }));
+}
+
 export const DEFAULT_MOMENT_LINE_DURATION = 5;
 
 export function isNarratorDialogLine(
@@ -664,6 +686,7 @@ export async function saveMomentDialogScript(
         : entry,
     );
     await safeSet("heap-moments", next);
+    dispatchMomentDialogUpdated({ momentId, storyId: preferredStoryId, script: payload });
     window.dispatchEvent(new CustomEvent("moments-updated"));
     return true;
   }
@@ -688,6 +711,11 @@ export async function saveMomentDialogScript(
   } else {
     await safeSet(storyKey, { ...(stored as object), items: nextItems });
   }
+  dispatchMomentDialogUpdated({
+    momentId,
+    storyId: location.storyId,
+    script: payload,
+  });
   window.dispatchEvent(new CustomEvent("moments-updated"));
   window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id: location.storyId } }));
   return true;

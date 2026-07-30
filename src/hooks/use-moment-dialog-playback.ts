@@ -7,6 +7,9 @@ import {
   ensureCharacterPositions,
   ensureTimedDialogScript,
   loadMomentDialogScript,
+  momentDialogUpdateMatches,
+  MOMENT_DIALOG_UPDATED,
+  type MomentDialogUpdatedDetail,
 } from '@/lib/moment-dialog';
 import { loadStorySceneCharacters } from '@/lib/scene-characters';
 
@@ -21,19 +24,14 @@ export function useMomentDialogPlayback(
   const [hasLines, setHasLines] = useState(false);
   const [loopEpoch, setLoopEpoch] = useState(0);
 
-  const syncFromStorage = useCallback(
-    async (activeMomentId: string, cancelled: () => boolean, restart = false) => {
-      const characters = await loadStorySceneCharacters(storyId);
+  const applyScript = useCallback(
+    (
+      script: Awaited<ReturnType<typeof ensureTimedDialogScript>>,
+      cancelled: () => boolean,
+      options?: { restart?: boolean; bumpLoop?: boolean },
+    ) => {
       if (cancelled()) return;
 
-      const fallbackOrder = characters.map(character => character.id);
-      const loaded = await loadMomentDialogScript(activeMomentId, storyId, fallbackOrder);
-      if (cancelled()) return;
-
-      const script = ensureTimedDialogScript(
-        ensureCharacterPositions(loaded, characters),
-        characters,
-      );
       const linesExist = script.lines.length > 0;
       const sceneDuration = computeMomentDialogDuration(script);
       const playbackLoopDuration = computeMomentDialogLoopDuration(script);
@@ -41,12 +39,16 @@ export function useMomentDialogPlayback(
       setDuration(sceneDuration);
       setLoopDuration(Math.max(0.5, playbackLoopDuration));
 
-      if (restart) {
+      if (options?.restart) {
         setLoopEpoch(epoch => epoch + 1);
         setCurrentTime(0);
         setPlaying(linesExist);
         setHasLines(linesExist);
         return;
+      }
+
+      if (options?.bumpLoop) {
+        setLoopEpoch(epoch => epoch + 1);
       }
 
       setHasLines(previousHasLines => {
@@ -60,7 +62,39 @@ export function useMomentDialogPlayback(
         return linesExist;
       });
     },
-    [storyId],
+    [],
+  );
+
+  const syncFromStorage = useCallback(
+    async (activeMomentId: string, cancelled: () => boolean, restart = false) => {
+      const characters = await loadStorySceneCharacters(storyId);
+      if (cancelled()) return;
+
+      const fallbackOrder = characters.map(character => character.id);
+      const loaded = await loadMomentDialogScript(activeMomentId, storyId, fallbackOrder);
+      if (cancelled()) return;
+
+      const script = ensureTimedDialogScript(
+        ensureCharacterPositions(loaded, characters),
+        characters,
+      );
+      applyScript(script, cancelled, { restart });
+    },
+    [applyScript, storyId],
+  );
+
+  const syncFromDetail = useCallback(
+    (detail: MomentDialogUpdatedDetail, cancelled: () => boolean) => {
+      void loadStorySceneCharacters(storyId).then(characters => {
+        if (cancelled()) return;
+        const script = ensureTimedDialogScript(
+          ensureCharacterPositions(detail.script, characters),
+          characters,
+        );
+        applyScript(script, cancelled, { bumpLoop: true });
+      });
+    },
+    [applyScript, storyId],
   );
 
   useEffect(() => {
@@ -88,13 +122,21 @@ export function useMomentDialogPlayback(
       });
     };
 
+    const onDialogUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<MomentDialogUpdatedDetail>).detail;
+      if (!momentDialogUpdateMatches(detail, momentId, storyId)) return;
+      syncFromDetail(detail, isCancelled);
+    };
+
     window.addEventListener('moments-updated', onMomentsUpdated);
+    window.addEventListener(MOMENT_DIALOG_UPDATED, onDialogUpdated);
 
     return () => {
       cancelled = true;
       window.removeEventListener('moments-updated', onMomentsUpdated);
+      window.removeEventListener(MOMENT_DIALOG_UPDATED, onDialogUpdated);
     };
-  }, [momentId, storyId, syncFromStorage]);
+  }, [momentId, storyId, syncFromDetail, syncFromStorage]);
 
   useEffect(() => {
     if (!playing || !hasLines) return;

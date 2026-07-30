@@ -419,62 +419,61 @@ export function MomentDialogModal({
     : -1;
 
   const persistScript = useCallback(
-    async (nextScript: MomentDialogScript) => {
+    (
+      updater:
+        | MomentDialogScript
+        | ((current: MomentDialogScript) => MomentDialogScript),
+    ) => {
       if (!momentId) return;
-      setScript(nextScript);
-      try {
-        await saveMomentDialogScript(momentId, nextScript, storyId);
-      } catch (error) {
-        logger.error('Failed to save moment dialog', error);
-      }
-    },
-    [momentId, storyId],
-  );
-
-  const addLine = useCallback(
-    (character: OrderedCharacter) => {
       setScript(current => {
-        const nextScript = addLineForCharacter(current, character);
-        const added = nextScript.lines[nextScript.lines.length - 1];
-        if (added?.id) {
-          setSelectedLineId(added.id);
-        }
-        if (momentId) {
-          void saveMomentDialogScript(momentId, nextScript, storyId).catch(error => {
-            logger.error('Failed to save moment dialog', error);
-          });
-        }
+        const nextScript = typeof updater === 'function' ? updater(current) : updater;
+        void saveMomentDialogScript(momentId, nextScript, storyId).catch(error => {
+          logger.error('Failed to save moment dialog', error);
+        });
         return nextScript;
       });
     },
     [momentId, storyId],
   );
 
+  const addLine = useCallback(
+    (character: OrderedCharacter) => {
+      persistScript(current => {
+        const nextScript = addLineForCharacter(current, character);
+        const added = nextScript.lines[nextScript.lines.length - 1];
+        if (added?.id) {
+          setSelectedLineId(added.id);
+        }
+        return nextScript;
+      });
+    },
+    [persistScript],
+  );
+
   const removeLine = useCallback(
     (lineId: string) => {
-      const next = removeLineFromScript(script, lineId);
-      void persistScript(next);
+      persistScript(current => removeLineFromScript(current, lineId));
       setSelectedLineId(prev => {
         if (prev !== lineId) return prev;
         const remaining = sortedLines.filter(line => line.id !== lineId);
         return remaining[0]?.id ?? null;
       });
     },
-    [persistScript, script, sortedLines],
+    [persistScript, sortedLines],
   );
 
   const updateLine = useCallback(
     (lineId: string, patch: Partial<MomentDialogLine>) => {
-      void persistScript(updateLineInScript(script, lineId, patch));
+      persistScript(current => updateLineInScript(current, lineId, patch));
     },
-    [persistScript, script],
+    [persistScript],
   );
 
   const updateLineTiming = useCallback(
     (lineId: string, patch: { start?: number; end?: number }) => {
-      void persistScript(updateLineTimingInScript(script, lineId, patch));
+      persistScript(current => updateLineTimingInScript(current, lineId, patch));
     },
-    [persistScript, script],
+    [persistScript],
   );
 
   const updateCharacterPosition = useCallback(
@@ -487,21 +486,23 @@ export function MomentDialogModal({
           : position === 'left' || position === 'right'
             ? position
             : 'left';
-      void persistScript(updateCharacterPositionInScript(script, characterId, validPosition));
+      persistScript(current =>
+        updateCharacterPositionInScript(current, characterId, validPosition),
+      );
     },
-    [persistScript, script],
+    [persistScript],
   );
 
   const changeLineSpeaker = useCallback(
     (lineId: string, character: OrderedCharacter) => {
-      void persistScript(
-        updateLineInScript(script, lineId, {
+      persistScript(current =>
+        updateLineInScript(current, lineId, {
           characterId: character.id,
           speaker: character.name,
         }),
       );
     },
-    [persistScript, script],
+    [persistScript],
   );
 
   const timelineCues = useMemo(
@@ -527,8 +528,8 @@ export function MomentDialogModal({
   );
 
   const resetLayout = useCallback(() => {
-    void persistScript(clearLinePositionsInScript(script));
-  }, [persistScript, script]);
+    persistScript(current => clearLinePositionsInScript(current));
+  }, [persistScript]);
 
   const { panelStyle, handleProps, dragging } = useDraggableOffset(open);
 

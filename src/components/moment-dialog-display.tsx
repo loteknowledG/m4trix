@@ -25,7 +25,10 @@ import {
   ensureCharacterPositions,
   ensureTimedDialogScript,
   loadMomentDialogScript,
+  momentDialogUpdateMatches,
+  MOMENT_DIALOG_UPDATED,
   resolveMomentDialogLineStyle,
+  type MomentDialogUpdatedDetail,
   saveMomentDialogScript,
   updateLineLayoutInScript,
   type DialogLinePosition,
@@ -40,7 +43,7 @@ type MomentDialogDisplayProps = {
   momentId: string | null;
   storyId?: string | null;
   stageRef: React.RefObject<HTMLElement | null>;
-  imageRef: React.RefObject<HTMLImageElement | null>;
+  imageRef: React.RefObject<HTMLImageElement | HTMLVideoElement | null>;
   placementMode?: boolean;
   currentTime?: number;
   loopEpoch?: number;
@@ -541,6 +544,13 @@ export function MomentDialogDisplay({
   }, [momentId, storyId]);
 
   useEffect(() => {
+    const applyDialogUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<MomentDialogUpdatedDetail>).detail;
+      if (!momentDialogUpdateMatches(detail, momentId, storyId)) return;
+      const withPositions = ensureCharacterPositions(detail.script, sceneCharacters);
+      setScript(ensureTimedDialogScript(withPositions, sceneCharacters));
+    };
+
     const reload = () => {
       if (!momentId) return;
       const fallbackOrder = sceneCharacters.map((character) => character.id);
@@ -552,8 +562,12 @@ export function MomentDialogDisplay({
         .catch((error) => logger.error("Failed to refresh moment dialog display", error));
     };
 
+    window.addEventListener(MOMENT_DIALOG_UPDATED, applyDialogUpdate);
     window.addEventListener("moments-updated", reload);
-    return () => window.removeEventListener("moments-updated", reload);
+    return () => {
+      window.removeEventListener(MOMENT_DIALOG_UPDATED, applyDialogUpdate);
+      window.removeEventListener("moments-updated", reload);
+    };
   }, [momentId, sceneCharacters, storyId]);
 
   const persistLayout = useCallback(

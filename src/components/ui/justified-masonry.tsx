@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { isMomentVideoSrc } from "@/lib/moments";
 import { cn } from "@/lib/utils";
 
 export type JustifiedMasonryItem = {
@@ -203,8 +204,36 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
         {itemsNeedingMeasure.map((item) => {
           const id = getId(item);
           const src = getSrc(item);
+          if (isMomentVideoSrc(src)) {
+            return (
+              <video
+                key={id}
+                src={src}
+                muted
+                playsInline
+                preload="metadata"
+                onLoadedMetadata={(e) => {
+                  const video = e.currentTarget;
+                  if (video.videoWidth && video.videoHeight) {
+                    setRatios((prev) => {
+                      if (prev[id]) return prev;
+                      return {
+                        ...prev,
+                        [id]: video.videoWidth / video.videoHeight,
+                      };
+                    });
+                  }
+                }}
+                onError={() => {
+                  setRatios((prev) => {
+                    if (prev[id]) return prev;
+                    return { ...prev, [id]: 16 / 9 };
+                  });
+                }}
+              />
+            );
+          }
           return (
-             
             <img
               key={id}
               src={src}
@@ -222,7 +251,6 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
                 }
               }}
               onError={() => {
-                // fall back to square if we can't measure
                 setRatios((prev) => {
                   if (prev[id]) return prev;
                   return { ...prev, [id]: 1 };

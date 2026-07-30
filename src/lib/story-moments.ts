@@ -13,7 +13,7 @@ const UUID_RE =
 export function isLikelyMomentSrc(value: string): boolean {
   const src = value.trim();
   if (!src) return false;
-  if (src.startsWith("data:image/")) return true;
+  if (src.startsWith("data:image/") || src.startsWith("data:video/")) return true;
   if (src.startsWith("blob:")) return true;
   if (src.startsWith("http://") || src.startsWith("https://")) return true;
   if (src.startsWith("/api/img")) return true;
@@ -68,16 +68,52 @@ export function normalizeStoryMomentEntry(raw: unknown): StoryMomentRecord | nul
 
 export function normalizeStoryMomentList(rawItems: unknown[]): StoryMomentRecord[] {
   const normalized: StoryMomentRecord[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenSrc = new Set<string>();
 
   for (const raw of rawItems) {
     const moment = normalizeStoryMomentEntry(raw);
-    if (!moment || seen.has(moment.id)) continue;
-    seen.add(moment.id);
+    if (!moment || seenIds.has(moment.id)) continue;
+
+    const srcKey = momentSrcDedupeKey(moment.src);
+    if (srcKey && seenSrc.has(srcKey)) continue;
+
+    seenIds.add(moment.id);
+    if (srcKey) seenSrc.add(srcKey);
     normalized.push(moment);
   }
 
   return normalized;
+}
+
+/** Stable key for deduping moments that reference the same underlying media. */
+export function momentSrcDedupeKey(src: string | undefined | null): string {
+  const trimmed = (src ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("data:")) return trimmed;
+  const withoutQuery = trimmed.split("?")[0] ?? trimmed;
+  try {
+    const url = new URL(trimmed);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return withoutQuery;
+  }
+}
+
+export function dedupeStoryMomentsBySrc(moments: StoryMomentRecord[]): StoryMomentRecord[] {
+  return normalizeStoryMomentList(moments);
+}
+
+export function storyMomentSrcExists(
+  moments: StoryMomentRecord[],
+  src: string,
+  fingerprint?: string,
+): boolean {
+  const srcKey = momentSrcDedupeKey(src);
+  return moments.some((moment) => {
+    if (fingerprint && moment.fingerprint && moment.fingerprint === fingerprint) return true;
+    return srcKey !== "" && momentSrcDedupeKey(moment.src) === srcKey;
+  });
 }
 
 export function readStoryMomentItems(stored: unknown): unknown[] {

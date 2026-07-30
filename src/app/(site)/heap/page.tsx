@@ -25,7 +25,8 @@ import {
 } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToastProvider, useToast } from '@/components/ui/toast';
-import { isEphemeralMomentSrc, materializeMomentSrc } from '@/lib/moments';
+import { MomentMedia } from '@/components/moment-media';
+import { isEphemeralMomentSrc, isMomentMediaFile, isMomentMediaUrl, materializeMomentSrc } from '@/lib/moments';
 import { createEmptyStory, storyEditorHref } from '@/lib/stories';
 
 // Local TextScramble removed (unused)
@@ -41,17 +42,7 @@ function HeapInner() {
   const toast = useToast();
   const [storySheetOpen, setStorySheetOpen] = useState(false);
   const router = useRouter();
-  const isImageLikeUrl = useCallback((u: string) => {
-    if (!u) return false;
-    const clean = u.trim();
-    if (clean.startsWith('/api/img?u=')) return true;
-    const base = clean.split('?')[0];
-    const hasExt = ['.gif', '.jpg', '.jpeg', '.png', '.webp'].some(ext =>
-      base.toLowerCase().endsWith(ext)
-    );
-    const isGoogleContent = /googleusercontent\.com/.test(clean);
-    return hasExt || isGoogleContent;
-  }, []);
+  const isImageLikeUrl = useCallback((u: string) => isMomentMediaUrl(u), []);
   const fixGoogleUrl = useCallback((u: string) => {
     try {
       const s = String(u || '');
@@ -228,13 +219,7 @@ function HeapInner() {
 
   const addMomentFromFile = useCallback(
     (file: File) => {
-      if (!file || file.size === 0) return;
-      const isMomentMime = file.type === 'image/gif' || file.type === 'image/jpeg';
-      const isMomentExt =
-        file.name?.toLowerCase().endsWith('.gif') ||
-        file.name?.toLowerCase().endsWith('.jpg') ||
-        file.name?.toLowerCase().endsWith('.jpeg');
-      if (!isMomentMime && !isMomentExt) return;
+      if (!isMomentMediaFile(file)) return;
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string | null;
@@ -256,7 +241,7 @@ function HeapInner() {
     (url: string) => {
       if (!url) return;
       const u = url.trim();
-      const isDataMoment = u.startsWith('data:image/');
+      const isDataMoment = u.startsWith('data:image/') || u.startsWith('data:video/');
       const isMomentUrl = isImageLikeUrl(u);
       if (!isDataMoment && !isMomentUrl) return;
 
@@ -299,7 +284,10 @@ function HeapInner() {
                 addMomentFromFile(file);
                 handled = true;
               }
-            } else if (it.type && it.type.indexOf('image/') === 0) {
+            } else if (
+              it.type &&
+              (it.type.indexOf('image/') === 0 || it.type.indexOf('video/') === 0)
+            ) {
               const blob = it.getAsFile?.();
               if (blob) {
                 addMomentFromFile(blob);
@@ -719,10 +707,11 @@ function HeapInner() {
                     >
                       <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
                         {storyPreviews[s.id] ? (
-                          <img
-                            src={storyPreviews[s.id] || undefined}
+                          <MomentMedia
+                            src={storyPreviews[s.id]!}
                             alt={s.title ?? 'story'}
                             className="w-full h-full object-cover"
+                            autoPlay
                           />
                         ) : (
                           <div className="w-full h-full bg-zinc-700" />
@@ -883,7 +872,7 @@ function HeapInner() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/mp4,.mp4"
             multiple
             className="hidden"
             onChange={e => onFiles(e.target.files)}

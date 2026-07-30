@@ -2,7 +2,7 @@
 
 import { Circle, Check, CheckCircle } from '@/components/icons';
 import { useEffect, useState } from 'react';
-import { normalizeMomentSrc } from '@/lib/moments';
+import { MomentMedia } from '@/components/moment-media';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
@@ -135,11 +135,11 @@ export default function MomentCard({
             </span>
           )}
         </button>
-        <img
-          src={normalizeMomentSrc(item.src)}
+        <MomentMedia
+          src={item.src}
           alt={item.name || 'moment'}
-          referrerPolicy="no-referrer"
           className="w-full h-full object-cover block"
+          autoPlay
         />
       </div>
       {open && (
@@ -184,10 +184,11 @@ export default function MomentCard({
               <div className="max-h-full max-w-full flex items-center justify-center">
                 <div className="flex items-center justify-center w-full">
                   {}
-                  <img
-                    src={normalizeMomentSrc(item.src)}
+                  <MomentMedia
+                    src={item.src}
                     alt={item.name || 'Moment preview'}
                     className="h-screen max-w-full object-contain rounded"
+                    controls
                     onClick={e => {
                       e.stopPropagation();
                       e.preventDefault();

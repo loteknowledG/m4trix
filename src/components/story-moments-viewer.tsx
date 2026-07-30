@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight } from '@/components/icons';
 import { MomentDialogDisplay } from '@/components/moment-dialog-display';
 import { useMomentDialogPlayback } from '@/hooks/use-moment-dialog-playback';
-import { normalizeMomentSrc } from '@/lib/moments';
+import { MomentMedia } from '@/components/moment-media';
+import { isMomentVideoSrc } from '@/lib/moments';
 import { safeGet } from '@/lib/storage-compat';
 import { cn } from '@/lib/utils';
 
@@ -95,7 +96,7 @@ export function StoryMomentsViewer({
   className,
 }: StoryMomentsViewerProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [overlay, setOverlay] = useState<OverlayTextState>(DEFAULT_OVERLAY);
   const [pixelWidth, setPixelWidth] = useState<number | null>(null);
@@ -207,11 +208,13 @@ export function StoryMomentsViewer({
             ref={containerRef}
             className="relative flex h-full w-full max-h-[min(72vh,820px)] items-center justify-center"
           >
-            <img
+            <MomentMedia
               ref={imageRef}
-              src={normalizeMomentSrc(moment.src)}
+              src={moment.src}
               alt={moment.name || 'Story moment'}
               className="h-full max-h-[min(72vh,820px)] w-full object-contain"
+              autoPlay
+              controls={isMomentVideoSrc(moment.src)}
             />
 
             <MomentDialogDisplay

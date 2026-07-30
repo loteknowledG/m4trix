@@ -53,10 +53,13 @@ import {
 } from "@/lib/game/story-arc";
 import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import {
+  dedupeStoryMomentsBySrc,
   filterStoryMomentItems,
   mergeStoryMomentItemsForSave,
+  momentSrcDedupeKey,
   normalizeStoryMomentList,
   readStoryMomentItems,
+  storyMomentSrcExists,
   type StoryMomentRecord,
 } from "@/lib/story-moments";
 import {
@@ -68,8 +71,10 @@ import {
   createSceneObject,
 } from "@/lib/game/objectives";
 import { logger } from "@/lib/logger";
-import { isEphemeralMomentSrc, materializeMomentSrc } from "@/lib/moments";
+import { isMomentMediaFile, isEphemeralMomentSrc, materializeMomentSrc } from "@/lib/moments";
 import { cn } from "@/lib/utils";
+
+const MOMENT_REORDER_MIME = "application/x-m4trix-moment-reorder";
 
 type StageEditForm = {
   name: string;
@@ -241,10 +246,11 @@ export default function StoryPage() {
   const saveStoryItems = useCallback(
     async (nextItems: Moment[]) => {
       if (!id) return;
+      const dedupedItems = dedupeStoryMomentsBySrc(nextItems);
       const storyKey = `story:${id}`;
       const stored = (await get<any>(storyKey)) || [];
       const existingRawItems = readStoryMomentItems(stored);
-      const mergedItems = mergeStoryMomentItemsForSave(nextItems, existingRawItems);
+      const mergedItems = mergeStoryMomentItemsForSave(dedupedItems, existingRawItems);
       if (Array.isArray(stored)) {
         await set(storyKey, mergedItems);
       } else if (stored && typeof stored === "object") {
@@ -468,6 +474,7 @@ export default function StoryPage() {
   const onDragStart = useCallback((e: React.DragEvent, idx: number) => {
     dragIndexRef.current = idx;
     try {
+      e.dataTransfer.setData(MOMENT_REORDER_MIME, String(idx));
       e.dataTransfer.setData("text/plain", String(idx));
       e.dataTransfer.effectAllowed = "move";
     } catch (err) {
@@ -527,9 +534,13 @@ export default function StoryPage() {
   const onDrop = useCallback(
     async (e: React.DragEvent, idx: number) => {
       e.preventDefault();
+      e.stopPropagation();
       const fromStr = (() => {
         try {
-          return e.dataTransfer.getData("text/plain");
+          return (
+            e.dataTransfer.getData(MOMENT_REORDER_MIME) ||
+            e.dataTransfer.getData("text/plain")
+          );
         } catch (err) {
           return String(dragIndexRef.current ?? "");
         }
@@ -541,9 +552,11 @@ export default function StoryPage() {
       stopAutoScroll();
       if (from === null || Number.isNaN(from) || from === to) return;
 
-      const next = [...moments];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
+      const reordered = [...moments];
+      const [moved] = reordered.splice(from, 1);
+      reordered.splice(to, 0, moved);
+
+      const next = dedupeStoryMomentsBySrc(reordered);
 
       setMoments(next);
       try {
@@ -565,20 +578,21 @@ export default function StoryPage() {
   const handleExternalDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
+
+      const isInternalReorder =
+        dragIndexRef.current !== null ||
+        Array.from(e.dataTransfer.types).includes(MOMENT_REORDER_MIME);
+      if (isInternalReorder) return;
+
       const addSrc = async (src: string, fingerprint?: string) => {
         setMoments((ms) => {
-          // avoid duplicates by fingerprint (when available) or by src
-          if (
-            ms.some((m) =>
-              fingerprint && m.fingerprint ? m.fingerprint === fingerprint : m.src === src,
-            )
-          ) {
+          if (storyMomentSrcExists(ms, src, fingerprint)) {
             setStoryCount(ms.length).catch(() => {});
             return ms;
           }
 
           const newMoment: Moment = { id: crypto.randomUUID(), src, fingerprint };
-          const updated = [...ms, newMoment];
+          const updated = dedupeStoryMomentsBySrc([...ms, newMoment]);
           saveStoryItems(updated).catch(() => {});
           setStoryCount(updated.length).catch(() => {});
           return updated;
@@ -587,7 +601,7 @@ export default function StoryPage() {
 
       if (e.dataTransfer.files && e.dataTransfer.files.length) {
         for (const file of Array.from(e.dataTransfer.files)) {
-          if (file.type.startsWith("image/")) {
+          if (isMomentMediaFile(file)) {
             const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
             const dataUrl = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader();
@@ -602,11 +616,11 @@ export default function StoryPage() {
       }
       const text = e.dataTransfer.getData("text/plain");
       if (text) {
+        if (/^\d+$/.test(text.trim())) return;
         const durable = isEphemeralMomentSrc(text) ? await materializeMomentSrc(text) : text;
         const finalSrc = durable || text;
-        // normalize URL for dedupe by stripping query params
-        const normalized = text.split("?")[0];
-        await addSrc(finalSrc, normalized);
+        const normalized = momentSrcDedupeKey(finalSrc);
+        await addSrc(finalSrc, normalized || undefined);
       }
     },
     [id, saveStoryItems],
@@ -1478,7 +1492,7 @@ export default function StoryPage() {
                     <div className="font-medium">No moments yet</div>
                   </div>
                   <div className="text-sm">
-                    Add moments from the heap or drag animated gifs into this story.
+                    Add moments from the heap or drag images and MP4 videos into this story.
                   </div>
                   <div className="mt-4 flex items-center justify-center gap-2">
                     <button

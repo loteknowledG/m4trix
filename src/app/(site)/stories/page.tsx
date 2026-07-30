@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { MomentMedia } from '@/components/moment-media';
 import { createEmptyStory, storyEditorHref, type StoryMeta } from '@/lib/stories';
 
 export default function StoriesPage() {
@@ -208,10 +209,11 @@ export default function StoriesPage() {
                           Open {s.title && s.title.trim() ? s.title : 'Untitled'}
                         </span>
                         {previews[s.id] ? (
-                          <img
-                            src={previews[s.id] || undefined}
+                          <MomentMedia
+                            src={previews[s.id]!}
                             alt={s.title ?? 'story'}
                             className="w-full h-full object-cover"
+                            autoPlay
                           />
                         ) : (
                           <div className="h-full w-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm text-muted-foreground">

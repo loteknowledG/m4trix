@@ -50,8 +50,22 @@ export default function MomentsGrid({
             draggable
             onDragStart={onDragStart ? (e) => onDragStart(e, idx) : undefined}
             onDragEnd={onDragEnd ? () => onDragEnd(idx) : undefined}
-            onDragOver={onDragOver ? (e) => onDragOver(e, idx) : undefined}
-            onDrop={onDrop ? (e) => onDrop(e, idx) : undefined}
+            onDragOver={
+              onDragOver
+                ? (e) => {
+                    e.stopPropagation();
+                    onDragOver(e, idx);
+                  }
+                : undefined
+            }
+            onDrop={
+              onDrop
+                ? (e) => {
+                    e.stopPropagation();
+                    onDrop(e, idx);
+                  }
+                : undefined
+            }
             className={
               "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
             }
