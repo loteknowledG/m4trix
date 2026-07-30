@@ -665,10 +665,9 @@ export function moveCharacterInOrder(order: string[], characterId: string, direc
 export function addLineForCharacter(
   script: MomentDialogScript,
   character: { id: string; name: string; role?: "player" | "npc" | "narrator" },
-  text: string,
+  text = "",
 ): MomentDialogScript {
   const trimmed = text.trim();
-  if (!trimmed) return script;
   const characterOrder = script.characterOrder.includes(character.id)
     ? script.characterOrder
     : [...script.characterOrder, character.id];
