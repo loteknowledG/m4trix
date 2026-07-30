@@ -78,11 +78,29 @@ export function cueWordRotateWords(text: string): string[] {
   return segments.length > 0 ? segments : ['…'];
 }
 
+const LEGACY_DIALOG_TEXT_EFFECT_MAP: Record<string, VideoCueTextEffect> = {
+  generate: 'textGenerate',
+  blur: 'blurIn',
+  shimmer: 'shimmeringText',
+  gradient: 'gradientText',
+  highlight: 'colourfulText',
+  typewriter: 'typing',
+};
+
 export function normalizeVideoCueTextEffect(value: unknown): VideoCueTextEffect {
   if (typeof value !== 'string') return 'none';
   return VIDEO_CUE_TEXT_EFFECTS.some(effect => effect.id === value)
     ? (value as VideoCueTextEffect)
     : 'none';
+}
+
+/** Maps legacy moment-dialog effect ids to video cue effects, then normalizes. */
+export function normalizeMomentDialogTextEffect(value: unknown): VideoCueTextEffect {
+  if (typeof value === 'string') {
+    const legacy = LEGACY_DIALOG_TEXT_EFFECT_MAP[value];
+    if (legacy) return legacy;
+  }
+  return normalizeVideoCueTextEffect(value);
 }
 
 export function videoCueTextEffectLabel(effect: VideoCueTextEffect): string {

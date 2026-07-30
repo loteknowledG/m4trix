@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
+import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
 import {
   resolveMomentDialogLineStyle,
   resolveMomentLineLayout,
@@ -209,9 +209,11 @@ function MomentDialogBubble({
               textShadow: buildCueTextShadow(style.shadowColor),
             }}
           >
-            <DialogTextEffectView
+            <VideoCueTextEffectView
               text={line.text}
               effect={style.textEffect}
+              color={style.color}
+              shadowColor={style.shadowColor}
               lineKey={line.id}
               replayKey={momentId ? `${momentId}-${line.id}` : line.id}
               className="text-inherit"

@@ -2,10 +2,10 @@
 
 import { Input } from '@/components/ui/input';
 import {
-  DIALOG_TEXT_EFFECTS,
-  normalizeDialogTextEffect,
-  type DialogTextEffect,
-} from '@/lib/dialog-text-effects';
+  VIDEO_CUE_TEXT_EFFECTS,
+  normalizeMomentDialogTextEffect,
+  type VideoCueTextEffect,
+} from '@/lib/video-cue-text-effects';
 import {
   normalizeCueColor,
   normalizeCueFont,
@@ -14,7 +14,7 @@ import {
 } from '@/lib/video-timed-cues';
 
 export type DialogLineStyleValues = {
-  textEffect?: DialogTextEffect;
+  textEffect?: VideoCueTextEffect;
   font?: VideoCueFontId;
   fontScale?: number;
   color?: string;
@@ -28,7 +28,7 @@ type DialogLineStyleEditorProps = {
 };
 
 export function DialogLineStyleEditor({ values, onChange }: DialogLineStyleEditorProps) {
-  const textEffect = normalizeDialogTextEffect(values.textEffect);
+  const textEffect = normalizeMomentDialogTextEffect(values.textEffect);
   const font = values.font ?? 'system';
   const fontScale = values.fontScale ?? 0.04;
 
@@ -41,11 +41,11 @@ export function DialogLineStyleEditor({ values, onChange }: DialogLineStyleEdito
         <select
           value={textEffect}
           onChange={event =>
-            onChange({ textEffect: normalizeDialogTextEffect(event.target.value) })
+            onChange({ textEffect: normalizeMomentDialogTextEffect(event.target.value) })
           }
           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
         >
-          {DIALOG_TEXT_EFFECTS.map(option => (
+          {VIDEO_CUE_TEXT_EFFECTS.map(option => (
             <option key={option.id} value={option.id}>
               {option.label}
             </option>

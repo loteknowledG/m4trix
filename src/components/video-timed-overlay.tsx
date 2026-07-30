@@ -9,41 +9,14 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
-import { BlurText } from '@/components/text/blur-text';
-import { BouncingText } from '@/components/text/bouncing-text';
-import { EmbossText } from '@/components/text/emboss-text';
-import { DriftText } from '@/components/text/drift-text';
-import { EchoText } from '@/components/text/echo-text';
-import { LiquidText } from '@/components/text/liquid-text';
-import { PaperCutText } from '@/components/text/paper-cut-text';
-import { PopText } from '@/components/text/pop-text';
-import { WaveText } from '@/components/text/wave-text';
-import { WaveformText } from '@/components/text/waveform-text';
-import { BreathingText } from '@/components/text/breathing-text';
-import { GradientText } from '@/components/text/gradient-text';
-import { ShimmeringText } from '@/components/text/shimmering-text';
-import { TextGenerateEffect } from '@/components/text/text-generate-effect';
-import { TypingText } from '@/components/text/typing-text';
-import { WobbleText } from '@/components/text/wobble-text';
-import ColourfulText from '@/components/ui/colourful-text';
-import { FlipWords } from '@/components/ui/flip-words';
-import { TextAnimate } from '@/components/ui/text-animate';
-import { HyperText } from '@/components/ui/hyper-text';
-import { LineShadowText } from '@/components/ui/line-shadow-text';
-import { MorphingText } from '@/components/ui/morphing-text';
-import { SparklesText } from '@/components/ui/sparkles-text';
-import { SpinningText } from '@/components/ui/spinning-text';
-import { TypingAnimation } from '@/components/ui/typing-animation';
-import { WordRotate } from '@/components/ui/word-rotate';
+import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
 import {
   buildCueTextShadow,
   getActiveCues,
   resolveVideoCueFontFamily,
-  type VideoCueTextAnimatePreset,
   type VideoTimedCue,
 } from '@/lib/video-timed-cues';
-import { cueWordRotateWords, normalizeVideoCueTextEffect } from '@/lib/video-cue-text-effects';
-import { CUE_TEXT_WRAP_CLASS, CueTextByWords } from '@/lib/cue-text-word-wrap';
+import { CUE_TEXT_WRAP_CLASS } from '@/lib/cue-text-word-wrap';
 import { cn } from '@/lib/utils';
 
 type CueLayoutPatch = Partial<Pick<VideoTimedCue, 'x' | 'y' | 'width' | 'fontScale'>>;
@@ -77,8 +50,6 @@ function VideoCueBubbleContent({
   const textColor = cue.color ?? '#ffffff';
   const speakerColor = cue.speakerColor ?? textColor;
   const textShadow = buildCueTextShadow(cue.shadowColor ?? '#000000');
-  const text = cue.text.trim() || '…';
-  const textEffect = normalizeVideoCueTextEffect(cue.textEffect);
 
   return (
     <>
@@ -94,175 +65,15 @@ function VideoCueBubbleContent({
         </div>
       ) : null}
       <div className={CUE_TEXT_WRAP_CLASS} style={{ color: textColor, textShadow }}>
-        {textEffect === 'lineShadowText' ? (
-          <LineShadowText
-            key={cue.id}
-            shadowColor={cue.shadowColor ?? '#000000'}
-            as="span"
-            className="inline text-[length:inherit] font-[inherit]"
-          >
-            {text}
-          </LineShadowText>
-        ) : textEffect === 'sparklesText' ? (
-          <SparklesText
-            key={cue.id}
-            colors={{ first: textColor, second: cue.shadowColor ?? '#ffffff' }}
-            sparklesCount={8}
-            className="inline text-[length:inherit] font-[inherit] font-normal"
-          >
-            {text}
-          </SparklesText>
-        ) : textEffect === 'spinningText' ? (
-          <SpinningText
-            key={cue.id}
-            radius={2.5}
-            duration={10}
-            className="inline-flex min-h-[5ch] min-w-[5ch] items-center justify-center text-[length:inherit] font-[inherit]"
-            style={{ color: textColor }}
-          >
-            {text}
-          </SpinningText>
-        ) : textEffect === 'gradientText' ? (
-          <GradientText key={cue.id} className="text-[length:inherit] font-[inherit]">
-            {text}
-          </GradientText>
-        ) : textEffect === 'shimmeringText' ? (
-          <ShimmeringText key={cue.id} className="text-[length:inherit] font-[inherit]">
-            {text}
-          </ShimmeringText>
-        ) : textEffect === 'colourfulText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => <ColourfulText text={word} />}
-          </CueTextByWords>
-        ) : textEffect === 'breathingText' ? (
-          <BreathingText key={cue.id} className="text-[length:inherit] font-[inherit]">
-            {text}
-          </BreathingText>
-        ) : textEffect === 'embossText' ? (
-          <EmbossText
-            key={cue.id}
-            className="text-[length:inherit] font-[inherit]"
-            highlightColor="rgba(255, 255, 255, 0.45)"
-            shadowColor={cue.shadowColor ?? 'rgba(0, 0, 0, 0.65)'}
-          >
-            {text}
-          </EmbossText>
-        ) : textEffect === 'echoText' ? (
-          <EchoText key={cue.id} text={text} className="text-[length:inherit] font-[inherit]" />
-        ) : textEffect === 'driftText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => <DriftText text={word} className="inline" />}
-          </CueTextByWords>
-        ) : textEffect === 'paperCutText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => (
-              <PaperCutText
-                text={word}
-                color={textColor}
-                shadowColor={cue.shadowColor ?? 'rgba(0, 0, 0, 0.65)'}
-                className="inline"
-              />
-            )}
-          </CueTextByWords>
-        ) : textEffect === 'liquidText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => <LiquidText text={word} className="inline" />}
-          </CueTextByWords>
-        ) : textEffect === 'waveText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => <WaveText text={word} className="inline" />}
-          </CueTextByWords>
-        ) : textEffect === 'waveformText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => <WaveformText text={word} className="inline" />}
-          </CueTextByWords>
-        ) : textEffect === 'wobbleText' ? (
-          <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-            {word => <WobbleText text={word} className="inline" />}
-          </CueTextByWords>
-        ) : animated && textEffect !== 'none' ? (
-          textEffect === 'typing' ? (
-            <TypingAnimation key={cue.id} startOnView={false} loop={false} className="inline">
-              {text}
-            </TypingAnimation>
-          ) : textEffect === 'wordRotate' ? (
-            <WordRotate
-              key={cue.id}
-              words={cueWordRotateWords(text)}
-              containerClassName="py-0"
-              className="inline-block text-[length:inherit] font-[inherit] leading-snug"
-            />
-          ) : textEffect === 'hyperText' ? (
-            <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-              {word => (
-                <HyperText
-                  startOnView={false}
-                  animateOnHover={false}
-                  as="span"
-                  className="inline py-0 text-[length:inherit] font-[inherit]"
-                >
-                  {word}
-                </HyperText>
-              )}
-            </CueTextByWords>
-          ) : textEffect === 'morphingText' ? (
-            <MorphingText
-              key={cue.id}
-              texts={cueWordRotateWords(text)}
-              className="relative mx-0 h-auto min-h-[1.2em] w-full max-w-none text-[length:inherit] font-[inherit] font-normal leading-snug lg:text-[length:inherit]"
-            />
-          ) : textEffect === 'blurText' ? (
-            <BlurText
-              key={cue.id}
-              text={text}
-              className="inline"
-              animateBy="words"
-              segmentClassName="whitespace-nowrap"
-            />
-          ) : textEffect === 'flipWords' ? (
-            <FlipWords
-              key={cue.id}
-              words={cueWordRotateWords(text)}
-              duration={2500}
-              className="relative inline-block px-0 text-[length:inherit] font-[inherit] text-inherit dark:text-inherit"
-            />
-          ) : textEffect === 'textGenerate' ? (
-            <TextGenerateEffect key={cue.id} className="inline" wordClassName="whitespace-nowrap">
-              {text}
-            </TextGenerateEffect>
-          ) : textEffect === 'bouncingText' ? (
-            <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-              {word => <BouncingText text={word} className="inline" />}
-            </CueTextByWords>
-          ) : textEffect === 'popText' ? (
-            <CueTextByWords key={cue.id} text={text} className="text-[length:inherit] font-[inherit]">
-              {word => (
-                <PopText
-                  text={word}
-                  burstColor={textColor}
-                  className="inline text-[length:inherit] font-[inherit]"
-                />
-              )}
-            </CueTextByWords>
-          ) : textEffect === 'typingText' ? (
-            <TypingText key={cue.id} text={text} className="text-[length:inherit] font-[inherit]" />
-          ) : (
-            <TextAnimate
-              key={cue.id}
-              animation={textEffect as VideoCueTextAnimatePreset}
-              by="word"
-              startOnView={false}
-              once
-              as="span"
-              className="inline"
-              segmentClassName="whitespace-nowrap"
-            >
-              {text}
-            </TextAnimate>
-          )
-        ) : (
-          text
-        )}
+        <VideoCueTextEffectView
+          text={cue.text}
+          effect={cue.textEffect}
+          color={textColor}
+          shadowColor={cue.shadowColor ?? '#000000'}
+          lineKey={cue.id}
+          animated={animated}
+          className="text-[length:inherit] font-[inherit]"
+        />
       </div>
     </>
   );

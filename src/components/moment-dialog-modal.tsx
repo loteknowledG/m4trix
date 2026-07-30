@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
-import { DialogTextEffectView } from '@/components/text/dialog-text-effect-view';
+import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
 import { useDraggableOffset } from '@/hooks/use-draggable-offset';
 import { getStagePalette } from '@/lib/game/story-arc-palettes';
 import {
@@ -179,9 +179,11 @@ function SelectedMomentLineEditor({
             fontSize: `${Math.max(0.75, style.fontScale * 18)}rem`,
           }}
         >
-          <DialogTextEffectView
+          <VideoCueTextEffectView
             text={draft.trim()}
             effect={effect}
+            color={style.color}
+            shadowColor={style.shadowColor}
             lineKey={line.id}
             replayKey={`${line.id}-${effect}-preview`}
             className="text-inherit"

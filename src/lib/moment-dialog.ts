@@ -1,5 +1,8 @@
 import { get, set } from "idb-keyval";
-import { normalizeDialogTextEffect, type DialogTextEffect } from "@/lib/dialog-text-effects";
+import {
+  normalizeMomentDialogTextEffect,
+  type VideoCueTextEffect,
+} from "@/lib/video-cue-text-effects";
 import { isLikelyMomentSrc } from "@/lib/story-moments";
 import {
   normalizeCueColor,
@@ -22,7 +25,7 @@ export type MomentDialogLine = {
   characterId: string;
   speaker: string;
   text: string;
-  textEffect?: DialogTextEffect;
+  textEffect?: VideoCueTextEffect;
   /** Seconds when this line becomes visible */
   start?: number;
   /** Seconds when this line hides */
@@ -53,7 +56,7 @@ export type MomentDialogScript = {
 export const DEFAULT_MOMENT_LINE_DURATION = 5;
 
 export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
-  textEffect: "none" as DialogTextEffect,
+  textEffect: "none" as VideoCueTextEffect,
   font: "system" as VideoCueFontId,
   fontScale: 0.04,
   color: "#ffffff",
@@ -62,7 +65,7 @@ export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
 
 export function resolveMomentDialogLineStyle(line: Partial<MomentDialogLine>) {
   return {
-    textEffect: normalizeDialogTextEffect(line.textEffect),
+    textEffect: normalizeMomentDialogTextEffect(line.textEffect),
     font: line.font ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.font,
     fontScale: line.fontScale ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.fontScale,
     color: line.color ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.color,
@@ -224,6 +227,7 @@ export function momentLinesToTimelineCues(
       color: line.color,
       speakerColor: line.speakerColor,
       shadowColor: line.shadowColor,
+      textEffect: line.textEffect,
     };
   });
 }
@@ -341,7 +345,7 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
       characterId,
       speaker,
       text,
-      textEffect: normalizeDialogTextEffect(record.textEffect),
+      textEffect: normalizeMomentDialogTextEffect(record.textEffect),
     };
     const font = normalizeCueFont(record.font);
     if (font) entry.font = font;
@@ -725,7 +729,7 @@ export function updateLineTextInScript(
 export function updateLineEffectInScript(
   script: MomentDialogScript,
   lineId: string,
-  textEffect: DialogTextEffect,
+  textEffect: VideoCueTextEffect,
 ): MomentDialogScript {
   return updateLineInScript(script, lineId, { textEffect });
 }

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
-import { DialogTextEffectView } from "@/components/text/dialog-text-effect-view";
-import type { DialogTextEffect } from "@/lib/dialog-text-effects";
+import { VideoCueTextEffectView } from "@/components/text/video-cue-text-effect-view";
+import type { VideoCueTextEffect } from "@/lib/video-cue-text-effects";
 import {
   buildCueTextShadow,
   resolveVideoCueFontFamily,
@@ -68,7 +68,7 @@ function VnDialogMessage({
   line?: MomentDialogLine;
   paletteIndex: number;
   align?: "start" | "end";
-  textEffect?: DialogTextEffect;
+  textEffect?: VideoCueTextEffect;
   lineKey: string;
   momentId?: string | null;
   compact?: boolean;
@@ -106,9 +106,11 @@ function VnDialogMessage({
           fontSize,
         }}
       >
-        <DialogTextEffectView
+        <VideoCueTextEffectView
           text={message.text}
           effect={textEffect ?? style.textEffect}
+          color={dialogColor}
+          shadowColor={style.shadowColor}
           lineKey={lineKey}
           replayKey={momentId ? `${momentId}-${lineKey}` : lineKey}
           className="text-inherit"
