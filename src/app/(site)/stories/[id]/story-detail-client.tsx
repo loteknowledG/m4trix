@@ -24,6 +24,10 @@ import ErrorBoundary from "@/components/error-boundary";
 import MomentsGrid from "@/components/moments-grid";
 import { Marquee } from "@/components/ui/marquee";
 import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
+import StoryExperienceModeToggle, {
+  type StoryExperienceMode,
+} from "@/components/story-experience-mode-toggle";
+import { StoryMomentsViewer } from "@/components/story-moments-viewer";
 import {
   Sheet,
   SheetClose,
@@ -206,6 +210,8 @@ export default function StoryPage() {
   const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
   const [narratorEnabled, setNarratorEnabled] = useState(true);
   const [directorNotes, setDirectorNotes] = useState("");
+  const [storyMode, setStoryMode] = useState<StoryExperienceMode>("view");
+  const [viewMomentIndex, setViewMomentIndex] = useState(0);
   const assignedNpcCharacter = assignedNpcId
     ? characters.find((character) => character.id === assignedNpcId) || null
     : null;
@@ -1020,6 +1026,45 @@ export default function StoryPage() {
     [moments, stagedMomentsByStage],
   );
 
+  const viewMoments = useMemo(() => {
+    const ordered: Moment[] = [];
+    for (const stageNumber of populatedStageNumbers) {
+      ordered.push(...getStageMoments(stageNumber));
+    }
+    ordered.push(...unstagedMoments);
+    return ordered;
+  }, [getStageMoments, populatedStageNumbers, unstagedMoments]);
+
+  const isEditMode = storyMode === "edit";
+
+  const enterViewMode = useCallback(() => {
+    setStoryMode("view");
+    clearSelection(scope);
+  }, [clearSelection]);
+
+  const enterEditMode = useCallback(() => {
+    setStoryMode("edit");
+  }, []);
+
+  const handleStoryModeChange = useCallback(
+    (mode: StoryExperienceMode) => {
+      if (mode === "view") {
+        enterViewMode();
+        return;
+      }
+      enterEditMode();
+    },
+    [enterEditMode, enterViewMode],
+  );
+
+  useEffect(() => {
+    if (viewMoments.length === 0) {
+      setViewMomentIndex(0);
+      return;
+    }
+    setViewMomentIndex((prev) => Math.min(prev, viewMoments.length - 1));
+  }, [viewMoments.length]);
+
   const saveNpcAppearance = useCallback(async () => {
     await saveStoryMetadata({ npcAppearance: assignedNpcAppearance });
   }, [assignedNpcAppearance, saveStoryMetadata]);
@@ -1203,27 +1248,30 @@ export default function StoryPage() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <SelectionHeaderBar
-              selectedIds={selectedIds || []}
-              moments={moments}
-              showSelectAll={(selectedIds || []).length > 0}
-              onSelectAll={() => {
-                if ((selectedIds || []).length !== moments.length) {
-                  setSelectionStore(
-                    scope,
-                    moments.map((m) => m.id),
-                  );
-                } else {
-                  clearSelection(scope);
-                }
-              }}
-              onClearSelection={() => clearSelection(scope)}
-            />
+            {isEditMode ? (
+              <SelectionHeaderBar
+                selectedIds={selectedIds || []}
+                moments={moments}
+                showSelectAll={(selectedIds || []).length > 0}
+                onSelectAll={() => {
+                  if ((selectedIds || []).length !== moments.length) {
+                    setSelectionStore(
+                      scope,
+                      moments.map((m) => m.id),
+                    );
+                  } else {
+                    clearSelection(scope);
+                  }
+                }}
+                onClearSelection={() => clearSelection(scope)}
+              />
+            ) : null}
           </div>
         }
         navRight={
           <div className="flex items-center gap-2">
-            {!(selectedIds || []).length ? (
+            <StoryExperienceModeToggle mode={storyMode} onModeChange={handleStoryModeChange} />
+            {isEditMode && !(selectedIds || []).length ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1285,7 +1333,7 @@ export default function StoryPage() {
               </TooltipProvider>
             ) : null}
 
-            {(selectedIds || []).length > 0 ? (
+            {(selectedIds || []).length > 0 && isEditMode ? (
               <>
                 <TooltipProvider>
                   <Tooltip>
@@ -1357,49 +1405,68 @@ export default function StoryPage() {
       >
         <ErrorBoundary>
           <div
-            className="overflow-auto h-[calc(100vh_-_var(--app-header-height,56px))]"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleExternalDrop}
+            className={cn(
+              "overflow-auto h-[calc(100vh_-_var(--app-header-height,56px))]",
+              !isEditMode && "bg-gradient-to-b from-background via-background to-black/90",
+            )}
+            onDragOver={isEditMode ? (e) => e.preventDefault() : undefined}
+            onDrop={isEditMode ? handleExternalDrop : undefined}
           >
-            <div className="py-4">
-              <div className="mb-6">
-                {editingTitle ? (
+            <div className={cn(isEditMode ? "py-4" : "mx-auto flex min-h-full w-full max-w-6xl flex-col justify-center px-2 py-8 sm:px-4")}>
+              <div className={cn(isEditMode ? "mb-6" : "mb-5 text-center")}>
+                {isEditMode ? (
+                  editingTitle ? (
                     <input
                       autoFocus
                       aria-label="Edit story title"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       onBlur={async () => {
-                      await saveStoryTitle();
-                      setEditingTitle(false);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        (e.target as HTMLInputElement).blur();
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
+                        await saveStoryTitle();
                         setEditingTitle(false);
-                      }
-                    }}
-                    className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setEditingTitle(true)}
-                    className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
-                    aria-label="Edit story title"
-                  >
-                    <Marquee
-                      className="text-5xl font-light"
-                      duration="8s"
-                      gap="13rem"
-                      distance="200%"
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          (e.target as HTMLInputElement).blur();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditingTitle(false);
+                        }
+                      }}
+                      className="w-full text-5xl font-light bg-transparent border-0 focus:ring-0 placeholder:text-muted-foreground"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingTitle(true)}
+                      className="w-full text-left text-5xl font-light bg-transparent border-0 focus:outline-none"
+                      aria-label="Edit story title"
                     >
-                      {title.trim() ? title : "Add a title"}
-                    </Marquee>
-                  </button>
+                      <Marquee
+                        className="text-5xl font-light"
+                        duration="8s"
+                        gap="13rem"
+                        distance="200%"
+                      >
+                        {title.trim() ? title : "Add a title"}
+                      </Marquee>
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <h1 className="text-3xl font-light tracking-tight text-foreground sm:text-4xl">
+                      {title.trim() ? title : "Untitled story"}
+                    </h1>
+                    {viewMoments.length > 0 ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {viewMoments[viewMomentIndex]?.name?.trim() || "Story moment"}
+                        {viewMoments.length > 1
+                          ? ` · Part ${viewMomentIndex + 1} of ${viewMoments.length}`
+                          : null}
+                      </p>
+                    ) : null}
+                  </>
                 )}
               </div>
               {loading ? (
@@ -1430,7 +1497,7 @@ export default function StoryPage() {
                     </button>
                   </div>
                 </div>
-              ) : (
+              ) : isEditMode ? (
                 <MomentsProvider collection={moments}>
                   <>
                       {populatedStageNumbers.map((stageNumber) => {
@@ -1510,6 +1577,13 @@ export default function StoryPage() {
                     </>
                   <CollectionOverlay />
                 </MomentsProvider>
+              ) : (
+                <StoryMomentsViewer
+                  moments={viewMoments}
+                  currentIndex={viewMomentIndex}
+                  onIndexChange={setViewMomentIndex}
+                  storyId={id ?? null}
+                />
               )}
             </div>
           </div>
