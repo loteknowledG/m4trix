@@ -1,9 +1,13 @@
-import { get, set } from "idb-keyval";
+import { safeGet, safeSet } from "@/lib/storage-compat";
 import {
   normalizeMomentDialogTextEffect,
   type VideoCueTextEffect,
 } from "@/lib/video-cue-text-effects";
-import { isLikelyMomentSrc } from "@/lib/story-moments";
+import {
+  isLikelyMomentSrc,
+  normalizeStoryMomentEntry,
+  storyMomentId,
+} from "@/lib/story-moments";
 import {
   normalizeCueColor,
   normalizeCueFont,
@@ -483,6 +487,66 @@ export function scriptPreviewLines(
   return preview;
 }
 
+function momentEntryMatchesId(entry: unknown, momentId: string): boolean {
+  const target = momentId.trim();
+  if (!target) return false;
+
+  const normalized = storyMomentId(entry);
+  if (normalized === target) return true;
+
+  if (typeof entry === "string" && entry.trim() === target) return true;
+
+  if (entry && typeof entry === "object") {
+    const record = entry as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const src = typeof record.src === "string" ? record.src.trim() : "";
+    if (id === target || src === target) return true;
+  }
+
+  return false;
+}
+
+function readStoryItems(stored: unknown): { items: unknown[]; useItemsWrapper: boolean } {
+  const useItemsWrapper = Boolean(
+    stored &&
+      typeof stored === "object" &&
+      !Array.isArray(stored) &&
+      Array.isArray((stored as { items?: unknown[] }).items),
+  );
+  const items: unknown[] = Array.isArray(stored)
+    ? stored
+    : useItemsWrapper
+      ? ((stored as { items: unknown[] }).items ?? [])
+      : [];
+  return { items, useItemsWrapper };
+}
+
+function attachDialogToMomentEntry(
+  entry: unknown,
+  momentId: string,
+  payload: MomentDialogScript,
+): MomentRecord {
+  if (typeof entry === "string") {
+    const src = entry.trim();
+    return {
+      id: momentId,
+      src: isLikelyMomentSrc(src) ? src : momentId,
+      dialogScript: payload,
+      dialogLines: payload.lines,
+    };
+  }
+
+  const normalized = normalizeStoryMomentEntry(entry);
+  const base = (entry && typeof entry === "object" ? (entry as MomentRecord) : {}) as MomentRecord;
+  return {
+    ...base,
+    id: normalized?.id ?? base.id ?? momentId,
+    src: normalized?.src ?? base.src ?? momentId,
+    dialogScript: payload,
+    dialogLines: payload.lines,
+  };
+}
+
 async function findMomentLocation(
   momentId: string,
   preferredStoryId?: string | null,
@@ -501,35 +565,30 @@ async function findMomentLocation(
 
   if (preferredStoryId) {
     const storyKey = `story:${preferredStoryId}`;
-    const stored = await get<unknown>(storyKey);
-    const useItemsWrapper = Boolean(
-      stored &&
-        typeof stored === "object" &&
-        !Array.isArray(stored) &&
-        Array.isArray((stored as { items?: unknown[] }).items),
-    );
-    const items: unknown[] = Array.isArray(stored)
-      ? stored
-      : useItemsWrapper
-        ? ((stored as { items: unknown[] }).items ?? [])
-        : [];
+    const stored = await safeGet<unknown>(storyKey);
+    const { items, useItemsWrapper } = readStoryItems(stored);
 
     for (const entry of items) {
-      const entryId =
-        typeof entry === "string" ? entry : (entry as { id?: string })?.id;
-      if (entryId !== momentId) continue;
+      if (!momentEntryMatchesId(entry, momentId)) continue;
       return {
         script: readScript(entry) ?? { characterOrder: [], lines: [] },
+        location: { kind: "story", storyId: preferredStoryId, useItemsWrapper },
+      };
+    }
+
+    if (stored !== undefined) {
+      return {
+        script: null,
         location: { kind: "story", storyId: preferredStoryId, useItemsWrapper },
       };
     }
   }
 
   const heap =
-    (await get<MomentRecord[]>("heap-moments")) ||
-    (await get<MomentRecord[]>("heap-gifs")) ||
+    (await safeGet<MomentRecord[]>("heap-moments")) ||
+    (await safeGet<MomentRecord[]>("heap-gifs")) ||
     [];
-  const heapItem = heap.find((entry) => entry.id === momentId);
+  const heapItem = heap.find((entry) => momentEntryMatchesId(entry, momentId));
   if (heapItem) {
     return {
       script: readScript(heapItem) ?? { characterOrder: [], lines: [] },
@@ -537,26 +596,14 @@ async function findMomentLocation(
     };
   }
 
-  const storiesMeta = (await get<Array<{ id: string }>>("stories")) || [];
+  const storiesMeta = (await safeGet<Array<{ id: string }>>("stories")) || [];
   for (const meta of storiesMeta) {
     const storyKey = `story:${meta.id}`;
-    const stored = await get<unknown>(storyKey);
-    const useItemsWrapper = Boolean(
-      stored &&
-        typeof stored === "object" &&
-        !Array.isArray(stored) &&
-        Array.isArray((stored as { items?: unknown[] }).items),
-    );
-    const items: unknown[] = Array.isArray(stored)
-      ? stored
-      : useItemsWrapper
-        ? ((stored as { items: unknown[] }).items ?? [])
-        : [];
+    const stored = await safeGet<unknown>(storyKey);
+    const { items, useItemsWrapper } = readStoryItems(stored);
 
     for (const entry of items) {
-      const entryId =
-        typeof entry === "string" ? entry : (entry as { id?: string })?.id;
-      if (entryId !== momentId) continue;
+      if (!momentEntryMatchesId(entry, momentId)) continue;
       return {
         script: readScript(entry) ?? { characterOrder: [], lines: [] },
         location: { kind: "story", storyId: meta.id, useItemsWrapper },
@@ -591,42 +638,38 @@ export async function saveMomentDialogScript(
 
   if (location.kind === "heap") {
     const heap =
-      (await get<MomentRecord[]>("heap-moments")) ||
-      (await get<MomentRecord[]>("heap-gifs")) ||
+      (await safeGet<MomentRecord[]>("heap-moments")) ||
+      (await safeGet<MomentRecord[]>("heap-gifs")) ||
       [];
     const next = heap.map((entry) =>
-      entry.id === momentId
+      momentEntryMatchesId(entry, momentId)
         ? { ...entry, dialogScript: payload, dialogLines: payload.lines }
         : entry,
     );
-    await set("heap-moments", next);
+    await safeSet("heap-moments", next);
     window.dispatchEvent(new CustomEvent("moments-updated"));
     return true;
   }
 
   const storyKey = `story:${location.storyId}`;
-  const stored = await get<unknown>(storyKey);
-  const items: unknown[] = Array.isArray(stored)
-    ? stored
-    : location.useItemsWrapper
-      ? ((stored as { items: unknown[] }).items ?? [])
-      : [];
+  const stored = await safeGet<unknown>(storyKey);
+  const { items, useItemsWrapper } = readStoryItems(stored);
 
+  let updated = false;
   const nextItems = items.map((entry) => {
-    const entryId =
-      typeof entry === "string" ? entry : (entry as { id?: string })?.id;
-    if (entryId !== momentId) return entry;
-    if (typeof entry === "string") {
-      if (!isLikelyMomentSrc(entry)) return entry;
-      return { id: entry, src: entry, dialogScript: payload, dialogLines: payload.lines };
-    }
-    return { ...(entry as MomentRecord), dialogScript: payload, dialogLines: payload.lines };
+    if (!momentEntryMatchesId(entry, momentId)) return entry;
+    updated = true;
+    return attachDialogToMomentEntry(entry, momentId, payload);
   });
 
+  if (!updated) {
+    nextItems.push(attachDialogToMomentEntry(null, momentId, payload));
+  }
+
   if (Array.isArray(stored)) {
-    await set(storyKey, nextItems);
+    await safeSet(storyKey, nextItems);
   } else {
-    await set(storyKey, { ...(stored as object), items: nextItems });
+    await safeSet(storyKey, { ...(stored as object), items: nextItems });
   }
   window.dispatchEvent(new CustomEvent("moments-updated"));
   window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id: location.storyId } }));
@@ -763,6 +806,8 @@ export function updateLineInScript(
       MomentDialogLine,
       | "text"
       | "textEffect"
+      | "characterId"
+      | "speaker"
       | "font"
       | "fontScale"
       | "color"

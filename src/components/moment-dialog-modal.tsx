@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CueTimeField } from '@/components/cue-time-field';
 import VideoCueTimeline from '@/components/video-cue-timeline';
 import { Button } from '@/components/ui/button';
@@ -305,9 +305,11 @@ export function MomentDialogModal({
   const [sceneCharacters, setSceneCharacters] = useState<SceneCharacter[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
+      initialLoadDoneRef.current = false;
       setSelectedLineId(null);
       onEditLineIdChange?.(null);
       onIsPlayingChange?.(false);
@@ -335,9 +337,15 @@ export function MomentDialogModal({
   }, [open, storyId]);
 
   useEffect(() => {
+    initialLoadDoneRef.current = false;
+  }, [momentId]);
+
+  useEffect(() => {
     if (!open || !momentId) return;
     if (storyId && sceneCharacters.length === 0) return;
+    if (initialLoadDoneRef.current) return;
 
+    initialLoadDoneRef.current = true;
     let cancelled = false;
     setLoading(true);
     const fallbackOrder = sceneCharacters.map(character => character.id);
@@ -416,7 +424,6 @@ export function MomentDialogModal({
       setScript(nextScript);
       try {
         await saveMomentDialogScript(momentId, nextScript, storyId);
-        window.dispatchEvent(new CustomEvent('moments-updated'));
       } catch (error) {
         logger.error('Failed to save moment dialog', error);
       }
@@ -429,15 +436,13 @@ export function MomentDialogModal({
       setScript(current => {
         const nextScript = addLineForCharacter(current, character);
         const added = nextScript.lines[nextScript.lines.length - 1];
-        setSelectedLineId(added?.id ?? null);
+        if (added?.id) {
+          setSelectedLineId(added.id);
+        }
         if (momentId) {
-          void saveMomentDialogScript(momentId, nextScript, storyId)
-            .then(() => {
-              window.dispatchEvent(new CustomEvent('moments-updated'));
-            })
-            .catch(error => {
-              logger.error('Failed to save moment dialog', error);
-            });
+          void saveMomentDialogScript(momentId, nextScript, storyId).catch(error => {
+            logger.error('Failed to save moment dialog', error);
+          });
         }
         return nextScript;
       });
