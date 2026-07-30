@@ -12,14 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
 import { useDraggableOffset } from '@/hooks/use-draggable-offset';
@@ -45,7 +37,6 @@ import {
   resolveMomentDialogLineStyle,
   resolveMomentLineTiming,
   saveMomentDialogScript,
-  scriptPreviewLines,
   updateCharacterPositionInScript,
   updateLineInScript,
   updateLineTimingInScript,
@@ -83,24 +74,75 @@ function momentLineSummaryLabel(
   return `Dialog ${index + 1}`;
 }
 
+function AddDialogBar({
+  characters,
+  onAdd,
+  className,
+}: {
+  characters: OrderedCharacter[];
+  onAdd: (character: OrderedCharacter) => void;
+  className?: string;
+}) {
+  const [speakerId, setSpeakerId] = useState(characters[0]?.id ?? '');
+
+  useEffect(() => {
+    if (characters.some(character => character.id === speakerId)) return;
+    setSpeakerId(characters[0]?.id ?? '');
+  }, [characters, speakerId]);
+
+  const handleAdd = () => {
+    const character = characters.find(entry => entry.id === speakerId);
+    if (character) onAdd(character);
+  };
+
+  if (!characters.length) return null;
+
+  return (
+    <div className={cn('flex items-end gap-2', className)}>
+      <label className="grid min-w-0 flex-1 gap-1">
+        <span className="text-[11px] text-muted-foreground">Speaker</span>
+        <select
+          value={speakerId}
+          onChange={event => setSpeakerId(event.target.value)}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="Speaker for new dialog"
+        >
+          {characters.map(character => (
+            <option key={character.id} value={character.id}>
+              {character.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button type="button" size="sm" variant="secondary" className="h-8 shrink-0" onClick={handleAdd}>
+        Add
+      </Button>
+    </div>
+  );
+}
+
 function SelectedMomentLineEditor({
   line,
   character,
+  characters,
   speakerPosition,
   currentTime,
   lineIndex,
   onUpdate,
   onUpdateTiming,
+  onSpeakerChange,
   onPositionChange,
   onRemove,
 }: {
   line: MomentDialogLine;
   character: OrderedCharacter;
+  characters: OrderedCharacter[];
   speakerPosition: DialogSpeakerPosition;
   currentTime?: number;
   lineIndex: number;
   onUpdate: (patch: Partial<MomentDialogLine>) => void;
   onUpdateTiming: (patch: { start?: number; end?: number }) => void;
+  onSpeakerChange: (character: OrderedCharacter) => void;
   onPositionChange: (position: DialogSpeakerPosition) => void;
   onRemove: () => void;
 }) {
@@ -132,6 +174,25 @@ function SelectedMomentLineEditor({
           Remove
         </Button>
       </div>
+
+      <label className="grid gap-1">
+        <span className="text-[11px] text-muted-foreground">Speaker</span>
+        <select
+          value={line.characterId}
+          onChange={event => {
+            const next = characters.find(entry => entry.id === event.target.value);
+            if (next) onSpeakerChange(next);
+          }}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          aria-label="Dialog speaker"
+        >
+          {characters.map(entry => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="grid grid-cols-2 gap-2">
         <CueTimeField
@@ -275,6 +336,8 @@ export function MomentDialogModal({
 
   useEffect(() => {
     if (!open || !momentId) return;
+    if (storyId && sceneCharacters.length === 0) return;
+
     let cancelled = false;
     setLoading(true);
     const fallbackOrder = sceneCharacters.map(character => character.id);
@@ -363,12 +426,23 @@ export function MomentDialogModal({
 
   const addLine = useCallback(
     (character: OrderedCharacter) => {
-      const nextScript = addLineForCharacter(script, character);
-      const added = nextScript.lines[nextScript.lines.length - 1];
-      setSelectedLineId(added?.id ?? null);
-      void persistScript(nextScript);
+      setScript(current => {
+        const nextScript = addLineForCharacter(current, character);
+        const added = nextScript.lines[nextScript.lines.length - 1];
+        setSelectedLineId(added?.id ?? null);
+        if (momentId) {
+          void saveMomentDialogScript(momentId, nextScript, storyId)
+            .then(() => {
+              window.dispatchEvent(new CustomEvent('moments-updated'));
+            })
+            .catch(error => {
+              logger.error('Failed to save moment dialog', error);
+            });
+        }
+        return nextScript;
+      });
     },
-    [persistScript, script],
+    [momentId, storyId],
   );
 
   const removeLine = useCallback(
@@ -409,6 +483,18 @@ export function MomentDialogModal({
             ? position
             : 'left';
       void persistScript(updateCharacterPositionInScript(script, characterId, validPosition));
+    },
+    [persistScript, script],
+  );
+
+  const changeLineSpeaker = useCallback(
+    (lineId: string, character: OrderedCharacter) => {
+      void persistScript(
+        updateLineInScript(script, lineId, {
+          characterId: character.id,
+          speaker: character.name,
+        }),
+      );
     },
     [persistScript, script],
   );
@@ -469,15 +555,17 @@ export function MomentDialogModal({
               </span>
               <h3 className="text-sm font-medium">Dialog</h3>
             </div>
-            <button
-              type="button"
-              data-drag-cancel
-              onClick={() => onOpenChange(false)}
-              className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
-              aria-label="Close dialog editor"
-            >
-              ×
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                data-drag-cancel
+                onClick={() => onOpenChange(false)}
+                className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
+                aria-label="Close dialog editor"
+              >
+                ×
+              </button>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -487,41 +575,18 @@ export function MomentDialogModal({
               </div>
             ) : orderedCharacters.length ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-medium">Timed dialogs</div>
-                    <div className="text-xs text-muted-foreground">
-                      Select a block on the timeline to edit one dialog at a time
-                    </div>
+                <div>
+                  <div className="text-sm font-medium">Timed dialogs</div>
+                  <div className="text-xs text-muted-foreground">
+                    Pick a speaker and click Add, then select a block on the timeline to edit
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button type="button" size="sm" variant="secondary">
-                        Add
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      <DropdownMenuLabel>Pick speaker</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {orderedCharacters.map(character => (
-                        <DropdownMenuItem
-                          key={character.id}
-                          onClick={() => addLine(character)}
-                        >
-                          <span className="truncate font-medium">{character.name}</span>
-                          <span className="ml-auto pl-2 text-[11px] text-muted-foreground">
-                            {character.roleLabel}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
+
+                <AddDialogBar characters={orderedCharacters} onAdd={addLine} />
 
                 {sortedLines.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No dialogs yet. Add one, pick a speaker, then drag it on the timeline below
-                    the moment.
+                    No dialogs yet. Choose Player, AI character, or Narrator above, then click Add.
                   </p>
                 ) : (
                   <>
@@ -561,6 +626,7 @@ export function MomentDialogModal({
                         key={selectedLine.id}
                         line={selectedLine}
                         character={selectedCharacter}
+                        characters={orderedCharacters}
                         speakerPosition={resolveCharacterPosition(
                           script,
                           selectedCharacter.id,
@@ -570,6 +636,9 @@ export function MomentDialogModal({
                         currentTime={currentTime}
                         onUpdate={patch => updateLine(selectedLine.id, patch)}
                         onUpdateTiming={patch => updateLineTiming(selectedLine.id, patch)}
+                        onSpeakerChange={character =>
+                          changeLineSpeaker(selectedLine.id, character)
+                        }
                         onPositionChange={position =>
                           updateCharacterPosition(
                             selectedCharacter.id,
@@ -598,7 +667,7 @@ export function MomentDialogModal({
             )}
           </div>
 
-          {sortedLines.length > 0 ? (
+          {orderedCharacters.length > 0 ? (
             <div className="shrink-0 space-y-2 border-t border-border/60 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs text-muted-foreground">
@@ -638,6 +707,11 @@ export function MomentDialogModal({
                 onSeek={handleTimelineSeek}
                 onScrubStart={() => onIsPlayingChange?.(false)}
               />
+              {sortedLines.length === 0 ? (
+                <p className="text-center text-[11px] text-muted-foreground">
+                  New dialogs appear here after you click Add.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
