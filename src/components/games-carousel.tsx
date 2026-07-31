@@ -9,7 +9,6 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { pressableClass } from '@/components/ui/pressable';
 import { safeGet } from '@/lib/storage-compat';
 
 type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
@@ -179,14 +178,8 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious
-        className="left-1 top-[54%] -mt-6 z-10"
-        buttonClassName={`h-12 w-12 bg-[#c90084]/80 ${pressableClass}`}
-      />
-      <CarouselNext
-        className="right-1 top-[54%] -mt-6 z-10"
-        buttonClassName={`h-12 w-12 bg-[#c90084]/80 ${pressableClass}`}
-      />
+      <CarouselPrevious className="left-1 top-[54%] -mt-6 z-10" buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]" />
+      <CarouselNext className="right-1 top-[54%] -mt-6 z-10" buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]" />
     </Carousel>
   );
 }
