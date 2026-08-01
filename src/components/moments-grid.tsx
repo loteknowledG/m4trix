@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import JustifiedMasonry from "@/components/ui/justified-masonry";
 import MomentCard from "@/components/moment-card";
 
@@ -36,11 +37,27 @@ export default function MomentsGrid({
   dragOverIndex,
   onOpen,
 }: MomentsGridProps) {
+  const [isDraggingExternal, setIsDraggingExternal] = useState(false);
+
   if (!moments || moments.length === 0) return null;
 
-  const handleExternalDrop = (e: React.DragEvent) => {
-    if (!onExternalDrop) return;
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDraggingExternal(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    const related = e.relatedTarget as HTMLElement;
+    if (!e.currentTarget.contains(related)) {
+      setIsDraggingExternal(false);
+    }
+  };
+
+  const handleExternalDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingExternal(false);
+    if (!onExternalDrop) return;
     e.stopPropagation();
 
     const target = e.target as HTMLElement;
@@ -56,7 +73,20 @@ export default function MomentsGrid({
   };
 
   return (
-    <div className="relative w-full" onDrop={handleExternalDrop} onDragOver={(e) => e.preventDefault()}>
+    <div
+      className={`relative w-full transition-colors ${isDraggingExternal ? "bg-cyan-950/50 ring-4 ring-dashed ring-cyan-500" : ""}`}
+      onDrop={handleExternalDrop}
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+    >
+      {isDraggingExternal && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
+          <div className="rounded-lg bg-cyan-500/90 px-6 py-3 text-lg font-bold text-white shadow-lg">
+            Drop to add moment
+          </div>
+        </div>
+      )}
       <JustifiedMasonry
         items={moments}
         targetRowHeight={220}
