@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { FaCompass } from 'react-icons/fa';
 import { FaArrowRight } from 'react-icons/fa6';
 import { FiVolume2, FiVolumeX } from 'react-icons/fi';
@@ -27,6 +27,26 @@ const CHAT_FOOTER_ICON_BOX: React.CSSProperties = {
   minHeight: '2.5rem',
   maxHeight: '2.5rem',
 };
+
+const VOICE_ENABLED_STORAGE_KEY = 'm4trix:voice-enabled';
+
+function readVoiceEnabled(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const stored = window.localStorage.getItem(VOICE_ENABLED_STORAGE_KEY);
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function writeVoiceEnabled(value: boolean): void {
+  try {
+    window.localStorage.setItem(VOICE_ENABLED_STORAGE_KEY, String(value));
+  } catch {
+    /* ignore storage failures */
+  }
+}
 
 const chatFooterIconLayoutClass =
   'inline-flex shrink-0 flex-none items-center justify-center gap-0 rounded-md p-0 [&_svg]:size-4 [&_svg]:shrink-0';
@@ -102,7 +122,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const steerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [voiceEnabled, setVoiceEnabled] = React.useState(true);
+  const [voiceEnabled, setVoiceEnabled] = React.useState(readVoiceEnabled);
 
   const lastSpokenIdRef = useRef<string | null>(null);
   const speakTimerRef = useRef<number | null>(null);
@@ -737,7 +757,11 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
                         ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500'
                         : 'border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700',
                     )}
-                    onClick={() => setVoiceEnabled(prev => !prev)}
+                    onClick={() => {
+                        const next = !voiceEnabled;
+                        setVoiceEnabled(next);
+                        writeVoiceEnabled(next);
+                      }}
                     type="button"
                     aria-label={voiceEnabled ? 'Voice on' : 'Voice off'}
                     title={voiceEnabled ? 'Voice on' : 'Voice off'}
