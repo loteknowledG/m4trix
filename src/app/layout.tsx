@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
-import { Mrs_Saint_Delafield, Satisfy } from 'next/font/google';
+import { Crafty_Girls, Mrs_Saint_Delafield, Satisfy } from 'next/font/google';
 
 import { getAppReleaseVersion } from '@/lib/app-release-version.server';
 
@@ -20,6 +20,13 @@ const SatisfyScript = Satisfy({
   subsets: ['latin'],
   weight: '400',
   variable: '--font-satisfy',
+  display: 'swap',
+});
+
+const CraftyGirlsScript = Crafty_Girls({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-crafty-girls',
   display: 'swap',
 });
 
@@ -63,7 +70,7 @@ export default async function RootLayout({
         <meta name="m4trix-release" content={releaseVersion} />
       </head>
       <body
-        className={`${GeistSans.className} ${SignatureScript.variable} ${SatisfyScript.variable} h-screen overflow-y-hidden overflow-x-auto`}
+        className={`${GeistSans.className} ${SignatureScript.variable} ${SatisfyScript.variable} ${CraftyGirlsScript.variable} h-screen overflow-y-hidden overflow-x-auto`}
       >
         <ThemeProvider attribute="class" forcedTheme="dark">
           <div className="app-min-width-wrapper">
