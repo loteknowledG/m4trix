@@ -773,6 +773,7 @@ export function MomentDialogModal({
                 onCueTimingChange={handleCueTimingChange}
                 onSeek={handleTimelineSeek}
                 onScrubStart={() => onIsPlayingChange?.(false)}
+                groupBySpeaker
               />
               {sortedLines.length === 0 ? (
                 <p className="text-center text-[11px] text-muted-foreground">

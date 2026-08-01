@@ -1,6 +1,6 @@
 'use client';
 
-import {
+import React, {
   useCallback,
   useMemo,
   useRef,
@@ -47,7 +47,13 @@ type VideoCueTimelineProps = {
   manualFollow?: boolean;
   followRunning?: boolean;
   onFollowToggle?: () => void;
+  groupBySpeaker?: boolean;
   className?: string;
+};
+
+type SpeakerRow = {
+  speaker: string;
+  cues: VideoTimedCue[];
 };
 
 export default function VideoCueTimeline({
@@ -63,14 +69,27 @@ export default function VideoCueTimeline({
   manualFollow = false,
   followRunning = false,
   onFollowToggle,
+  groupBySpeaker = false,
   className,
 }: VideoCueTimelineProps) {
-  const trackRef = useRef<HTMLDivElement>(null);
+  const trackRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const sortedCues = useMemo(
     () => [...cues].sort((a, b) => a.start - b.start),
     [cues],
   );
+
+  const speakerRows = useMemo((): SpeakerRow[] => {
+    if (!groupBySpeaker) return [];
+    const map = new Map<string, VideoTimedCue[]>();
+    for (const cue of sortedCues) {
+      const key = cue.speaker || 'Unknown';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(cue);
+    }
+    return Array.from(map.entries()).map(([speaker, cues]) => ({ speaker, cues }));
+  }, [sortedCues, groupBySpeaker]);
+
   const duration = useMemo(
     () => computeTimelineDuration(cues, skipSegments, currentTime, videoDuration),
     [cues, skipSegments, currentTime, videoDuration],
@@ -88,9 +107,18 @@ export default function VideoCueTimeline({
     return output;
   }, [duration, tickStep]);
 
-  const timeFromClientX = useCallback(
-    (clientX: number) => {
-      const rect = trackRef.current?.getBoundingClientRect();
+  const getTimeFromX = useCallback(
+    (clientX: number, speakerKey?: string) => {
+      let rect: DOMRect | undefined;
+      if (speakerKey) {
+        rect = trackRefs.current.get(speakerKey)?.getBoundingClientRect();
+      }
+      if (!rect) {
+        for (const ref of trackRefs.current.values()) {
+          rect = ref.getBoundingClientRect();
+          if (rect?.width) break;
+        }
+      }
       if (!rect?.width) return 0;
       return clampTimelineTime(((clientX - rect.left) / rect.width) * duration, duration);
     },
@@ -117,7 +145,7 @@ export default function VideoCueTimeline({
       const cueDuration = Math.max(0.5, originEnd - originStart);
 
       const onMove = (ev: PointerEvent) => {
-        const delta = timeFromClientX(ev.clientX) - timeFromClientX(originX);
+        const delta = getTimeFromX(ev.clientX) - getTimeFromX(originX);
         if (mode === 'move') {
           let nextStart = clampTimelineTime(originStart + delta, duration - cueDuration);
           nextStart = Math.min(nextStart, duration - cueDuration);
@@ -151,11 +179,11 @@ export default function VideoCueTimeline({
       handle.addEventListener('pointerup', onEnd);
       handle.addEventListener('pointercancel', onEnd);
     },
-    [duration, onCueTimingChange, onSelectCue, timeFromClientX],
+    [duration, onCueTimingChange, onSelectCue, getTimeFromX],
   );
 
   const beginScrub = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+    (event: ReactPointerEvent<HTMLElement>, speakerKey?: string) => {
       if (!onSeek) return;
       event.preventDefault();
       event.stopPropagation();
@@ -166,7 +194,7 @@ export default function VideoCueTimeline({
       onSelectCue?.(null);
 
       const applyScrub = (clientX: number) => {
-        const time = timeFromClientX(clientX);
+        const time = getTimeFromX(clientX, speakerKey);
         setScrubTime(time);
         onSeek(time);
       };
@@ -190,7 +218,7 @@ export default function VideoCueTimeline({
       handle.addEventListener('pointerup', onEnd);
       handle.addEventListener('pointercancel', onEnd);
     },
-    [onScrubStart, onSeek, onSelectCue, timeFromClientX],
+    [onScrubStart, onSeek, onSelectCue, getTimeFromX],
   );
 
   if (sortedCues.length === 0 && skipSegments.length === 0) {
@@ -205,6 +233,8 @@ export default function VideoCueTimeline({
       </div>
     );
   }
+
+  const playheadLeft = `${percentOf(clampTimelineTime(displayTime, duration), duration)}%`;
 
   return (
     <div className={cn('space-y-2 rounded-lg border border-border/60 bg-card/40 p-3', className)}>
@@ -241,81 +271,47 @@ export default function VideoCueTimeline({
           ))}
         </div>
 
-        <div
-          ref={trackRef}
-          className="relative h-16 rounded-md border border-border/60 bg-muted/30"
-        >
-          <button
-            type="button"
-            aria-label="Scrub playback"
-            className="absolute inset-0 z-0 cursor-ew-resize rounded-md"
-            onPointerDown={beginScrub}
-          />
-          {skipSegments.map((segment, index) => (
-            <div
-              key={segment.id}
-              className="pointer-events-none absolute top-1 z-[1] h-3 rounded-sm border border-dashed border-amber-500/50 bg-amber-500/15"
-              style={{
-                left: `${percentOf(segment.start, duration)}%`,
-                width: `${percentOf(segment.end - segment.start, duration)}%`,
-              }}
-              title={
-                segment.label?.trim() ||
-                `Skip ${index + 1} (${formatCueTime(segment.start)}–${formatCueTime(segment.end)})`
-              }
-            />
-          ))}
-
-          {sortedCues.map((cue, index) => {
-            const selected = selectedCueId === cue.id;
-            const width = Math.max(percentOf(cue.end - cue.start, duration), 1.5);
-            return (
-              <div
-                key={cue.id}
-                className={cn(
-                  'absolute bottom-1 top-5 z-[2] flex min-w-[1.25rem] items-center overflow-hidden rounded-md border text-[10px] font-medium shadow-sm',
-                  selected
-                    ? 'border-primary bg-primary/85 text-primary-foreground ring-2 ring-primary/40'
-                    : 'border-primary/40 bg-primary/55 text-primary-foreground hover:bg-primary/70',
-                )}
-                style={{
-                  left: `${percentOf(cue.start, duration)}%`,
-                  width: `${width}%`,
-                }}
-                onPointerDown={event => beginCueDrag(event, cue, 'move')}
-                onClick={event => {
-                  event.stopPropagation();
-                  onSelectCue?.(cue.id);
-                }}
-                title={`${cuePreviewLabel(cue, index)} (${formatCueTime(cue.start)}–${formatCueTime(cue.end)})`}
-              >
-                <button
-                  type="button"
-                  aria-label="Adjust dialog start"
-                  className="h-full w-1.5 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/35"
-                  onPointerDown={event => beginCueDrag(event, cue, 'start')}
-                />
-                <span className="min-w-0 flex-1 truncate px-1">{cuePreviewLabel(cue, index)}</span>
-                <button
-                  type="button"
-                  aria-label="Adjust dialog end"
-                  className="h-full w-1.5 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/35"
-                  onPointerDown={event => beginCueDrag(event, cue, 'end')}
+        <div className="space-y-1">
+          {groupBySpeaker ? (
+            speakerRows.map(({ speaker, cues: speakerCues }) => (
+              <div key={speaker} className="flex items-center gap-2">
+                <div className="w-20 shrink-0 truncate text-right text-[10px] font-medium text-muted-foreground">
+                  {speaker}
+                </div>
+                <TrackRow
+                  ref={el => {
+                    if (el) trackRefs.current.set(speaker, el);
+                    else trackRefs.current.delete(speaker);
+                  }}
+                  cues={speakerCues}
+                  skipSegments={skipSegments}
+                  selectedCueId={selectedCueId}
+                  duration={duration}
+                  playheadLeft={playheadLeft}
+                  onCueDrag={beginCueDrag}
+                  onScrub={beginScrub}
+                  speakerKey={speaker}
                 />
               </div>
-            );
-          })}
-
-          <button
-            type="button"
-            aria-label="Drag playhead to scrub"
-            className="absolute inset-y-0 z-[4] w-4 -translate-x-1/2 cursor-ew-resize touch-none"
-            style={{ left: `${percentOf(clampTimelineTime(displayTime, duration), duration)}%` }}
-            onPointerDown={beginScrub}
-          >
-            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-red-500 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
-            <span className="pointer-events-none absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-red-500 ring-2 ring-background" />
-          </button>
+            ))
+          ) : (
+            <div
+              ref={el => {
+                if (el) trackRefs.current.set('default', el);
+                else trackRefs.current.delete('default');
+              }}
+            >
+              <TrackRow
+                cues={sortedCues}
+                skipSegments={skipSegments}
+                selectedCueId={selectedCueId}
+                duration={duration}
+                playheadLeft={playheadLeft}
+                onCueDrag={beginCueDrag}
+                onScrub={beginScrub}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -327,3 +323,119 @@ export default function VideoCueTimeline({
     </div>
   );
 }
+
+type TrackRowProps = {
+  cues: VideoTimedCue[];
+  skipSegments: VideoSkipSegment[];
+  selectedCueId: string | null;
+  duration: number;
+  playheadLeft: string;
+  onCueDrag: (
+    event: ReactPointerEvent,
+    cue: VideoTimedCue,
+    mode: 'move' | 'start' | 'end',
+  ) => void;
+  onScrub: (event: ReactPointerEvent<HTMLElement>, speakerKey?: string) => void;
+  speakerKey?: string;
+};
+
+const TrackRow = React.forwardRef<HTMLDivElement, TrackRowProps>(
+  (
+    {
+      cues,
+      skipSegments,
+      selectedCueId,
+      duration,
+      playheadLeft,
+      onCueDrag,
+      onScrub,
+      speakerKey,
+    },
+    ref,
+  ) => {
+    return (
+      <div
+        ref={ref}
+        className="relative h-8 rounded-md border border-border/60 bg-muted/30"
+      >
+        <button
+          type="button"
+          aria-label="Scrub playback"
+          className="absolute inset-0 z-0 cursor-ew-resize rounded-md"
+          onPointerDown={event => onScrub(event, speakerKey)}
+        />
+        {skipSegments.map((segment, index) => (
+          <div
+            key={segment.id}
+            className="pointer-events-none absolute top-1 z-[1] h-3 rounded-sm border border-dashed border-amber-500/50 bg-amber-500/15"
+            style={{
+              left: `${percentOf(segment.start, duration)}%`,
+              width: `${percentOf(segment.end - segment.start, duration)}%`,
+            }}
+            title={
+              segment.label?.trim() ||
+              `Skip ${index + 1} (${formatCueTime(segment.start)}–${formatCueTime(segment.end)})`
+            }
+          />
+        ))}
+
+        {cues.map((cue, index) => {
+          const selected = selectedCueId === cue.id;
+          const width = Math.max(percentOf(cue.end - cue.start, duration), 1.5);
+          return (
+            <div
+              key={cue.id}
+              className={cn(
+                'absolute bottom-1 top-3 z-[2] flex min-w-[1.25rem] items-center overflow-hidden rounded border text-[10px] font-medium shadow-sm',
+                selected
+                  ? 'border-primary bg-primary/85 text-primary-foreground ring-2 ring-primary/40'
+                  : 'border-primary/40 bg-primary/55 text-primary-foreground hover:bg-primary/70',
+              )}
+              style={{
+                left: `${percentOf(cue.start, duration)}%`,
+                width: `${width}%`,
+              }}
+              onPointerDown={event => onCueDrag(event, cue, 'move')}
+              onClick={event => {
+                event.stopPropagation();
+              }}
+              title={`${cuePreviewLabel(cue, index)} (${formatCueTime(cue.start)}–${formatCueTime(cue.end)})`}
+            >
+              <button
+                type="button"
+                aria-label="Adjust dialog start"
+                className="h-full w-1.5 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/35"
+                onPointerDown={event => {
+                  event.stopPropagation();
+                  onCueDrag(event, cue, 'start');
+                }}
+              />
+              <span className="min-w-0 flex-1 truncate px-1">{cuePreviewLabel(cue, index)}</span>
+              <button
+                type="button"
+                aria-label="Adjust dialog end"
+                className="h-full w-1.5 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/35"
+                onPointerDown={event => {
+                  event.stopPropagation();
+                  onCueDrag(event, cue, 'end');
+                }}
+              />
+            </div>
+          );
+        })}
+
+        <button
+          type="button"
+          aria-label="Drag playhead to scrub"
+          className="absolute inset-y-0 z-[4] w-4 -translate-x-1/2 cursor-ew-resize touch-none"
+          style={{ left: playheadLeft }}
+          onPointerDown={event => onScrub(event, speakerKey)}
+        >
+          <span className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-red-500 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
+          <span className="pointer-events-none absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-red-500 ring-2 ring-background" />
+        </button>
+      </div>
+    );
+  },
+);
+TrackRow.displayName = 'TrackRow';
