@@ -154,7 +154,25 @@ export async function probeLmstudioHealth(
         error?: string;
         modelCount?: number;
         models?: LmstudioModelOption[];
+        skipServerCheck?: boolean;
       } | null;
+
+      if (payload?.skipServerCheck) {
+        const browserMessage =
+          browserErr instanceof Error ? browserErr.message : String(browserErr);
+        return {
+          ok: false,
+          baseUrl,
+          modelsUrl,
+          modelCount: 0,
+          models: [],
+          via: 'browser',
+          error:
+            `Tunnel URL detected. Server-side check skipped. ` +
+            `Browser failed: ${browserMessage}. ` +
+            `Ensure your proxy is running and the tunnel is active.`,
+        };
+      }
 
       if (proxyRes.ok && payload?.ok) {
         const models = Array.isArray(payload.models) ? payload.models : [];
