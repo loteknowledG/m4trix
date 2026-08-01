@@ -1923,7 +1923,7 @@ export default function GamePage() {
                     disabled={!hasMoments}
                     aria-label="Previous moment"
                     title="Previous moment"
-                    buttonClassName="bg-black/55 text-white hover:bg-black/75 hover:text-white"
+                    buttonClassName="pointer-events-auto bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </CarouselNavButton>
@@ -1933,7 +1933,7 @@ export default function GamePage() {
                     disabled={!hasMoments}
                     aria-label="Next moment"
                     title="Next moment"
-                    buttonClassName="bg-black/55 text-white hover:bg-black/75 hover:text-white"
+                    buttonClassName="pointer-events-auto bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </CarouselNavButton>
