@@ -4,7 +4,7 @@ import {
   type VideoCueTextAnimatePreset,
 } from '@/lib/video-cue-text-effects';
 
-export type VideoCueFontId = 'system' | 'serif' | 'mono' | 'cursive' | 'mrs' | 'satisfy';
+export type VideoCueFontId = 'system' | 'serif' | 'mono' | 'cursive' | 'mrs' | 'satisfy' | 'crafty';
 
 export type { VideoCueTextEffect, VideoCueTextAnimatePreset };
 
@@ -15,6 +15,7 @@ export const VIDEO_CUE_FONT_OPTIONS: { id: VideoCueFontId; label: string }[] = [
   { id: 'cursive', label: 'Cursive' },
   { id: 'mrs', label: 'Mrs Saint Delafield' },
   { id: 'satisfy', label: 'Satisfy' },
+  { id: 'crafty', label: 'Crafty Girls' },
 ];
 
 export type VideoTimedCue = {
@@ -68,6 +69,8 @@ export function resolveVideoCueFontFamily(font?: VideoCueFontId): string {
       return '"Mrs Saint Delafield", cursive';
     case 'satisfy':
       return 'Satisfy, cursive';
+    case 'crafty':
+      return '"Crafty Girls", cursive';
     default:
       return 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
   }
