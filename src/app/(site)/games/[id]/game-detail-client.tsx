@@ -474,6 +474,7 @@ export default function GamePage() {
   }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
 
   const goToPreviousMoment = useCallback(() => {
+    console.log('[DEBUG] goToPreviousMoment clicked', { hasMoments, storyMomentsLength: storyMoments.length, currentMomentIndex });
     if (!hasMoments || storyMoments.length === 0) return;
     setMomentSelectionMode("manual");
     setCurrentMomentIndex((current) => {
@@ -484,6 +485,7 @@ export default function GamePage() {
   }, [hasMoments, storyMoments.length]);
 
   const goToNextMoment = useCallback(() => {
+    console.log('[DEBUG] goToNextMoment clicked', { hasMoments, storyMomentsLength: storyMoments.length, currentMomentIndex });
     if (!hasMoments || storyMoments.length === 0) return;
     setMomentSelectionMode("manual");
     setCurrentMomentIndex((current) => {
@@ -559,7 +561,9 @@ export default function GamePage() {
 
   // Moment selection and saved story state
   useEffect(() => {
+    console.log('[DEBUG] currentMoment changed', { currentMomentIndex, momentName: currentMoment?.name, hasMoments });
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
+    console.log('[DEBUG] moment src:', src);
     setPreviewSrc(typeof src === "string" ? normalizeMomentSrc(src) || undefined : undefined);
   }, [currentMoment]);
 
