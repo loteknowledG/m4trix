@@ -473,17 +473,25 @@ export default function GamePage() {
     return chunks.join("\n\n");
   }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
 
-  const goToPreviousMoment = () => {
-    if (!hasMoments) return;
+  const goToPreviousMoment = useCallback(() => {
+    if (!hasMoments || storyMoments.length === 0) return;
     setMomentSelectionMode("manual");
-    setCurrentMomentIndex((current) => (current - 1 + storyMoments.length) % storyMoments.length);
-  };
+    setCurrentMomentIndex((current) => {
+      const len = storyMoments.length;
+      if (len === 0) return 0;
+      return (current - 1 + len) % len;
+    });
+  }, [hasMoments, storyMoments.length]);
 
-  const goToNextMoment = () => {
-    if (!hasMoments) return;
+  const goToNextMoment = useCallback(() => {
+    if (!hasMoments || storyMoments.length === 0) return;
     setMomentSelectionMode("manual");
-    setCurrentMomentIndex((current) => (current + 1) % storyMoments.length);
-  };
+    setCurrentMomentIndex((current) => {
+      const len = storyMoments.length;
+      if (len === 0) return 0;
+      return (current + 1) % len;
+    });
+  }, [hasMoments, storyMoments.length]);
 
   useEffect(() => {
     try {
