@@ -305,7 +305,7 @@ export function Menu({ isOpen }: MenuProps) {
                       submenus={
                         label === 'Stories'
                           ? storiesList.map(s => ({
-                              href: `/stories/new?story=${encodeURIComponent(s.id)}`,
+                              href: `/stories/edit?story=${encodeURIComponent(s.id)}`,
                               label: s.title && s.title.trim() ? s.title : 'Untitled',
                               // only mark a story submenu active when the current route/query indicates a story is open
                               active:

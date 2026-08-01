@@ -186,7 +186,7 @@ export default function StoryPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const routeId = params?.id as string | undefined;
-  const id = routeId === "new" ? searchParams?.get("story") || undefined : routeId;
+  const id = routeId === "edit" ? searchParams?.get("story") || undefined : routeId;
 
   const [moments, setMoments] = useState<Moment[]>([]);
   const [loading, setLoading] = useState(true);
