@@ -197,13 +197,13 @@ body,
       0 6px 0 hsl(var(--foreground));
   }
   .pushable-effect:hover {
-    transform: translateY(-2px);
+    transform: translate(-1px, -2px);
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.03) inset,
-      0 8px 0 hsl(var(--foreground));
+      0 10px 0 hsl(var(--foreground));
   }
   .pushable-effect:active {
-    transform: translateY(2px);
+    transform: translateY(3px);
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.04) inset,
       0 1px 0 hsl(var(--foreground));
