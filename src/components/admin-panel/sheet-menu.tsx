@@ -28,7 +28,7 @@ export function SheetMenu() {
             variant="link"
             asChild
           >
-            <Link href="/heap" className="flex items-center gap-2">
+            <Link href="/about" className="flex items-center gap-2">
               <VisuallyHidden.Root>
                 <SheetTitle>m4trix</SheetTitle>
               </VisuallyHidden.Root>
