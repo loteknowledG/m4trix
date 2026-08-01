@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { RefreshCw, Monitor, Smartphone, Laptop } from '@/components/icons';
+import { Loader2 } from '@/components/icons';
+import { MdMonitor, MdSmartphone, MdLaptop } from 'react-icons/md';
 import {
   checkForAppUpdate,
   fetchAppReleaseVersion,
@@ -25,9 +26,9 @@ function getAppType(): string {
 }
 
 function AppTypeIcon({ type }: { type: string }) {
-  if (type === 'Electron') return <Laptop size={48} />;
-  if (type === 'PWA') return <Smartphone size={48} />;
-  return <Monitor size={48} />;
+  if (type === 'Electron') return <MdLaptop size={48} />;
+  if (type === 'PWA') return <MdSmartphone size={48} />;
+  return <MdMonitor size={48} />;
 }
 
 export default function AboutPage() {
@@ -91,7 +92,7 @@ export default function AboutPage() {
           >
             {checking ? (
               <>
-                <RefreshCw size={16} className="animate-spin mr-2" />
+                <Loader2 size={16} className="animate-spin mr-2" />
                 Checking...
               </>
             ) : (
