@@ -1929,26 +1929,26 @@ export default function GamePage() {
                   />
                 )}
                 <div className="pointer-events-none absolute inset-0 top-[42%] z-10 flex -mt-6 items-center justify-between px-2">
-                  <CarouselNavButton
-                    type="button"
-                    onClick={goToPreviousMoment}
-                    disabled={!hasMoments}
-                    aria-label="Previous moment"
-                    title="Previous moment"
-                    buttonClassName="pointer-events-auto bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </CarouselNavButton>
-                  <CarouselNavButton
+                  <button
                     type="button"
                     onClick={goToNextMoment}
                     disabled={!hasMoments}
                     aria-label="Next moment"
-                    title="Next moment"
-                    buttonClassName="pointer-events-auto bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40"
+                    title={`Next moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <ChevronRight className="h-4 w-4" />
-                  </CarouselNavButton>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToPreviousMoment}
+                    disabled={!hasMoments}
+                    aria-label="Previous moment"
+                    title={`Prev moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
