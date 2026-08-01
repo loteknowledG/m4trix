@@ -269,7 +269,6 @@ export function VideoCueTextEffectView({
         text={displayText}
         className={cn('inline', className)}
         animateBy="words"
-        segmentClassName="whitespace-nowrap"
       />
     );
   }
@@ -290,7 +289,7 @@ export function VideoCueTextEffectView({
 
   if (textEffect === 'textGenerate') {
     return (
-      <TextGenerateEffect key={animationKey} className={cn('inline', className)} wordClassName="whitespace-nowrap">
+      <TextGenerateEffect key={animationKey} className={cn('inline', className)}>
         {displayText}
       </TextGenerateEffect>
     );
