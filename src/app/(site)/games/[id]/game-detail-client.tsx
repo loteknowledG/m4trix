@@ -1593,11 +1593,13 @@ export default function GamePage() {
         if (!mounted) return;
 
         const storyObj = stored;
+        console.log('[DEBUG] storyObj loaded:', JSON.stringify(storyObj)?.slice(0, 500));
         const momentsArr = Array.isArray(storyObj)
           ? storyObj
           : storyObj && Array.isArray(storyObj.items)
             ? storyObj.items
             : [];
+        console.log('[DEBUG] momentsArr extracted:', momentsArr.length, 'items');
         setStoryMoments(momentsArr);
         setGameData(storyObj);
 
@@ -1931,21 +1933,21 @@ export default function GamePage() {
                 <div className="pointer-events-none absolute inset-0 top-[42%] z-10 flex -mt-6 items-center justify-between px-2">
                   <button
                     type="button"
-                    onClick={goToNextMoment}
+                    onClick={() => { console.log('[DEBUG] INLINE onclick fired!'); goToNextMoment(); }}
                     disabled={!hasMoments}
                     aria-label="Next moment"
                     title={`Next moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
-                    className="pointer-events-auto h-12 w-12 rounded-full bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40 disabled:pointer-events-none"
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={goToPreviousMoment}
+                    onClick={() => { console.log('[DEBUG] INLINE prev onclick fired!'); goToPreviousMoment(); }}
                     disabled={!hasMoments}
                     aria-label="Previous moment"
                     title={`Prev moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
-                    className="pointer-events-auto h-12 w-12 rounded-full bg-black/55 text-white hover:bg-black/75 hover:text-white disabled:opacity-40 disabled:pointer-events-none"
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
