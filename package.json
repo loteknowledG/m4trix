@@ -33,6 +33,7 @@
     "lmstudio:probe": "node scripts/lmstudio-probe.js",
     "proxy": "node proxy-server.js",
     "proxy:lmstudio": "set LMSTUDIO_URL=http://localhost:11434 && node proxy-server.js",
+    "proxy:ollama": "set LMSTUDIO_URL=http://localhost:11434 && node proxy-server.js",
     "registry:build": "tsx ./scripts/build-registry.ts",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",

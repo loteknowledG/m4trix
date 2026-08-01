@@ -17,7 +17,29 @@ type HealthPayload = {
   modelCount?: number;
   models?: Array<{ id: string; label: string }>;
   error?: string;
+  skipServerCheck?: boolean;
 };
+
+const TUNNEL_DOMAINS = [
+  'ngrok',
+  'ngrok-free',
+  'loca.lt',
+  'loca.gt',
+  'lt',
+  'cloudflare一试',
+  'playit.gg',
+  'serveo.net',
+  'localtunnel',
+];
+
+function isTunnelUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return TUNNEL_DOMAINS.some(domain => hostname.includes(domain));
+  } catch {
+    return false;
+  }
+}
 
 function resolveBaseUrl(req?: NextRequest): string {
   if (req) {
@@ -52,6 +74,20 @@ export async function GET(req: NextRequest) {
 
   const lmstudioUrl = resolveBaseUrl(req);
   const modelsUrl = getLmstudioModelsUrl(lmstudioUrl);
+
+  if (isTunnelUrl(lmstudioUrl)) {
+    const payload: HealthPayload = {
+      ok: false,
+      baseUrl: lmstudioUrl,
+      modelsUrl,
+      skipServerCheck: true,
+      error: 'Tunnel URLs cannot be checked server-side. Use browser check.',
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);

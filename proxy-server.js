@@ -1,7 +1,7 @@
 const http = require('http');
 const { URL } = require('url');
 
-const PORT = 3000;
+const PORT = 3001;
 const DEFAULT_LMSTUDIO = 'http://localhost:11434';
 
 const proxy = http.createServer(async (req, res) => {
