@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import JustifiedMasonry from "@/components/ui/justified-masonry";
 import MomentCard from "@/components/moment-card";
 
@@ -39,20 +39,41 @@ export default function MomentsGrid({
 }: MomentsGridProps) {
   const [isDraggingExternal, setIsDraggingExternal] = useState(false);
 
-  if (!moments || moments.length === 0) return null;
+  useEffect(() => {
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer?.types.includes("Files")) {
+        setIsDraggingExternal(true);
+      }
+    };
 
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingExternal(true);
-  };
+    const handleDragLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) {
+        setIsDraggingExternal(false);
+      }
+    };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    const related = e.relatedTarget as HTMLElement;
-    if (!e.currentTarget.contains(related)) {
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
       setIsDraggingExternal(false);
-    }
-  };
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener("dragenter", handleDragEnter);
+    document.addEventListener("dragleave", handleDragLeave);
+    document.addEventListener("drop", handleDrop);
+    document.addEventListener("dragover", handleDragOver);
+
+    return () => {
+      document.removeEventListener("dragenter", handleDragEnter);
+      document.removeEventListener("dragleave", handleDragLeave);
+      document.removeEventListener("drop", handleDrop);
+      document.removeEventListener("dragover", handleDragOver);
+    };
+  }, []);
 
   const handleExternalDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -72,66 +93,67 @@ export default function MomentsGrid({
     onExternalDrop(e, undefined);
   };
 
+  if (!moments || moments.length === 0) return null;
+
   return (
-    <div
-      className={`relative w-full transition-colors ${isDraggingExternal ? "bg-cyan-950/50 ring-4 ring-dashed ring-cyan-500" : ""}`}
-      onDrop={handleExternalDrop}
-      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-    >
+    <>
       {isDraggingExternal && (
-        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
-          <div className="rounded-lg bg-cyan-500/90 px-6 py-3 text-lg font-bold text-white shadow-lg">
-            Drop to add moment
+        <div
+          className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center bg-cyan-950/70"
+          onDrop={handleExternalDrop}
+        >
+          <div className="rounded-xl bg-cyan-500 px-8 py-6 text-2xl font-bold text-white shadow-2xl ring-4 ring-cyan-400">
+            Drop anywhere to add moment
           </div>
         </div>
       )}
-      <JustifiedMasonry
-        items={moments}
-        targetRowHeight={220}
-        itemSpacing={16}
-        rowSpacing={16}
-        renderItem={(item, style) => {
-          const idx = moments.findIndex((m: Moment) => m.id === item.id);
-          return (
-            <div
-              key={item.id}
-              style={style}
-              draggable
-              data-moment-idx={idx}
-              onDragStart={onDragStart ? (e) => onDragStart(e, idx) : undefined}
-              onDragEnd={onDragEnd ? () => onDragEnd(idx) : undefined}
-              onDragOver={
-                onDragOver
-                  ? (e) => {
-                      e.stopPropagation();
-                      onDragOver(e, idx);
-                    }
-                  : undefined
-              }
-              onDrop={
-                onDrop
-                  ? (e) => {
-                      e.stopPropagation();
-                      onDrop(e, idx);
-                    }
-                  : undefined
-              }
-              className={
-                "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
-              }
-            >
-              <MomentCard
-                item={{ ...item, selected: selectedIds.includes(item.id as string) }}
-                anySelected={selectedIds.length > 0}
-                toggleSelect={toggleSelect}
-                onOpen={onOpen}
-              />
-            </div>
-          );
-        }}
-      />
-    </div>
+      <div className="relative w-full">
+        <JustifiedMasonry
+          items={moments}
+          targetRowHeight={220}
+          itemSpacing={16}
+          rowSpacing={16}
+          renderItem={(item, style) => {
+            const idx = moments.findIndex((m: Moment) => m.id === item.id);
+            return (
+              <div
+                key={item.id}
+                style={style}
+                draggable
+                data-moment-idx={idx}
+                onDragStart={onDragStart ? (e) => onDragStart(e, idx) : undefined}
+                onDragEnd={onDragEnd ? () => onDragEnd(idx) : undefined}
+                onDragOver={
+                  onDragOver
+                    ? (e) => {
+                        e.stopPropagation();
+                        onDragOver(e, idx);
+                      }
+                    : undefined
+                }
+                onDrop={
+                  onDrop
+                    ? (e) => {
+                        e.stopPropagation();
+                        onDrop(e, idx);
+                      }
+                    : undefined
+                }
+                className={
+                  "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
+                }
+              >
+                <MomentCard
+                  item={{ ...item, selected: selectedIds.includes(item.id as string) }}
+                  anySelected={selectedIds.length > 0}
+                  toggleSelect={toggleSelect}
+                  onOpen={onOpen}
+                />
+              </div>
+            );
+          }}
+        />
+      </div>
+    </>
   );
 }
