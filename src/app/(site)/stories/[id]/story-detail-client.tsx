@@ -574,9 +574,8 @@ export default function StoryPage() {
     [moments, id, saveStoryItems],
   );
 
-  // allow dropping external images/URLs to append to story
   const handleExternalDrop = useCallback(
-    async (e: React.DragEvent) => {
+    async (e: React.DragEvent, insertAtIdx?: number) => {
       e.preventDefault();
 
       const isInternalReorder =
@@ -584,7 +583,7 @@ export default function StoryPage() {
         Array.from(e.dataTransfer.types).includes(MOMENT_REORDER_MIME);
       if (isInternalReorder) return;
 
-      const addSrc = async (src: string, fingerprint?: string) => {
+      const addSrc = async (src: string, fingerprint?: string, insertAt?: number) => {
         setMoments((ms) => {
           if (storyMomentSrcExists(ms, src, fingerprint)) {
             setStoryCount(ms.length).catch(() => {});
@@ -592,7 +591,12 @@ export default function StoryPage() {
           }
 
           const newMoment: Moment = { id: crypto.randomUUID(), src, fingerprint };
-          const updated = dedupeStoryMomentsBySrc([...ms, newMoment]);
+          let updated: Moment[];
+          if (insertAt !== undefined && insertAt >= 0 && insertAt <= ms.length) {
+            updated = [...ms.slice(0, insertAt), newMoment, ...ms.slice(insertAt)];
+          } else {
+            updated = dedupeStoryMomentsBySrc([...ms, newMoment]);
+          }
           saveStoryItems(updated).catch(() => {});
           setStoryCount(updated.length).catch(() => {});
           return updated;
@@ -609,7 +613,7 @@ export default function StoryPage() {
               reader.onerror = () => reject(reader.error);
               reader.readAsDataURL(file);
             });
-            await addSrc(dataUrl, fingerprint);
+            await addSrc(dataUrl, fingerprint, insertAtIdx);
           }
         }
         return;
@@ -620,7 +624,7 @@ export default function StoryPage() {
         const durable = isEphemeralMomentSrc(text) ? await materializeMomentSrc(text) : text;
         const finalSrc = durable || text;
         const normalized = momentSrcDedupeKey(finalSrc);
-        await addSrc(finalSrc, normalized || undefined);
+        await addSrc(finalSrc, normalized || undefined, insertAtIdx);
       }
     },
     [id, saveStoryItems],
@@ -1555,6 +1559,7 @@ export default function StoryPage() {
                               }}
                               onDragOver={onDragOver}
                               onDrop={onDrop}
+                              onExternalDrop={handleExternalDrop}
                               dragOverIndex={dragOverIndex}
                             />
                           </div>
@@ -1572,6 +1577,7 @@ export default function StoryPage() {
                         }}
                         onDragOver={onDragOver}
                         onDrop={onDrop}
+                        onExternalDrop={handleExternalDrop}
                         dragOverIndex={dragOverIndex}
                       />
                     </>
