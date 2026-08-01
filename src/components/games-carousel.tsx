@@ -163,12 +163,24 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
               onClick={event => handleSlideClick(event, story.id)}
             >
               {previews[story.id] ? (
-                <img
-                  src={previews[story.id] || undefined}
-                  alt={story.title ?? 'story'}
-                  className="h-full w-auto object-contain pointer-events-none"
-                  draggable={false}
-                />
+                (previews[story.id] || '').endsWith('.mp4') ? (
+                  <video
+                    src={previews[story.id] || undefined}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="h-full w-auto object-contain pointer-events-none"
+                    draggable={false}
+                  />
+                ) : (
+                  <img
+                    src={previews[story.id] || undefined}
+                    alt={story.title ?? 'story'}
+                    className="h-full w-auto object-contain pointer-events-none"
+                    draggable={false}
+                  />
+                )
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   No preview
