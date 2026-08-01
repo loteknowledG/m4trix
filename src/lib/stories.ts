@@ -12,7 +12,7 @@ export function newStoryId() {
 }
 
 export function storyEditorHref(storyId: string) {
-  return `/stories/new/?story=${encodeURIComponent(storyId)}`;
+  return `/stories/edit/?story=${encodeURIComponent(storyId)}`;
 }
 
 /** Create an empty story (same outcome as heap → Add to Story → New story with no moments). */
