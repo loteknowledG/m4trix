@@ -1395,51 +1395,19 @@ export default function GamePage() {
             [responder]: [...(prev[responder] || []), aiResponse],
           }));
 
-          // Narrator gives ONE sentence describing what both characters did
+          // Narrator says the story description
           if (narratorEnabled) {
-            try {
-              const narratorResp = await fetch('/api/agents/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  prompt: `The story is: ${storyDescription || title || 'an unfolding scene'}. ${speakerName} said: "${trimmed}". ${responderName} replied: "${reply}". Write ONE short sentence narrating the current scene in the style of a story narrator, describing the setting, mood, or what is happening.`,
-                  model: connectionModel || undefined,
-                  provider: activeProvider,
-                  lmstudioUrl,
-                  zenApiKey,
-                  googleApiKey,
-                  hfApiKey,
-                  nvidiaApiKey,
-                  character: {
-                    id: 'narrator',
-                    name: 'Narrator',
-                    description: 'You are a story narrator. Describe the current scene, setting, or mood in ONE short sentence. Focus on the world and atmosphere, not the characters speaking.',
-                  },
-                  maxTokens: 80,
-                }),
-              });
-
-              if (narratorResp.ok) {
-                const nData = await narratorResp.json();
-                const nText = nData?.choices?.[0]?.message?.content?.trim()
-                  || nData?.messages?.[0]?.text?.trim()
-                  || nData?.content?.trim()
-                  || (typeof nData === 'string' ? nData : '')
-                  || '';
-                if (nText) {
-                  const narratorMessage: CustomChatMessage = {
-                    id: `narrator-${Date.now()}`,
-                    from: 'agent',
-                    text: nText,
-                  };
-                  setConversations((prev) => ({
-                    ...prev,
-                    narrator: [...(prev.narrator || []), narratorMessage],
-                  }));
-                }
-              }
-            } catch (narratorErr) {
-              console.error('Narrator error:', narratorErr);
+            const narratorText = (storyDescription || title || 'The story unfolds...').trim();
+            if (narratorText) {
+              const narratorMessage: CustomChatMessage = {
+                id: `narrator-${Date.now()}`,
+                from: 'agent',
+                text: narratorText,
+              };
+              setConversations((prev) => ({
+                ...prev,
+                narrator: [...(prev.narrator || []), narratorMessage],
+              }));
             }
           }
         }
