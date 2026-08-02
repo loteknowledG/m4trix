@@ -1991,14 +1991,14 @@ export default function GamePage() {
         <div className="relative h-full">
           {/* Floating Action Button (FAB) - expandable menu */}
           <TooltipProvider delayDuration={150}>
-            {/* Main FAB - Gear button */}
+            {/* Main FAB - Gear button (transparent face, big icon) */}
             <Pressable
               type="button"
               onClick={() => setFabOpen(!fabOpen)}
-              className="fixed left-4 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-white shadow-lg shadow-black/30 hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-white"
+              className="fixed left-4 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-white shadow-lg shadow-black/30 hover:bg-zinc-700/50 focus:outline-none focus:ring-2 focus:ring-white border border-white/30"
               aria-label={fabOpen ? "Close menu" : "Open menu"}
             >
-              {fabOpen ? <FaTimes className="h-4 w-4" /> : <FaCog className="h-4 w-4" />}
+              {fabOpen ? <FaTimes className="h-5 w-5" /> : <FaCog className="h-6 w-6" />}
             </Pressable>
 
             {/* Expanded buttons - appear when FAB is open */}
