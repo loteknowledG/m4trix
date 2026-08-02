@@ -194,7 +194,6 @@ export default function GamePage() {
     narrator: '',
   });
   const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
-  const [narratorEnabled] = useState(true);
 
   const [connected, setConnected] = useState(false);
   console.debug('[game] connected state:', connected);
