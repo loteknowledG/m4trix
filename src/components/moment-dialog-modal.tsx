@@ -450,7 +450,9 @@ export function MomentDialogModal({
       if (!momentId) return;
       setScript(current => {
         const nextScript = typeof updater === 'function' ? updater(current) : updater;
-        dispatchMomentDialogUpdated({ momentId, storyId, script: nextScript });
+        void queueMicrotask(() => {
+          dispatchMomentDialogUpdated({ momentId, storyId, script: nextScript });
+        });
         void saveMomentDialogScript(momentId, nextScript, storyId).catch(error => {
           logger.error('Failed to save moment dialog', error);
         });
@@ -771,6 +773,7 @@ export function MomentDialogModal({
                 onCueTimingChange={handleCueTimingChange}
                 onSeek={handleTimelineSeek}
                 onScrubStart={() => onIsPlayingChange?.(false)}
+                groupBySpeaker
               />
               {sortedLines.length === 0 ? (
                 <p className="text-center text-[11px] text-muted-foreground">

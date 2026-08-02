@@ -181,7 +181,7 @@ type CarouselControlProps = React.ComponentProps<typeof Button> & {
 };
 
 const carouselNavButtonClassName =
-  'pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/40 transition hover:bg-[#c90084]/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40';
+  'pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900';
 
 const CarouselNavButton = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
   ({ className, buttonClassName, variant = 'raised', size = 'icon', ...props }, ref) => {

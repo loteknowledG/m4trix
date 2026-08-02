@@ -9,7 +9,6 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { pressableClass } from '@/components/ui/pressable';
 import { safeGet } from '@/lib/storage-compat';
 
 type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
@@ -164,12 +163,24 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
               onClick={event => handleSlideClick(event, story.id)}
             >
               {previews[story.id] ? (
-                <img
-                  src={previews[story.id] || undefined}
-                  alt={story.title ?? 'story'}
-                  className="h-full w-auto object-contain pointer-events-none"
-                  draggable={false}
-                />
+                (previews[story.id] || '').endsWith('.mp4') ? (
+                  <video
+                    src={previews[story.id] || undefined}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="h-full w-auto object-contain pointer-events-none"
+                    draggable={false}
+                  />
+                ) : (
+                  <img
+                    src={previews[story.id] || undefined}
+                    alt={story.title ?? 'story'}
+                    className="h-full w-auto object-contain pointer-events-none"
+                    draggable={false}
+                  />
+                )
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   No preview
@@ -179,14 +190,8 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious
-        className="left-1 top-[54%] -mt-6 z-10"
-        buttonClassName={`h-12 w-12 bg-[#c90084]/80 ${pressableClass}`}
-      />
-      <CarouselNext
-        className="right-1 top-[54%] -mt-6 z-10"
-        buttonClassName={`h-12 w-12 bg-[#c90084]/80 ${pressableClass}`}
-      />
+      <CarouselPrevious className="left-1 top-[54%] -mt-6 z-10" buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]" />
+      <CarouselNext className="right-1 top-[54%] -mt-6 z-10" buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]" />
     </Carousel>
   );
 }

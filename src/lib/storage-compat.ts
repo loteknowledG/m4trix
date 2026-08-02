@@ -53,11 +53,16 @@ export async function safeGet<T>(key: string) {
 export async function safeSet<T>(key: string, value: T) {
   try {
     await set(key, value);
+    return;
   } catch {
-    // ignore and fall back to localStorage
+    // IndexedDB failed, fall back to localStorage
   }
 
-  writeLocalStorage(key, value);
+  try {
+    writeLocalStorage(key, value);
+  } catch {
+    console.error(`Failed to save ${key} - storage quota exceeded`);
+  }
 }
 
 export async function safeDel(key: string) {

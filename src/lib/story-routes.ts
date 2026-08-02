@@ -3,7 +3,7 @@ export function resolveStoryId(
   storyQuery: string | null | undefined,
 ): string | null {
   if (!routeId) return null;
-  if (routeId === "new") {
+  if (routeId === "new" || routeId === "edit") {
     const queryId = storyQuery?.trim();
     return queryId || null;
   }

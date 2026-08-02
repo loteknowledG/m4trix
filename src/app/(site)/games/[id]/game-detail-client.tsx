@@ -4,13 +4,15 @@ import { del, get, keys, set } from "idb-keyval";
 import dynamic from "next/dynamic";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { FaBrain, FaBug, FaDesktop, FaTags } from "react-icons/fa";
+import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes } from "react-icons/fa";
 import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
+import { CharacterChatDialog } from "@/components/ui/character-chat-dialog";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
+import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
 import {
@@ -38,6 +40,7 @@ import { getDesktopBridge } from "@/lib/app-update-client";
 import { openDesktopInstallerDownload } from "@/lib/desktop-release";
 import {
   DEFAULT_LMSTUDIO_URL,
+  fetchAgentsWithLmstudioBrowserProxy,
   normalizeLmstudioUrl,
   probeLmstudioHealth,
 } from "@/lib/lmstudio";
@@ -152,6 +155,7 @@ export default function GamePage() {
   }, []);
   const historyPushedForOpenRef = useRef(false);
   const [confirmQuit, setConfirmQuit] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
   const [title, setTitle] = useState("Game");
   const [storyMoments, setStoryMoments] = useState<any[]>([]);
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
@@ -179,8 +183,57 @@ export default function GamePage() {
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
   const momentStateReadyRef = useRef(false);
-  const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
+
+  // Multi-character conversations
+  type CharacterId = 'protagonist' | 'antagonist' | 'narrator';
+  const [conversations, setConversations] = useState<Record<CharacterId, CustomChatMessage[]>>({
+    protagonist: [],
+    antagonist: [],
+    narrator: [],
+  });
+  const [characterInputs, setCharacterInputs] = useState<Record<CharacterId, string>>({
+    protagonist: '',
+    antagonist: '',
+    narrator: '',
+  });
+  const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
+
+  // Derive combined chatMessages for legacy code that expects a single array
+  const chatMessages: CustomChatMessage[] = [
+    ...(conversations.protagonist || []),
+    ...(conversations.antagonist || []),
+    ...(conversations.narrator || []),
+  ];
+
+  // Legacy setChatMessages wrapper that updates the right character conversation
+  const setChatMessages = (
+    updater: CustomChatMessage[] | ((prev: CustomChatMessage[]) => CustomChatMessage[])
+  ) => {
+    setConversations((prev) => {
+      // Combine all current messages
+      const combined = [
+        ...(prev.protagonist || []),
+        ...(prev.antagonist || []),
+        ...(prev.narrator || []),
+      ];
+
+      const next = typeof updater === 'function' ? updater(combined) : updater;
+
+      // Put all messages in the protagonist conversation
+      return {
+        ...prev,
+        protagonist: next,
+        antagonist: prev.antagonist,
+        narrator: prev.narrator,
+      };
+    });
+  };
+
+  const chatInput = characterInputs[activeCharacter] || '';
+  const setChatInput = (value: string) => {
+    setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: value }));
+  };
+
   const [connected, setConnected] = useState(false);
   console.debug('[game] connected state:', connected);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
@@ -473,17 +526,27 @@ export default function GamePage() {
     return chunks.join("\n\n");
   }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
 
-  const goToPreviousMoment = () => {
-    if (!hasMoments) return;
+  const goToPreviousMoment = useCallback(() => {
+    console.log('[DEBUG] goToPreviousMoment clicked', { hasMoments, storyMomentsLength: storyMoments.length, currentMomentIndex });
+    if (!hasMoments || storyMoments.length === 0) return;
     setMomentSelectionMode("manual");
-    setCurrentMomentIndex((current) => (current - 1 + storyMoments.length) % storyMoments.length);
-  };
+    setCurrentMomentIndex((current) => {
+      const len = storyMoments.length;
+      if (len === 0) return 0;
+      return (current - 1 + len) % len;
+    });
+  }, [hasMoments, storyMoments.length]);
 
-  const goToNextMoment = () => {
-    if (!hasMoments) return;
+  const goToNextMoment = useCallback(() => {
+    console.log('[DEBUG] goToNextMoment clicked', { hasMoments, storyMomentsLength: storyMoments.length, currentMomentIndex });
+    if (!hasMoments || storyMoments.length === 0) return;
     setMomentSelectionMode("manual");
-    setCurrentMomentIndex((current) => (current + 1) % storyMoments.length);
-  };
+    setCurrentMomentIndex((current) => {
+      const len = storyMoments.length;
+      if (len === 0) return 0;
+      return (current + 1) % len;
+    });
+  }, [hasMoments, storyMoments.length]);
 
   useEffect(() => {
     try {
@@ -551,7 +614,9 @@ export default function GamePage() {
 
   // Moment selection and saved story state
   useEffect(() => {
+    console.log('[DEBUG] currentMoment changed', { currentMomentIndex, momentName: currentMoment?.name, hasMoments });
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
+    console.log('[DEBUG] moment src:', src);
     setPreviewSrc(typeof src === "string" ? normalizeMomentSrc(src) || undefined : undefined);
   }, [currentMoment]);
 
@@ -1226,10 +1291,156 @@ export default function GamePage() {
   };
 
   const sendChatMessage = async () => {
-    const trimmed = chatInput.trim();
+    const trimmed = characterInputs[activeCharacter]?.trim();
     if (!trimmed) return;
-    await sendGamePrompt(trimmed);
+    await sendAsCharacter(activeCharacter, trimmed);
   };
+
+  const sendAsCharacter = async (characterId: CharacterId, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // Add user message to character's conversation
+    const userMessage: CustomChatMessage = {
+      id: `user-${Date.now()}`,
+      from: 'user',
+      text: trimmed,
+    };
+
+    setConversations((prev) => ({
+      ...prev,
+      [characterId]: [...(prev[characterId] || []), userMessage],
+    }));
+
+    // Clear input for this character
+    setCharacterInputs((prev) => ({ ...prev, [characterId]: '' }));
+
+    // Determine who responds - the OTHER character responds
+    // If narrator spoke, both protagonist and antagonist respond
+    const responders: CharacterId[] = characterId === 'protagonist' ? ['antagonist'] :
+                                     characterId === 'antagonist' ? ['protagonist'] :
+                                     characterId === 'narrator' ? ['protagonist', 'antagonist'] :
+                                     [];
+
+    if (responders.length === 0) return;
+
+    // Get character names
+    const speakerName = characterId === 'protagonist'
+      ? (assignedPlayer?.name || 'Protagonist')
+      : characterId === 'antagonist'
+        ? (assignedNpc?.name || 'Antagonist')
+        : 'Narrator';
+
+    // Get active provider and API key from storage
+    const activeProvider =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
+      "zen";
+    const lmstudioUrl = normalizeLmstudioUrl(
+      getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
+    );
+    const zenApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) || undefined;
+    const googleApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) || undefined;
+    const hfApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) || undefined;
+    const nvidiaApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || undefined;
+
+    try {
+      // Process each responder (one at a time so they can react to each other)
+      for (let i = 0; i < responders.length; i++) {
+        const currentResponder = responders[i];
+
+        // Get the current responder's character info - use defaults if not set
+        const currentResponderCharacter = currentResponder === 'protagonist'
+          ? (assignedPlayer || { id: 'protagonist', name: 'Protagonist', description: 'A character in a story' })
+          : currentResponder === 'antagonist'
+            ? (assignedNpc || { id: 'antagonist', name: 'Antagonist', description: 'A character in a story' })
+            : null;
+        const currentResponderName = currentResponderCharacter.name;
+
+        // Build prompt based on who is speaking
+        const isNarratorSpeaking = characterId === 'narrator';
+        const promptText = isNarratorSpeaking
+          ? `The narrator describes: "${trimmed}". ${currentResponderName}, what would you say in response? Reply with ONE short sentence of dialogue in character.`
+          : `${speakerName} said: "${trimmed}". ${currentResponderName}, reply with exactly ONE short sentence in character.`;
+
+        // Call AI for this responder
+        try {
+          const requestBody = {
+            prompt: promptText,
+            model: connectionModel || undefined,
+            provider: activeProvider,
+            lmstudioUrl,
+            zenApiKey,
+            googleApiKey,
+            hfApiKey,
+            nvidiaApiKey,
+            character: {
+              id: currentResponderCharacter.id,
+              name: currentResponderName,
+              description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
+            },
+            maxTokens: 100,
+          };
+          console.log('[DEBUG] AI request:', JSON.stringify({ provider: activeProvider, model: connectionModel, hasKey: !!zenApiKey, lmstudioUrl }).slice(0, 300));
+          // Use the helper that handles LM Studio clientProxy envelope
+          const response = await fetchAgentsWithLmstudioBrowserProxy(requestBody);
+
+          if (response.ok) {
+            // The helper handles clientProxy - response may be text (streamed) or JSON
+            const contentType = response.headers.get('content-type') || '';
+            let reply = '';
+            let data: any = null;
+
+            if (contentType.includes('text/plain')) {
+              // Streamed response
+              const text = await response.text();
+              reply = text.trim();
+            } else {
+              data = await response.json();
+              // API response format: { messages: [{from, text, agentId}], mode, debug } or { messages: [{content}] }
+              reply = data?.messages?.[0]?.text?.trim()
+                || data?.messages?.[0]?.content?.trim()
+                || data?.choices?.[0]?.message?.content?.trim()
+                || data?.content?.trim()
+                || (typeof data === 'string' ? data : '')
+                || '';
+            }
+
+            if (reply) {
+              const aiResponse: CustomChatMessage = {
+                id: `agent-${Date.now()}-${currentResponder}`,
+                from: 'agent',
+                text: reply,
+              };
+
+              setConversations((prev) => ({
+                ...prev,
+                [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
+              }));
+            } else {
+              // No content - log the raw response for debugging
+              console.warn('AI returned empty content for', currentResponder, JSON.stringify(data).slice(0, 500));
+              // Continue without adding a message
+            }
+            // Set debug data
+            const debugDataValue = contentType.includes('text/plain')
+              ? { reply }
+              : data;
+            setDebugData({ request: requestBody, response: debugDataValue, prompt: trimmed });
+          }
+        } catch (loopErr) {
+          // Silently log - don't add error to conversation since AI should only respond with one sentence
+          console.error('AI response error for', currentResponder, loopErr);
+        }
+      }
+
+      // Narrator only speaks when the player explicitly chose narrator
+      // (No auto-trigger for character dialogs)
+    } catch (err) {
+      console.error('AI response error:', err);
+    }
+  };
+
 
   const handleEditChatMessage = (messageId: string, nextText: string) => {
     setChatMessages((messages) =>
@@ -1581,11 +1792,13 @@ export default function GamePage() {
         if (!mounted) return;
 
         const storyObj = stored;
+        console.log('[DEBUG] storyObj loaded:', JSON.stringify(storyObj)?.slice(0, 500));
         const momentsArr = Array.isArray(storyObj)
           ? storyObj
           : storyObj && Array.isArray(storyObj.items)
             ? storyObj.items
             : [];
+        console.log('[DEBUG] momentsArr extracted:', momentsArr.length, 'items');
         setStoryMoments(momentsArr);
         setGameData(storyObj);
 
@@ -1598,6 +1811,17 @@ export default function GamePage() {
               ? storyObj.description
               : "";
         setStoryDescription(resolvedDescription);
+        // Initialize narrator conversation with the story description
+        if (resolvedDescription && resolvedDescription.trim()) {
+          setConversations((prev) => ({
+            ...prev,
+            narrator: [{
+              id: `narrator-initial-${Date.now()}`,
+              from: 'agent',
+              text: resolvedDescription.trim(),
+            }],
+          }));
+        }
         const resolvedArc = storyMeta?.storyArc ?? storyObj?.storyArc ?? null;
         setStoryArc(resolvedArc);
 
@@ -1729,13 +1953,9 @@ export default function GamePage() {
           (typeof storyObj?.description === "string" ? storyObj.description.trim() : "") ||
           resolvedTitle.trim() ||
           `Game ${id}`;
-        setChatMessages([
-          {
-            id: "story-opening",
-            from: "agent",
-            text: openingText,
-          },
-          ...nextHistory.map((entry) => ({
+        // Only load chat history - story opening is now in the narrator dialog
+        setChatMessages(
+          nextHistory.map((entry) => ({
             id: entry.id,
             from: entry.from,
             text: entry.text,
@@ -1744,7 +1964,7 @@ export default function GamePage() {
                 ? player?.name?.trim() || "You"
                 : npc?.name?.trim() || "NPC",
           })),
-        ]);
+        );
       } catch (e) {
         console.error("Failed to load game data", e);
       } finally {
@@ -1769,112 +1989,118 @@ export default function GamePage() {
         contentClassName="p-0"
       >
         <div className="relative h-full">
+          {/* Floating Action Button (FAB) - expandable menu */}
           <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Pressable
-                  type="button"
-                  onClick={() => setConfirmQuit(true)}
-                  className="fixed left-4 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-black/30 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
-                  aria-label="Quit game"
-                >
-                  <MdExitToApp className="h-5 w-5" />
-                </Pressable>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={10}
-                className="z-[60] border-0 bg-black/90 text-white"
-              >
-                Quit game
-              </TooltipContent>
-            </Tooltip>
+            {/* Main FAB - Gear button (transparent face, big icon) */}
+            <Pressable
+              type="button"
+              onClick={() => setFabOpen(!fabOpen)}
+              className="fixed left-4 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-white shadow-lg shadow-black/30 hover:bg-zinc-700/50 focus:outline-none focus:ring-2 focus:ring-white border border-white/30"
+              aria-label={fabOpen ? "Close menu" : "Open menu"}
+            >
+              {fabOpen ? <FaTimes className="h-5 w-5" /> : <FaCog className="h-6 w-6" />}
+            </Pressable>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Pressable
-                  type="button"
-                  onClick={() => setDebugOpen(true)}
-                  className="fixed left-16 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-black/30 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-white"
-                  aria-label="Debug"
-                >
-                  <FaBug className="h-4 w-4" />
-                </Pressable>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={10}
-                className="z-[60] border-0 bg-black/90 text-white"
-              >
-                Debug
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Pressable
-                  type="button"
-                  onClick={() => setTagDialogOpen(true)}
-                  className="fixed left-28 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-600 text-white shadow-lg shadow-black/30 hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="Tag current moment"
-                  disabled={!currentMoment}
-                >
-                  <FaTags className="h-4 w-4" />
-                </Pressable>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={10}
-                className="z-[60] border-0 bg-black/90 text-white"
-              >
-                Tag current moment
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Pressable
-                  type="button"
-                  onClick={() => setMemoryDialogOpen(true)}
-                  className="fixed left-40 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-black/30 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-white"
-                  aria-label="Show memory"
-                >
-                  <FaBrain className="h-4 w-4" />
-                </Pressable>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={10}
-                className="z-[60] border-0 bg-black/90 text-white"
-              >
-                Memory
-              </TooltipContent>
-            </Tooltip>
-
-            {showDesktopInstall ? (
+            {/* Expanded buttons - appear when FAB is open - using carousel button style */}
+            <div
+              className={`fixed left-4 top-12 z-50 flex items-center gap-2 transition-all duration-300 ease-out ${
+                fabOpen ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 -translate-x-4 pointer-events-none'
+              }`}
+              style={{ left: '60px' }}
+            >
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Pressable
                     type="button"
-                    onClick={() => void handleInstallDesktop()}
-                    disabled={desktopInstallBusy}
-                    className="fixed left-52 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg shadow-black/30 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Install desktop app"
+                    onClick={() => { setConfirmQuit(true); setFabOpen(false); }}
+                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
+                    aria-label="Quit game"
                   >
-                    <FaDesktop className="h-4 w-4" />
+                    <MdExitToApp className="h-5 w-5" />
                   </Pressable>
                 </TooltipTrigger>
-                <TooltipContent
-                  side="top"
-                  sideOffset={10}
-                  className="z-[60] border-0 bg-black/90 text-white"
-                >
-                  {desktopInstallBusy
-                    ? "Fetching installer…"
-                    : "Install desktop (auto-update)"}
+                <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
+                  Quit game
                 </TooltipContent>
               </Tooltip>
-            ) : null}
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pressable
+                    type="button"
+                    onClick={() => { setDebugOpen(true); setFabOpen(false); }}
+                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
+                    aria-label="Debug"
+                  >
+                    <FaBug className="h-5 w-5" />
+                  </Pressable>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
+                  Debug
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pressable
+                    type="button"
+                    onClick={() => { setTagDialogOpen(true); setFabOpen(false); }}
+                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Tag current moment"
+                    disabled={!currentMoment}
+                  >
+                    <FaTags className="h-5 w-5" />
+                  </Pressable>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
+                  Tag current moment
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pressable
+                    type="button"
+                    onClick={() => { setMemoryDialogOpen(true); setFabOpen(false); }}
+                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
+                    aria-label="Show memory"
+                  >
+                    <FaBrain className="h-5 w-5" />
+                  </Pressable>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
+                  Memory
+                </TooltipContent>
+              </Tooltip>
+
+              {showDesktopInstall ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Pressable
+                      type="button"
+                      onClick={() => { void handleInstallDesktop(); setFabOpen(false); }}
+                      disabled={desktopInstallBusy}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg shadow-black/30 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Install desktop app"
+                    >
+                      <FaDesktop className="h-4 w-4" />
+                    </Pressable>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
+                    {desktopInstallBusy
+                      ? "Fetching installer…"
+                      : "Install desktop (auto-update)"}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+
+              {/* Connection button - always at the end */}
+              <div className="pointer-events-auto">
+                <ConnectionSheet
+                  triggerClassName="h-10 w-10 rounded-full bg-black text-white hover:bg-zinc-800 border-0"
+                />
+              </div>
+            </div>
           </TooltipProvider>
 
           <div className="relative h-full w-full bg-black">
@@ -1917,26 +2143,26 @@ export default function GamePage() {
                   />
                 )}
                 <div className="pointer-events-none absolute inset-0 top-[42%] z-10 flex -mt-6 items-center justify-between px-2">
-                  <CarouselNavButton
+                  <button
                     type="button"
-                    onClick={goToPreviousMoment}
-                    disabled={!hasMoments}
-                    aria-label="Previous moment"
-                    title="Previous moment"
-                    buttonClassName="bg-black/55 text-white hover:bg-black/75 hover:text-white"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </CarouselNavButton>
-                  <CarouselNavButton
-                    type="button"
-                    onClick={goToNextMoment}
+                    onClick={() => { console.log('[DEBUG] INLINE onclick fired!'); goToNextMoment(); }}
                     disabled={!hasMoments}
                     aria-label="Next moment"
-                    title="Next moment"
-                    buttonClassName="bg-black/55 text-white hover:bg-black/75 hover:text-white"
+                    title={`Next moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <ChevronRight className="h-4 w-4" />
-                  </CarouselNavButton>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { console.log('[DEBUG] INLINE prev onclick fired!'); goToPreviousMoment(); }}
+                    disabled={!hasMoments}
+                    aria-label="Previous moment"
+                    title={`Prev moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
@@ -1944,6 +2170,11 @@ export default function GamePage() {
                 <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] min-w-0 items-center rounded-full border border-white/20 bg-black/45 px-3 py-1 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
                   <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.85)]" />
                   <span className="truncate">{title}</span>
+                </div>
+                <div className="pointer-events-auto">
+                  <ConnectionSheet
+                    triggerClassName="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
+                  />
                 </div>
                 <div className="pointer-events-auto">
                   <GrokImagePromptButton
@@ -1958,43 +2189,43 @@ export default function GamePage() {
                 </div>
               </div>
 
-              <div
-                className="absolute inset-x-0 bottom-0 z-20 flex flex-col bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pb-3 pt-10 sm:px-6 sm:pb-5"
-                data-testid="game-chat-panel"
-                style={{ height: `${chatHeightPct}%` }}
-              >
-                <button
-                  type="button"
-                  aria-label="Resize chat panel"
-                  title="Drag to resize chat"
-                  className="mx-auto mb-2 flex h-4 w-28 shrink-0 cursor-ns-resize items-center justify-center rounded-full border border-white/25 bg-black/50 touch-none"
-                  onPointerDown={beginChatResize}
-                >
-                  <span className="h-0.5 w-10 rounded-full bg-white/70" />
-                </button>
-                <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden rounded-sm border border-white/70 bg-black/55 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-[2px] sm:px-5 sm:py-4">
-                  <CustomChatWindow
-                    variant="visualNovel"
-                    messages={chatMessages}
-                    input={chatInput}
-                    onInputChange={setChatInput}
-                    onSend={sendChatMessage}
-                    onEditMessage={handleEditChatMessage}
-                    onMessageEdited={handleMessageEdited}
-                    onSteerMessage={handleSteerChatMessage}
-                    onContinueMessage={handleContinueChatMessage}
-                    steerInstruction={steerInstruction}
-                    disabled={chatInFlight}
-                    connected={connected}
-                    connectionModel={connectionModel}
-                    playerMode={playerMode}
-                    onPlayerModeChange={setPlayerMode}
-                    playerIdentityHint={playerIdentityHint}
-                    sendIcon={<FaArrowUp className="h-4 w-4" />}
-                    sendIconAriaLabel="Send message"
-                  />
-                </div>
-              </div>
+              {/* Multi-character chat dialogs */}
+              <CharacterChatDialog
+                open
+                characterName={assignedPlayer?.name || 'Protagonist'}
+                messages={conversations.protagonist}
+                input={characterInputs.protagonist}
+                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, protagonist: v }))}
+                onSend={() => sendAsCharacter('protagonist', characterInputs.protagonist)}
+                isActive={activeCharacter === 'protagonist'}
+                onActivate={() => setActiveCharacter('protagonist')}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+              />
+              <CharacterChatDialog
+                open
+                characterName={assignedNpc?.name || 'Antagonist'}
+                messages={conversations.antagonist}
+                input={characterInputs.antagonist}
+                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, antagonist: v }))}
+                onSend={() => sendAsCharacter('antagonist', characterInputs.antagonist)}
+                isActive={activeCharacter === 'antagonist'}
+                onActivate={() => setActiveCharacter('antagonist')}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+              />
+              <CharacterChatDialog
+                open
+                characterName="Narrator"
+                messages={conversations.narrator}
+                input={characterInputs.narrator}
+                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, narrator: v }))}
+                onSend={() => sendAsCharacter('narrator', characterInputs.narrator)}
+                isActive={activeCharacter === 'narrator'}
+                onActivate={() => setActiveCharacter('narrator')}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+              />
             </div>
             )}
           </div>

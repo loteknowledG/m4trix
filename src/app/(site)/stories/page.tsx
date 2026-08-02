@@ -202,7 +202,7 @@ export default function StoriesPage() {
                         />
                       </label>
                       <Link
-                        href={`/stories/new/?story=${encodeURIComponent(s.id)}`}
+                        href={storyEditorHref(s.id)}
                         className="block h-full w-full"
                       >
                         <span className="sr-only">

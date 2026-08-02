@@ -19,6 +19,27 @@ const GOOGLE_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/open
 const HUGGINGFACE_MODELS_URL =
   'https://huggingface.co/api/models?pipeline_tag=text-generation&sort=downloads&direction=-1&limit=20';
 
+const TUNNEL_DOMAINS = [
+  'ngrok',
+  'ngrok-free',
+  'loca.lt',
+  'loca.gt',
+  'lt',
+  'cloudflare一试',
+  'playit.gg',
+  'serveo.net',
+  'localtunnel',
+];
+
+function isTunnelUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return TUNNEL_DOMAINS.some(domain => hostname.includes(domain));
+  } catch {
+    return false;
+  }
+}
+
 // Simple proxy to list models available to your Zen/OpenCode API key.
 //
 // Uses the hardcoded OpenCode models endpoint above. You can still
@@ -70,6 +91,14 @@ export async function GET(req: NextRequest) {
     }
     const baseUrl = lmstudioUrlParam || normalizeLmstudioUrl(process.env.LMSTUDIO_URL) || 'http://192.168.12.48:1234';
     const modelsUrl = getLmstudioModelsUrl(baseUrl);
+
+    if (isTunnelUrl(baseUrl)) {
+      return new Response(
+        JSON.stringify({ error: 'Tunnel URL detected. Server-side fetch skipped. Use browser check.' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     try {
       const resp = await fetch(modelsUrl, { method: 'GET' });
       if (!resp.ok) {
