@@ -307,7 +307,7 @@ export function CharacterChatDialog({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              setShowSettings(!showSettings);
+              setShowSettings(true);
             }}
             className="absolute top-1 right-1 z-10 h-6 w-6 flex items-center justify-center rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-white/20"
             aria-label="Text settings"
@@ -317,19 +317,53 @@ export function CharacterChatDialog({
           </button>
         )}
 
-        {showSettings && isActive && (
+        {messages.length === 0 ? (
+          <div className="text-center text-zinc-500 text-sm py-8">
+            {isActive ? "Type a message to start the conversation..." : "Waiting for other characters..."}
+          </div>
+        ) : (
+          messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={cn(
+                "rounded-lg px-3 py-2 max-w-[85%]",
+                msg.from === 'user'
+                  ? "ml-auto"
+                  : "mr-auto"
+              )}
+              style={{
+                fontFamily: resolveFontFamily(textOptions.font),
+                fontSize: `${textOptions.fontSize}px`,
+                color: textOptions.textColor,
+                backgroundColor: textOptions.bgColor,
+              }}
+            >
+              <div className="text-xs opacity-60 mb-0.5">{msg.from === 'user' ? characterName : 'AI'}</div>
+              <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Settings Modal */}
+      {showSettings && isActive && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-lg"
+          onClick={() => setShowSettings(false)}
+        >
           <div
-            className="absolute top-10 right-1 z-20 w-56 rounded-lg bg-zinc-900/95 border border-zinc-700 p-3 shadow-xl space-y-3"
+            className="w-64 rounded-lg bg-zinc-900 border border-zinc-700 p-4 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-200">Text Format</span>
+              <span className="text-sm font-semibold text-zinc-200">Text Format</span>
               <button
                 type="button"
                 onClick={() => setShowSettings(false)}
                 className="text-zinc-400 hover:text-white"
               >
-                <FaTimes className="h-3 w-3" />
+                <FaTimes className="h-3.5 w-3.5" />
               </button>
             </div>
 
@@ -364,14 +398,14 @@ export function CharacterChatDialog({
 
             <div className="space-y-1">
               <label className="text-[10px] text-zinc-400">Text Color</label>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
                 {['#ffffff', '#000000', '#ff5555', '#55ff55', '#5555ff', '#ffff55', '#ff55ff', '#55ffff'].map(c => (
                   <button
                     key={c}
                     type="button"
                     onClick={() => onTextOptionsChange?.({ ...textOptions, textColor: c })}
                     className={cn(
-                      "w-5 h-5 rounded border-2",
+                      "w-6 h-6 rounded border-2",
                       textOptions.textColor === c ? "border-cyan-400" : "border-zinc-600"
                     )}
                     style={{ backgroundColor: c }}
@@ -383,14 +417,14 @@ export function CharacterChatDialog({
 
             <div className="space-y-1">
               <label className="text-[10px] text-zinc-400">Background</label>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
                 {['transparent', '#000000', '#1f2937', '#374151', '#7c3aed', '#dc2626', '#059669'].map(c => (
                   <button
                     key={c}
                     type="button"
                     onClick={() => onTextOptionsChange?.({ ...textOptions, bgColor: c })}
                     className={cn(
-                      "w-5 h-5 rounded border-2",
+                      "w-6 h-6 rounded border-2",
                       textOptions.bgColor === c ? "border-cyan-400" : "border-zinc-600",
                       c === 'transparent' && "bg-[linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%)]"
                     )}
@@ -400,35 +434,13 @@ export function CharacterChatDialog({
                 ))}
               </div>
             </div>
-          </div>
-        )}
 
-        {messages.length === 0 ? (
-          <div className="text-center text-zinc-500 text-sm py-8">
-            {isActive ? "Type a message to start the conversation..." : "Waiting for other characters..."}
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                "rounded-lg px-3 py-2 max-w-[85%]",
-                msg.from === 'user'
-                  ? "ml-auto"
-                  : "mr-auto"
-              )}
-              style={{
-                fontFamily: resolveFontFamily(textOptions.font),
-                fontSize: `${textOptions.fontSize}px`,
-                color: textOptions.textColor,
-                backgroundColor: textOptions.bgColor,
-              }}
-            >
-              <div className="text-xs opacity-60 mb-0.5">{msg.from === 'user' ? characterName : 'AI'}</div>
-              <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+            <div className="pt-2 border-t border-zinc-700">
+              <p className="text-[10px] text-zinc-500">Changes apply to messages in this dialog.</p>
             </div>
-          ))
-        )}
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Input area - only show if active */}
