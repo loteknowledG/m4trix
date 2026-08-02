@@ -182,7 +182,7 @@ export function CharacterChatDialog({
     <div
       data-dialog-content
       className={cn(
-        "fixed z-50 flex flex-col bg-zinc-900/60 border border-zinc-700/70 shadow-2xl overflow-hidden rounded-lg backdrop-blur-md",
+        "fixed z-50 flex flex-col bg-zinc-900/30 border border-zinc-700/50 shadow-2xl overflow-hidden rounded-lg backdrop-blur-sm",
         "backdrop-blur-sm",
         activeBorderColor,
         className
