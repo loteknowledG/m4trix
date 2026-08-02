@@ -12,6 +12,7 @@ import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { CharacterChatDialog } from "@/components/ui/character-chat-dialog";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
+import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
 import {
@@ -2176,6 +2177,11 @@ export default function GamePage() {
                 <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] min-w-0 items-center rounded-full border border-white/20 bg-black/45 px-3 py-1 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
                   <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.85)]" />
                   <span className="truncate">{title}</span>
+                </div>
+                <div className="pointer-events-auto">
+                  <ConnectionSheet
+                    triggerClassName="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
+                  />
                 </div>
                 <div className="pointer-events-auto">
                   <GrokImagePromptButton
