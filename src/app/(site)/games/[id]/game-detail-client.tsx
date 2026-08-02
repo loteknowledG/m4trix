@@ -1334,12 +1334,18 @@ export default function GamePage() {
     const lmstudioUrl = normalizeLmstudioUrl(
       getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
     );
-    const apiKey =
-      getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ||
-      getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ||
-      getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ||
-      getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ||
-      "";
+    const zenApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) || undefined;
+    const googleApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) || undefined;
+    const hfApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) || undefined;
+    const nvidiaApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || undefined;
+
+    // Build the character context
+    const responderCharacter = responder === 'protagonist'
+      ? assignedPlayer
+      : assignedNpc;
+    const speakerCharacter = characterId === 'protagonist'
+      ? assignedPlayer
+      : assignedNpc;
 
     try {
       // Call AI for the responder
@@ -1347,24 +1353,34 @@ export default function GamePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          prompt: `${speakerName} said: "${trimmed}". ${responderName}, reply with exactly ONE short sentence.`,
+          model: connectionModel || undefined,
           provider: activeProvider,
-          model: connectionModel,
-          apiKey,
           lmstudioUrl,
-          messages: [
-            {
-              role: 'system',
-              content: `You are ${responderName}. The user controls ${speakerName}. ${speakerName} just said: "${trimmed}". Reply with exactly ONE short sentence in character as ${responderName}. No actions, no narration, just one sentence of dialogue.`
-            }
-          ],
-          max_tokens: 100,
-          temperature: 0.8,
+          zenApiKey,
+          googleApiKey,
+          hfApiKey,
+          nvidiaApiKey,
+          character: responderCharacter ? {
+            id: responderCharacter.id,
+            name: responderName,
+            description: `The ${responder}. ${responderCharacter.description || ''} Reply with exactly ONE short sentence in character.`,
+          } : {
+            id: responder,
+            name: responderName,
+            description: 'Reply with exactly ONE short sentence in character.',
+          },
+          maxTokens: 100,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        const reply = data?.choices?.[0]?.message?.content?.trim() || data?.messages?.[0]?.text?.trim() || '';
+        const reply = data?.choices?.[0]?.message?.content?.trim()
+          || data?.messages?.[0]?.text?.trim()
+          || data?.content?.trim()
+          || (typeof data === 'string' ? data : '')
+          || '';
 
         if (reply) {
           const aiResponse: CustomChatMessage = {
@@ -1385,24 +1401,30 @@ export default function GamePage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                  prompt: `${speakerName} said: "${trimmed}". ${responderName} replied: "${reply}". Write ONE short sentence describing what just happened between them.`,
+                  model: connectionModel || undefined,
                   provider: activeProvider,
-                  model: connectionModel,
-                  apiKey,
                   lmstudioUrl,
-                  messages: [
-                    {
-                      role: 'system',
-                      content: `You are a narrator. ${speakerName} said: "${trimmed}". ${responderName} replied: "${reply}". Write ONE short sentence describing what just happened between them.`
-                    }
-                  ],
-                  max_tokens: 60,
-                  temperature: 0.7,
+                  zenApiKey,
+                  googleApiKey,
+                  hfApiKey,
+                  nvidiaApiKey,
+                  character: {
+                    id: 'narrator',
+                    name: 'Narrator',
+                    description: 'You are a narrator. Write ONE short sentence describing what just happened between the two characters.',
+                  },
+                  maxTokens: 60,
                 }),
               });
 
               if (narratorResp.ok) {
                 const nData = await narratorResp.json();
-                const nText = nData?.choices?.[0]?.message?.content?.trim() || nData?.messages?.[0]?.text?.trim() || '';
+                const nText = nData?.choices?.[0]?.message?.content?.trim()
+                  || nData?.messages?.[0]?.text?.trim()
+                  || nData?.content?.trim()
+                  || (typeof nData === 'string' ? nData : '')
+                  || '';
                 if (nText) {
                   const narratorMessage: CustomChatMessage = {
                     id: `narrator-${Date.now()}`,
@@ -1421,7 +1443,8 @@ export default function GamePage() {
           }
         }
       } else {
-        throw new Error(`AI returned ${response.status}`);
+        const errText = await response.text().catch(() => '');
+        throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
       }
     } catch (err) {
       console.error('AI response error:', err);
