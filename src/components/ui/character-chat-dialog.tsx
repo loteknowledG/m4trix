@@ -78,7 +78,7 @@ export function CharacterChatDialog({
   const DEFAULT_WIDTH = 360
   const DEFAULT_HEIGHT = 480
   const MIN_WIDTH = 280
-  const MIN_HEIGHT = 300
+  const MIN_HEIGHT = 150
 
   React.useEffect(() => {
     if (!open) return
