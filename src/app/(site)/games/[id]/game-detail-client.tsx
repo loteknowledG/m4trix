@@ -1355,12 +1355,18 @@ export default function GamePage() {
       : assignedNpc;
 
     try {
+      // Build prompt based on who is speaking
+      const isNarratorSpeaking = characterId === 'narrator';
+      const promptText = isNarratorSpeaking
+        ? `The narrator says: "${trimmed}". ${responderName}, respond in character with ONE short sentence of dialogue.`
+        : `${speakerName} said: "${trimmed}". ${responderName}, reply with exactly ONE short sentence.`;
+
       // Call AI for the responder
       const response = await fetch('/api/agents/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `${speakerName} said: "${trimmed}". ${responderName}, reply with exactly ONE short sentence.`,
+          prompt: promptText,
           model: connectionModel || undefined,
           provider: activeProvider,
           lmstudioUrl,
