@@ -1810,6 +1810,17 @@ export default function GamePage() {
               ? storyObj.description
               : "";
         setStoryDescription(resolvedDescription);
+        // Initialize narrator conversation with the story description
+        if (resolvedDescription && resolvedDescription.trim()) {
+          setConversations((prev) => ({
+            ...prev,
+            narrator: [{
+              id: `narrator-initial-${Date.now()}`,
+              from: 'agent',
+              text: resolvedDescription.trim(),
+            }],
+          }));
+        }
         const resolvedArc = storyMeta?.storyArc ?? storyObj?.storyArc ?? null;
         setStoryArc(resolvedArc);
 
