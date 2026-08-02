@@ -10,6 +10,7 @@ import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
+import { CharacterChatDialog } from "@/components/ui/character-chat-dialog";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
@@ -179,8 +180,22 @@ export default function GamePage() {
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
   const momentStateReadyRef = useRef(false);
-  const [chatMessages, setChatMessages] = useState<CustomChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
+
+  // Multi-character conversations
+  type CharacterId = 'protagonist' | 'antagonist' | 'narrator';
+  const [conversations, setConversations] = useState<Record<CharacterId, CustomChatMessage[]>>({
+    protagonist: [],
+    antagonist: [],
+    narrator: [],
+  });
+  const [characterInputs, setCharacterInputs] = useState<Record<CharacterId, string>>({
+    protagonist: '',
+    antagonist: '',
+    narrator: '',
+  });
+  const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
+  const [narratorEnabled] = useState(true);
+
   const [connected, setConnected] = useState(false);
   console.debug('[game] connected state:', connected);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
@@ -1238,9 +1253,65 @@ export default function GamePage() {
   };
 
   const sendChatMessage = async () => {
-    const trimmed = chatInput.trim();
+    const trimmed = characterInputs[activeCharacter]?.trim();
     if (!trimmed) return;
-    await sendGamePrompt(trimmed);
+    await sendAsCharacter(activeCharacter, trimmed);
+  };
+
+  const sendAsCharacter = async (characterId: CharacterId, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // Add user message to character's conversation
+    const userMessage: CustomChatMessage = {
+      id: `user-${Date.now()}`,
+      from: 'user',
+      text: trimmed,
+    };
+
+    setConversations((prev) => ({
+      ...prev,
+      [characterId]: [...(prev[characterId] || []), userMessage],
+    }));
+
+    // Clear input for this character
+    setCharacterInputs((prev) => ({ ...prev, [characterId]: '' }));
+
+    // Determine who responds - the OTHER character responds
+    const responder = characterId === 'protagonist' ? 'antagonist' :
+                      characterId === 'antagonist' ? 'protagonist' : null;
+
+    if (responder) {
+      // Simulate AI response (placeholder - connect to actual AI)
+      const aiResponse: CustomChatMessage = {
+        id: `agent-${Date.now()}`,
+        from: 'agent',
+        text: `[${responder} responds with one sentence]`,
+      };
+
+      // Small delay to simulate thinking
+      setTimeout(() => {
+        setConversations((prev) => ({
+          ...prev,
+          [responder]: [...(prev[responder] || []), aiResponse],
+        }));
+
+        // Narrator gives ONE sentence describing what both characters did
+        if (narratorEnabled) {
+          const narratorMessage: CustomChatMessage = {
+            id: `narrator-${Date.now()}`,
+            from: 'agent',
+            text: `[Narrator: The ${characterId} and ${responder} did something together]`,
+          };
+          setTimeout(() => {
+            setConversations((prev) => ({
+              ...prev,
+              narrator: [...(prev.narrator || []), narratorMessage],
+            }));
+          }, 500);
+        }
+      }, 1000);
+    }
   };
 
   const handleEditChatMessage = (messageId: string, nextText: string) => {
@@ -1972,43 +2043,42 @@ export default function GamePage() {
                 </div>
               </div>
 
-              <div
-                className="absolute inset-x-0 bottom-0 z-20 flex flex-col bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pb-3 pt-10 sm:px-6 sm:pb-5"
-                data-testid="game-chat-panel"
-                style={{ height: `${chatHeightPct}%` }}
-              >
-                <button
-                  type="button"
-                  aria-label="Resize chat panel"
-                  title="Drag to resize chat"
-                  className="mx-auto mb-2 flex h-4 w-28 shrink-0 cursor-ns-resize items-center justify-center rounded-full border border-white/25 bg-black/50 touch-none"
-                  onPointerDown={beginChatResize}
-                >
-                  <span className="h-0.5 w-10 rounded-full bg-white/70" />
-                </button>
-                <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden rounded-sm border border-white/70 bg-black/55 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-[2px] sm:px-5 sm:py-4">
-                  <CustomChatWindow
-                    variant="visualNovel"
-                    messages={chatMessages}
-                    input={chatInput}
-                    onInputChange={setChatInput}
-                    onSend={sendChatMessage}
-                    onEditMessage={handleEditChatMessage}
-                    onMessageEdited={handleMessageEdited}
-                    onSteerMessage={handleSteerChatMessage}
-                    onContinueMessage={handleContinueChatMessage}
-                    steerInstruction={steerInstruction}
-                    disabled={chatInFlight}
-                    connected={connected}
-                    connectionModel={connectionModel}
-                    playerMode={playerMode}
-                    onPlayerModeChange={setPlayerMode}
-                    playerIdentityHint={playerIdentityHint}
-                    sendIcon={<FaArrowUp className="h-4 w-4" />}
-                    sendIconAriaLabel="Send message"
-                  />
-                </div>
-              </div>
+              {/* Multi-character chat dialogs */}
+              <CharacterChatDialog
+                open
+                characterName="Protagonist"
+                messages={conversations.protagonist}
+                input={characterInputs.protagonist}
+                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, protagonist: v }))}
+                onSend={() => sendAsCharacter('protagonist', characterInputs.protagonist)}
+                isActive={activeCharacter === 'protagonist'}
+                onActivate={() => setActiveCharacter('protagonist')}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+              />
+              <CharacterChatDialog
+                open
+                characterName="Antagonist"
+                messages={conversations.antagonist}
+                input={characterInputs.antagonist}
+                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, antagonist: v }))}
+                onSend={() => sendAsCharacter('antagonist', characterInputs.antagonist)}
+                isActive={activeCharacter === 'antagonist'}
+                onActivate={() => setActiveCharacter('antagonist')}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+              />
+              <CharacterChatDialog
+                open
+                characterName="Narrator"
+                messages={conversations.narrator}
+                input=""
+                onInputChange={() => {}}
+                onSend={() => {}}
+                isActive={false}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+              />
             </div>
             )}
           </div>
