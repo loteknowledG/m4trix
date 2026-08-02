@@ -1363,25 +1363,27 @@ export default function GamePage() {
 
         // Call AI for this responder
         try {
+          const requestBody = {
+            prompt: promptText,
+            model: connectionModel || undefined,
+            provider: activeProvider,
+            lmstudioUrl,
+            zenApiKey,
+            googleApiKey,
+            hfApiKey,
+            nvidiaApiKey,
+            character: {
+              id: currentResponderCharacter.id,
+              name: currentResponderName,
+              description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
+            },
+            maxTokens: 100,
+          };
+          console.log('[DEBUG] AI request:', JSON.stringify({ provider: activeProvider, model: connectionModel, hasKey: !!zenApiKey, lmstudioUrl }).slice(0, 300));
           const response = await fetch('/api/agents/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: promptText,
-              model: connectionModel || undefined,
-              provider: activeProvider,
-              lmstudioUrl,
-              zenApiKey,
-              googleApiKey,
-              hfApiKey,
-              nvidiaApiKey,
-              character: {
-                id: currentResponderCharacter.id,
-                name: currentResponderName,
-                description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
-              },
-              maxTokens: 100,
-            }),
+            body: JSON.stringify(requestBody),
           });
 
           if (response.ok) {
@@ -1425,21 +1427,8 @@ export default function GamePage() {
         }
       }
 
-      // Narrator says the story description (only once after all responders)
-      if (narratorEnabled && characterId !== 'narrator') {
-        const narratorText = (storyDescription || title || 'The story unfolds...').trim();
-        if (narratorText) {
-          const narratorMessage: CustomChatMessage = {
-            id: `narrator-${Date.now()}`,
-            from: 'agent',
-            text: narratorText,
-          };
-          setConversations((prev) => ({
-            ...prev,
-            narrator: [...(prev.narrator || []), narratorMessage],
-          }));
-        }
-      }
+      // Narrator only speaks when the player explicitly chose narrator
+      // (No auto-trigger for character dialogs)
     } catch (err) {
       console.error('AI response error:', err);
     }
