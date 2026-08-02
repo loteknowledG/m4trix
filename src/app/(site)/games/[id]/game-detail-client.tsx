@@ -1402,7 +1402,7 @@ export default function GamePage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  prompt: `${speakerName} said: "${trimmed}". ${responderName} replied: "${reply}". Write ONE short sentence describing what just happened between them.`,
+                  prompt: `The story is: ${storyDescription || title || 'an unfolding scene'}. ${speakerName} said: "${trimmed}". ${responderName} replied: "${reply}". Write ONE short sentence narrating the current scene in the style of a story narrator, describing the setting, mood, or what is happening.`,
                   model: connectionModel || undefined,
                   provider: activeProvider,
                   lmstudioUrl,
@@ -1413,9 +1413,9 @@ export default function GamePage() {
                   character: {
                     id: 'narrator',
                     name: 'Narrator',
-                    description: 'You are a narrator. Write ONE short sentence describing what just happened between the two characters.',
+                    description: 'You are a story narrator. Describe the current scene, setting, or mood in ONE short sentence. Focus on the world and atmosphere, not the characters speaking.',
                   },
-                  maxTokens: 60,
+                  maxTokens: 80,
                 }),
               });
 
@@ -2206,7 +2206,7 @@ export default function GamePage() {
               {/* Multi-character chat dialogs */}
               <CharacterChatDialog
                 open
-                characterName="Protagonist"
+                characterName={assignedPlayer?.name || 'Protagonist'}
                 messages={conversations.protagonist}
                 input={characterInputs.protagonist}
                 onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, protagonist: v }))}
@@ -2218,7 +2218,7 @@ export default function GamePage() {
               />
               <CharacterChatDialog
                 open
-                characterName="Antagonist"
+                characterName={assignedNpc?.name || 'Antagonist'}
                 messages={conversations.antagonist}
                 input={characterInputs.antagonist}
                 onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, antagonist: v }))}
