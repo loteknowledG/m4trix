@@ -1428,16 +1428,8 @@ export default function GamePage() {
             setDebugData({ request: requestBody, response: debugDataValue, prompt: trimmed });
           }
         } catch (loopErr) {
+          // Silently log - don't add error to conversation since AI should only respond with one sentence
           console.error('AI response error for', currentResponder, loopErr);
-          const aiResponse: CustomChatMessage = {
-            id: `agent-${Date.now()}-err`,
-            from: 'agent',
-            text: `[${currentResponder} could not respond: ${loopErr instanceof Error ? loopErr.message : 'unknown'}]`,
-          };
-          setConversations((prev) => ({
-            ...prev,
-            [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
-          }));
         }
       }
 
