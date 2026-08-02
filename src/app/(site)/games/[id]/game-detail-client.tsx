@@ -1314,10 +1314,16 @@ export default function GamePage() {
     setCharacterInputs((prev) => ({ ...prev, [characterId]: '' }));
 
     // Determine who responds - the OTHER character responds
-    const responder = characterId === 'protagonist' ? 'antagonist' :
-                      characterId === 'antagonist' ? 'protagonist' : null;
+    // If narrator spoke, both protagonist and antagonist respond
+    const responders: CharacterId[] = characterId === 'protagonist' ? ['antagonist'] :
+                                     characterId === 'antagonist' ? ['protagonist'] :
+                                     characterId === 'narrator' ? ['protagonist', 'antagonist'] :
+                                     [];
 
-    if (!responder) return;
+    if (responders.length === 0) return;
+
+    // For backward compatibility, use the first responder for primary logic
+    const responder = responders[0];
 
     // Get character names
     const speakerName = characterId === 'protagonist'
@@ -2200,10 +2206,11 @@ export default function GamePage() {
                 open
                 characterName="Narrator"
                 messages={conversations.narrator}
-                input=""
-                onInputChange={() => {}}
-                onSend={() => {}}
-                isActive={false}
+                input={characterInputs.narrator}
+                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, narrator: v }))}
+                onSend={() => sendAsCharacter('narrator', characterInputs.narrator)}
+                isActive={activeCharacter === 'narrator'}
+                onActivate={() => setActiveCharacter('narrator')}
                 playerMode={playerMode}
                 onPlayerModeChange={setPlayerMode}
               />
