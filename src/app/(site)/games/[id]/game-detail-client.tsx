@@ -1412,6 +1412,8 @@ export default function GamePage() {
               console.warn('AI returned empty content for', currentResponder, JSON.stringify(data).slice(0, 500));
               // Continue without adding a message
             }
+            // Set debug data
+            setDebugData({ request: requestBody, response: data, prompt: trimmed });
           }
         } catch (loopErr) {
           console.error('AI response error for', currentResponder, loopErr);
