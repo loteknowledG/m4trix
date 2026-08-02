@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { X, GripVertical } from "@/components/icons"
+import { X } from "@/components/icons"
 import { cn } from "@/lib/utils"
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window"
 
@@ -303,11 +303,11 @@ export function CharacterChatDialog({
 
       {/* Resize grip */}
       <div
-        className="absolute right-1 bottom-1 h-4 w-4 cursor-se-resize text-zinc-600 hover:text-zinc-400"
+        className="absolute right-1 bottom-1 h-4 w-4 cursor-se-resize text-zinc-600 hover:text-zinc-400 flex items-center justify-center text-xs font-bold"
         onPointerDown={handleResizePointerDown}
         aria-hidden
       >
-        <GripVertical className="h-full w-full" />
+        ⋮
       </div>
     </div>
   )
