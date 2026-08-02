@@ -1427,21 +1427,8 @@ export default function GamePage() {
         }
       }
 
-      // Narrator says the story description (only once after all responders)
-      if (narratorEnabled && characterId !== 'narrator') {
-        const narratorText = (storyDescription || title || 'The story unfolds...').trim();
-        if (narratorText) {
-          const narratorMessage: CustomChatMessage = {
-            id: `narrator-${Date.now()}`,
-            from: 'agent',
-            text: narratorText,
-          };
-          setConversations((prev) => ({
-            ...prev,
-            narrator: [...(prev.narrator || []), narratorMessage],
-          }));
-        }
-      }
+      // Narrator only speaks when the player explicitly chose narrator
+      // (No auto-trigger for character dialogs)
     } catch (err) {
       console.error('AI response error:', err);
     }
