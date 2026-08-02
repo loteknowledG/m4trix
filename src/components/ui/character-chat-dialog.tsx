@@ -182,7 +182,7 @@ export function CharacterChatDialog({
     <div
       data-dialog-content
       className={cn(
-        "fixed z-50 flex flex-col bg-zinc-900/30 border border-zinc-700/50 shadow-2xl overflow-hidden rounded-lg backdrop-blur-sm",
+        "fixed z-50 flex flex-col bg-transparent border border-zinc-700/50 shadow-2xl overflow-hidden rounded-lg backdrop-blur-sm",
         "backdrop-blur-sm",
         activeBorderColor,
         className
@@ -209,7 +209,7 @@ export function CharacterChatDialog({
       {/* Title bar */}
       <div
         className={cn(
-          "flex items-center justify-between bg-zinc-800/50 px-3 py-2 cursor-grab select-none shrink-0 backdrop-blur-sm",
+          "flex items-center justify-between bg-transparent px-3 py-2 cursor-grab select-none shrink-0 backdrop-blur-sm border-b border-zinc-700/30",
           isActive ? "border-b border-cyan-400/30" : ""
         )}
         onPointerDown={handlePointerDown}
@@ -249,8 +249,8 @@ export function CharacterChatDialog({
               className={cn(
                 "rounded-lg px-3 py-2 text-sm max-w-[85%]",
                 msg.from === 'user'
-                  ? "bg-cyan-600/80 text-white ml-auto"
-                  : "bg-zinc-700/80 text-zinc-100 mr-auto"
+                  ? "bg-cyan-600/60 text-white ml-auto"
+                  : "bg-zinc-700/60 text-zinc-100 mr-auto"
               )}
             >
               <div className="text-xs opacity-60 mb-0.5">{msg.from === 'user' ? characterName : 'AI'}</div>
