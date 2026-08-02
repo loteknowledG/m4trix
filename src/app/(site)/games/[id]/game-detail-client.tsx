@@ -1322,16 +1322,12 @@ export default function GamePage() {
 
     if (responders.length === 0) return;
 
-    // For backward compatibility, use the first responder for primary logic
-    const responder = responders[0];
-
     // Get character names
     const speakerName = characterId === 'protagonist'
       ? (assignedPlayer?.name || 'Protagonist')
-      : (assignedNpc?.name || 'Antagonist');
-    const responderName = responder === 'protagonist'
-      ? (assignedPlayer?.name || 'Protagonist')
-      : (assignedNpc?.name || 'Antagonist');
+      : characterId === 'antagonist'
+        ? (assignedNpc?.name || 'Antagonist')
+        : 'Narrator';
 
     // Get active provider and API key from storage
     const activeProvider =
@@ -1346,99 +1342,107 @@ export default function GamePage() {
     const hfApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) || undefined;
     const nvidiaApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || undefined;
 
-    // Build the character context
-    const responderCharacter = responder === 'protagonist'
-      ? assignedPlayer
-      : assignedNpc;
-    const speakerCharacter = characterId === 'protagonist'
-      ? assignedPlayer
-      : assignedNpc;
-
     try {
-      // Build prompt based on who is speaking
-      const isNarratorSpeaking = characterId === 'narrator';
-      const promptText = isNarratorSpeaking
-        ? `The narrator says: "${trimmed}". ${responderName}, respond in character with ONE short sentence of dialogue.`
-        : `${speakerName} said: "${trimmed}". ${responderName}, reply with exactly ONE short sentence.`;
+      // Process each responder (one at a time so they can react to each other)
+      for (let i = 0; i < responders.length; i++) {
+        const currentResponder = responders[i];
 
-      // Call AI for the responder
-      const response = await fetch('/api/agents/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptText,
-          model: connectionModel || undefined,
-          provider: activeProvider,
-          lmstudioUrl,
-          zenApiKey,
-          googleApiKey,
-          hfApiKey,
-          nvidiaApiKey,
-          character: responderCharacter ? {
-            id: responderCharacter.id,
-            name: responderName,
-            description: `The ${responder}. ${responderCharacter.description || ''} Reply with exactly ONE short sentence in character.`,
-          } : {
-            id: responder,
-            name: responderName,
-            description: 'Reply with exactly ONE short sentence in character.',
-          },
-          maxTokens: 100,
-        }),
-      });
+        // Get the current responder's character info
+        const currentResponderCharacter = currentResponder === 'protagonist'
+          ? assignedPlayer
+          : currentResponder === 'antagonist'
+            ? assignedNpc
+            : null;
+        const currentResponderName = currentResponder === 'protagonist'
+          ? (assignedPlayer?.name || 'Protagonist')
+          : (assignedNpc?.name || 'Antagonist');
 
-      if (response.ok) {
-        const data = await response.json();
-        const reply = data?.choices?.[0]?.message?.content?.trim()
-          || data?.messages?.[0]?.text?.trim()
-          || data?.content?.trim()
-          || (typeof data === 'string' ? data : '')
-          || '';
+        // Build prompt based on who is speaking
+        const isNarratorSpeaking = characterId === 'narrator';
+        const promptText = isNarratorSpeaking
+          ? `The narrator describes: "${trimmed}". ${currentResponderName}, what would you say in response? Reply with ONE short sentence of dialogue in character.`
+          : `${speakerName} said: "${trimmed}". ${currentResponderName}, reply with exactly ONE short sentence.`;
 
-        if (reply) {
+        // Call AI for this responder
+        const response = await fetch('/api/agents/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: promptText,
+            model: connectionModel || undefined,
+            provider: activeProvider,
+            lmstudioUrl,
+            zenApiKey,
+            googleApiKey,
+            hfApiKey,
+            nvidiaApiKey,
+            character: currentResponderCharacter ? {
+              id: currentResponderCharacter.id,
+              name: currentResponderName,
+              description: `The ${currentResponder}. ${currentResponderCharacter.description || ''} Reply with exactly ONE short sentence in character.`,
+            } : {
+              id: currentResponder,
+              name: currentResponderName,
+              description: 'Reply with exactly ONE short sentence in character.',
+            },
+            maxTokens: 100,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const reply = data?.choices?.[0]?.message?.content?.trim()
+            || data?.messages?.[0]?.text?.trim()
+            || data?.content?.trim()
+            || (typeof data === 'string' ? data : '')
+            || '';
+
+          if (reply) {
+            const aiResponse: CustomChatMessage = {
+              id: `agent-${Date.now()}-${currentResponder}`,
+              from: 'agent',
+              text: reply,
+            };
+
+            setConversations((prev) => ({
+              ...prev,
+              [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
+            }));
+          } else {
+            const errText = await response.text().catch(() => '');
+            throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
+          }
+        } catch (loopErr) {
+          console.error('AI response error for', currentResponder, loopErr);
           const aiResponse: CustomChatMessage = {
-            id: `agent-${Date.now()}`,
+            id: `agent-${Date.now()}-err`,
             from: 'agent',
-            text: reply,
+            text: `[${currentResponder} could not respond: ${loopErr instanceof Error ? loopErr.message : 'unknown'}]`,
           };
-
           setConversations((prev) => ({
             ...prev,
-            [responder]: [...(prev[responder] || []), aiResponse],
+            [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
           }));
-
-          // Narrator says the story description
-          if (narratorEnabled) {
-            const narratorText = (storyDescription || title || 'The story unfolds...').trim();
-            if (narratorText) {
-              const narratorMessage: CustomChatMessage = {
-                id: `narrator-${Date.now()}`,
-                from: 'agent',
-                text: narratorText,
-              };
-              setConversations((prev) => ({
-                ...prev,
-                narrator: [...(prev.narrator || []), narratorMessage],
-              }));
-            }
-          }
         }
-      } else {
-        const errText = await response.text().catch(() => '');
-        throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
+      }
+
+      // Narrator says the story description (only once after all responders)
+      if (narratorEnabled && characterId !== 'narrator') {
+        const narratorText = (storyDescription || title || 'The story unfolds...').trim();
+        if (narratorText) {
+          const narratorMessage: CustomChatMessage = {
+            id: `narrator-${Date.now()}`,
+            from: 'agent',
+            text: narratorText,
+          };
+          setConversations((prev) => ({
+            ...prev,
+            narrator: [...(prev.narrator || []), narratorMessage],
+          }));
+        }
       }
     } catch (err) {
       console.error('AI response error:', err);
-      // Fallback to placeholder
-      const aiResponse: CustomChatMessage = {
-        id: `agent-${Date.now()}`,
-        from: 'agent',
-        text: `[${responder} could not respond: ${err instanceof Error ? err.message : 'unknown'}]`,
-      };
-      setConversations((prev) => ({
-        ...prev,
-        [responder]: [...(prev[responder] || []), aiResponse],
-      }));
     }
   };
 
