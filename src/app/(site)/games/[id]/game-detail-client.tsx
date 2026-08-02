@@ -1316,36 +1316,125 @@ export default function GamePage() {
     const responder = characterId === 'protagonist' ? 'antagonist' :
                       characterId === 'antagonist' ? 'protagonist' : null;
 
-    if (responder) {
-      // Simulate AI response (placeholder - connect to actual AI)
+    if (!responder) return;
+
+    // Get character names
+    const speakerName = characterId === 'protagonist'
+      ? (assignedPlayer?.name || 'Protagonist')
+      : (assignedNpc?.name || 'Antagonist');
+    const responderName = responder === 'protagonist'
+      ? (assignedPlayer?.name || 'Protagonist')
+      : (assignedNpc?.name || 'Antagonist');
+
+    // Get active provider and API key from storage
+    const activeProvider =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
+      "zen";
+    const lmstudioUrl = normalizeLmstudioUrl(
+      getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
+    );
+    const apiKey =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ||
+      "";
+
+    try {
+      // Call AI for the responder
+      const response = await fetch('/api/agents/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: activeProvider,
+          model: connectionModel,
+          apiKey,
+          lmstudioUrl,
+          messages: [
+            {
+              role: 'system',
+              content: `You are ${responderName}. The user controls ${speakerName}. ${speakerName} just said: "${trimmed}". Reply with exactly ONE short sentence in character as ${responderName}. No actions, no narration, just one sentence of dialogue.`
+            }
+          ],
+          max_tokens: 100,
+          temperature: 0.8,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const reply = data?.choices?.[0]?.message?.content?.trim() || data?.messages?.[0]?.text?.trim() || '';
+
+        if (reply) {
+          const aiResponse: CustomChatMessage = {
+            id: `agent-${Date.now()}`,
+            from: 'agent',
+            text: reply,
+          };
+
+          setConversations((prev) => ({
+            ...prev,
+            [responder]: [...(prev[responder] || []), aiResponse],
+          }));
+
+          // Narrator gives ONE sentence describing what both characters did
+          if (narratorEnabled) {
+            try {
+              const narratorResp = await fetch('/api/agents/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  provider: activeProvider,
+                  model: connectionModel,
+                  apiKey,
+                  lmstudioUrl,
+                  messages: [
+                    {
+                      role: 'system',
+                      content: `You are a narrator. ${speakerName} said: "${trimmed}". ${responderName} replied: "${reply}". Write ONE short sentence describing what just happened between them.`
+                    }
+                  ],
+                  max_tokens: 60,
+                  temperature: 0.7,
+                }),
+              });
+
+              if (narratorResp.ok) {
+                const nData = await narratorResp.json();
+                const nText = nData?.choices?.[0]?.message?.content?.trim() || nData?.messages?.[0]?.text?.trim() || '';
+                if (nText) {
+                  const narratorMessage: CustomChatMessage = {
+                    id: `narrator-${Date.now()}`,
+                    from: 'agent',
+                    text: nText,
+                  };
+                  setConversations((prev) => ({
+                    ...prev,
+                    narrator: [...(prev.narrator || []), narratorMessage],
+                  }));
+                }
+              }
+            } catch (narratorErr) {
+              console.error('Narrator error:', narratorErr);
+            }
+          }
+        }
+      } else {
+        throw new Error(`AI returned ${response.status}`);
+      }
+    } catch (err) {
+      console.error('AI response error:', err);
+      // Fallback to placeholder
       const aiResponse: CustomChatMessage = {
         id: `agent-${Date.now()}`,
         from: 'agent',
-        text: `[${responder} responds with one sentence]`,
+        text: `[${responder} could not respond: ${err instanceof Error ? err.message : 'unknown'}]`,
       };
-
-      // Small delay to simulate thinking
-      setTimeout(() => {
-        setConversations((prev) => ({
-          ...prev,
-          [responder]: [...(prev[responder] || []), aiResponse],
-        }));
-
-        // Narrator gives ONE sentence describing what both characters did
-        if (narratorEnabled) {
-          const narratorMessage: CustomChatMessage = {
-            id: `narrator-${Date.now()}`,
-            from: 'agent',
-            text: `[Narrator: The ${characterId} and ${responder} did something together]`,
-          };
-          setTimeout(() => {
-            setConversations((prev) => ({
-              ...prev,
-              narrator: [...(prev.narrator || []), narratorMessage],
-            }));
-          }, 500);
-        }
-      }, 1000);
+      setConversations((prev) => ({
+        ...prev,
+        [responder]: [...(prev[responder] || []), aiResponse],
+      }));
     }
   };
 
