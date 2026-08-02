@@ -40,6 +40,7 @@ import { getDesktopBridge } from "@/lib/app-update-client";
 import { openDesktopInstallerDownload } from "@/lib/desktop-release";
 import {
   DEFAULT_LMSTUDIO_URL,
+  fetchAgentsWithLmstudioBrowserProxy,
   normalizeLmstudioUrl,
   probeLmstudioHealth,
 } from "@/lib/lmstudio";
@@ -1380,21 +1381,28 @@ export default function GamePage() {
             maxTokens: 100,
           };
           console.log('[DEBUG] AI request:', JSON.stringify({ provider: activeProvider, model: connectionModel, hasKey: !!zenApiKey, lmstudioUrl }).slice(0, 300));
-          const response = await fetch('/api/agents/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody),
-          });
+          // Use the helper that handles LM Studio clientProxy envelope
+          const response = await fetchAgentsWithLmstudioBrowserProxy(requestBody);
 
           if (response.ok) {
-            const data = await response.json();
-            // API response format: { agents, messages: [{from, text, agentId}], mode, debug }
-            // messages is an array of agent responses
-            const reply = data?.messages?.[0]?.text?.trim()
-              || data?.choices?.[0]?.message?.content?.trim()
-              || data?.content?.trim()
-              || (typeof data === 'string' ? data : '')
-              || '';
+            // The helper handles clientProxy - response may be text (streamed) or JSON
+            const contentType = response.headers.get('content-type') || '';
+            let reply = '';
+
+            if (contentType.includes('text/plain')) {
+              // Streamed response
+              const text = await response.text();
+              reply = text.trim();
+            } else {
+              const data = await response.json();
+              // API response format: { messages: [{from, text, agentId}], mode, debug } or { messages: [{content}] }
+              reply = data?.messages?.[0]?.text?.trim()
+                || data?.messages?.[0]?.content?.trim()
+                || data?.choices?.[0]?.message?.content?.trim()
+                || data?.content?.trim()
+                || (typeof data === 'string' ? data : '')
+                || '';
+            }
 
             if (reply) {
               const aiResponse: CustomChatMessage = {
@@ -1413,7 +1421,10 @@ export default function GamePage() {
               // Continue without adding a message
             }
             // Set debug data
-            setDebugData({ request: requestBody, response: data, prompt: trimmed });
+            const debugDataValue = contentType.includes('text/plain')
+              ? { reply }
+              : data;
+            setDebugData({ request: requestBody, response: debugDataValue, prompt: trimmed });
           }
         } catch (loopErr) {
           console.error('AI response error for', currentResponder, loopErr);
