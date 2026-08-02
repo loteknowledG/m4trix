@@ -441,7 +441,6 @@ export function CharacterChatDialog({
           </div>
         </div>
       )}
-      </div>
 
       {/* Input area - only show if active */}
       {isActive && (
