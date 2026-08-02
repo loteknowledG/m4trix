@@ -61,7 +61,6 @@ function resolveFontFamily(font?: string): string {
       return 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
   }
 }
-}
 
 const PANEL_STORAGE_KEY = 'm4trix:game-panel-state'
 
