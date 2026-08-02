@@ -1347,21 +1347,19 @@ export default function GamePage() {
       for (let i = 0; i < responders.length; i++) {
         const currentResponder = responders[i];
 
-        // Get the current responder's character info
+        // Get the current responder's character info - use defaults if not set
         const currentResponderCharacter = currentResponder === 'protagonist'
-          ? assignedPlayer
+          ? (assignedPlayer || { id: 'protagonist', name: 'Protagonist', description: 'A character in a story' })
           : currentResponder === 'antagonist'
-            ? assignedNpc
+            ? (assignedNpc || { id: 'antagonist', name: 'Antagonist', description: 'A character in a story' })
             : null;
-        const currentResponderName = currentResponder === 'protagonist'
-          ? (assignedPlayer?.name || 'Protagonist')
-          : (assignedNpc?.name || 'Antagonist');
+        const currentResponderName = currentResponderCharacter.name;
 
         // Build prompt based on who is speaking
         const isNarratorSpeaking = characterId === 'narrator';
         const promptText = isNarratorSpeaking
           ? `The narrator describes: "${trimmed}". ${currentResponderName}, what would you say in response? Reply with ONE short sentence of dialogue in character.`
-          : `${speakerName} said: "${trimmed}". ${currentResponderName}, reply with exactly ONE short sentence.`;
+          : `${speakerName} said: "${trimmed}". ${currentResponderName}, reply with exactly ONE short sentence in character.`;
 
         // Call AI for this responder
         try {
@@ -1377,14 +1375,10 @@ export default function GamePage() {
               googleApiKey,
               hfApiKey,
               nvidiaApiKey,
-              character: currentResponderCharacter ? {
+              character: {
                 id: currentResponderCharacter.id,
                 name: currentResponderName,
-                description: `The ${currentResponder}. ${currentResponderCharacter.description || ''} Reply with exactly ONE short sentence in character.`,
-              } : {
-                id: currentResponder,
-                name: currentResponderName,
-                description: 'Reply with exactly ONE short sentence in character.',
+                description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
               },
               maxTokens: 100,
             }),
