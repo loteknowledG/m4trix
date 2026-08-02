@@ -10,7 +10,7 @@ import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
-import { CharacterChatDialog } from "@/components/ui/character-chat-dialog";
+import { CharacterChatDialog, type TextOptions } from "@/components/ui/character-chat-dialog";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
@@ -197,6 +197,11 @@ export default function GamePage() {
     narrator: '',
   });
   const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
+  const [characterTextOptions, setCharacterTextOptions] = useState<Record<CharacterId, TextOptions>>({
+    protagonist: { font: 'system', fontSize: 14, textColor: '#ffffff', bgColor: 'transparent' },
+    antagonist: { font: 'system', fontSize: 14, textColor: '#ffffff', bgColor: 'transparent' },
+    narrator: { font: 'system', fontSize: 14, textColor: '#ffffff', bgColor: 'transparent' },
+  });
 
   // Derive combined chatMessages for legacy code that expects a single array
   const chatMessages: CustomChatMessage[] = [
@@ -2201,6 +2206,8 @@ export default function GamePage() {
                 onActivate={() => setActiveCharacter('protagonist')}
                 playerMode={playerMode}
                 onPlayerModeChange={setPlayerMode}
+                textOptions={characterTextOptions.protagonist}
+                onTextOptionsChange={(opts) => setCharacterTextOptions((prev) => ({ ...prev, protagonist: opts }))}
               />
               <CharacterChatDialog
                 open
@@ -2213,6 +2220,8 @@ export default function GamePage() {
                 onActivate={() => setActiveCharacter('antagonist')}
                 playerMode={playerMode}
                 onPlayerModeChange={setPlayerMode}
+                textOptions={characterTextOptions.antagonist}
+                onTextOptionsChange={(opts) => setCharacterTextOptions((prev) => ({ ...prev, antagonist: opts }))}
               />
               <CharacterChatDialog
                 open

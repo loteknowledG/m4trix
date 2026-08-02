@@ -37,10 +37,30 @@ export type TextOptions = {
 }
 
 const DEFAULT_TEXT_OPTIONS: TextOptions = {
-  font: 'sans',
+  font: 'system',
   fontSize: 14,
   textColor: '#ffffff',
   bgColor: 'transparent',
+}
+
+function resolveFontFamily(font?: string): string {
+  switch (font) {
+    case 'serif':
+      return 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif';
+    case 'mono':
+      return 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+    case 'cursive':
+      return 'cursive';
+    case 'mrs':
+      return '"Mrs Saint Delafield", cursive';
+    case 'satisfy':
+      return 'Satisfy, cursive';
+    case 'crafty':
+      return '"Crafty Girls", cursive';
+    default:
+      return 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  }
+}
 }
 
 const PANEL_STORAGE_KEY = 'm4trix:game-panel-state'
@@ -321,12 +341,13 @@ export function CharacterChatDialog({
                 onChange={(e) => onTextOptionsChange?.({ ...textOptions, font: e.target.value })}
                 className="w-full px-2 py-1 text-xs rounded bg-zinc-800 text-white border border-zinc-600"
               >
-                <option value="sans">Sans Serif</option>
+                <option value="system">System Sans</option>
                 <option value="serif">Serif</option>
                 <option value="mono">Monospace</option>
                 <option value="cursive">Cursive</option>
+                <option value="mrs">Mrs Saint Delafield</option>
                 <option value="satisfy">Satisfy</option>
-                <option value="fantasy">Fantasy</option>
+                <option value="crafty">Crafty Girls</option>
               </select>
             </div>
 
@@ -398,7 +419,7 @@ export function CharacterChatDialog({
                   : "mr-auto"
               )}
               style={{
-                fontFamily: textOptions.font,
+                fontFamily: resolveFontFamily(textOptions.font),
                 fontSize: `${textOptions.fontSize}px`,
                 color: textOptions.textColor,
                 backgroundColor: textOptions.bgColor,
