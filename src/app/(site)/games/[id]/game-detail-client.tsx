@@ -1364,53 +1364,55 @@ export default function GamePage() {
           : `${speakerName} said: "${trimmed}". ${currentResponderName}, reply with exactly ONE short sentence.`;
 
         // Call AI for this responder
-        const response = await fetch('/api/agents/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: promptText,
-            model: connectionModel || undefined,
-            provider: activeProvider,
-            lmstudioUrl,
-            zenApiKey,
-            googleApiKey,
-            hfApiKey,
-            nvidiaApiKey,
-            character: currentResponderCharacter ? {
-              id: currentResponderCharacter.id,
-              name: currentResponderName,
-              description: `The ${currentResponder}. ${currentResponderCharacter.description || ''} Reply with exactly ONE short sentence in character.`,
-            } : {
-              id: currentResponder,
-              name: currentResponderName,
-              description: 'Reply with exactly ONE short sentence in character.',
-            },
-            maxTokens: 100,
-          }),
-        });
+        try {
+          const response = await fetch('/api/agents/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: promptText,
+              model: connectionModel || undefined,
+              provider: activeProvider,
+              lmstudioUrl,
+              zenApiKey,
+              googleApiKey,
+              hfApiKey,
+              nvidiaApiKey,
+              character: currentResponderCharacter ? {
+                id: currentResponderCharacter.id,
+                name: currentResponderName,
+                description: `The ${currentResponder}. ${currentResponderCharacter.description || ''} Reply with exactly ONE short sentence in character.`,
+              } : {
+                id: currentResponder,
+                name: currentResponderName,
+                description: 'Reply with exactly ONE short sentence in character.',
+              },
+              maxTokens: 100,
+            }),
+          });
 
-        if (response.ok) {
-          const data = await response.json();
-          const reply = data?.choices?.[0]?.message?.content?.trim()
-            || data?.messages?.[0]?.text?.trim()
-            || data?.content?.trim()
-            || (typeof data === 'string' ? data : '')
-            || '';
+          if (response.ok) {
+            const data = await response.json();
+            const reply = data?.choices?.[0]?.message?.content?.trim()
+              || data?.messages?.[0]?.text?.trim()
+              || data?.content?.trim()
+              || (typeof data === 'string' ? data : '')
+              || '';
 
-          if (reply) {
-            const aiResponse: CustomChatMessage = {
-              id: `agent-${Date.now()}-${currentResponder}`,
-              from: 'agent',
-              text: reply,
-            };
+            if (reply) {
+              const aiResponse: CustomChatMessage = {
+                id: `agent-${Date.now()}-${currentResponder}`,
+                from: 'agent',
+                text: reply,
+              };
 
-            setConversations((prev) => ({
-              ...prev,
-              [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
-            }));
-          } else {
-            const errText = await response.text().catch(() => '');
-            throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
+              setConversations((prev) => ({
+                ...prev,
+                [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
+              }));
+            } else {
+              const errText = await response.text().catch(() => '');
+              throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
+            }
           }
           }
         } catch (loopErr) {
@@ -1446,6 +1448,7 @@ export default function GamePage() {
       console.error('AI response error:', err);
     }
   };
+
 
   const handleEditChatMessage = (messageId: string, nextText: string) => {
     setChatMessages((messages) =>
