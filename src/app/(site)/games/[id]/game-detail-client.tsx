@@ -2179,6 +2179,11 @@ export default function GamePage() {
                   <span className="truncate">{title}</span>
                 </div>
                 <div className="pointer-events-auto">
+                  <ConnectionSheet
+                    triggerClassName="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
+                  />
+                </div>
+                <div className="pointer-events-auto">
                   <GrokImagePromptButton
                     agents={grokChatMapping.agents}
                     className="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
@@ -2201,7 +2206,7 @@ export default function GamePage() {
               {/* Multi-character chat dialogs */}
               <CharacterChatDialog
                 open
-                characterName="Protagonist"
+                characterName={assignedPlayer?.name || 'Protagonist'}
                 messages={conversations.protagonist}
                 input={characterInputs.protagonist}
                 onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, protagonist: v }))}
@@ -2213,7 +2218,7 @@ export default function GamePage() {
               />
               <CharacterChatDialog
                 open
-                characterName="Antagonist"
+                characterName={assignedNpc?.name || 'Antagonist'}
                 messages={conversations.antagonist}
                 input={characterInputs.antagonist}
                 onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, antagonist: v }))}
