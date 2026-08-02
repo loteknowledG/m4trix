@@ -2182,10 +2182,10 @@ export default function GamePage() {
                 </div>
               </div>
 
-              {/* Fixed Connection button - top left, won't be covered by dialogs */}
-              <div className="pointer-events-auto fixed left-2 top-2 z-[100]">
+              {/* Fixed Connection button - last in the top left row, won't be covered by dialogs */}
+              <div className="pointer-events-auto fixed left-52 top-12 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black text-white shadow-lg shadow-black/30 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-white">
                 <ConnectionSheet
-                  triggerClassName="h-10 border-white/30 bg-black/70 text-white hover:bg-black/90 px-3"
+                  triggerClassName="h-10 w-10 rounded-full bg-black text-white hover:bg-zinc-800 border-0"
                 />
               </div>
 
