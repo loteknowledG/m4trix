@@ -209,24 +209,32 @@ export function CharacterChatDialog({
       {/* Title bar */}
       <div
         className={cn(
-          "flex items-center justify-between bg-transparent px-3 py-2 cursor-grab select-none shrink-0 backdrop-blur-sm border-b border-zinc-700/30",
+          "flex items-center justify-between bg-transparent px-3 py-2 select-none shrink-0 backdrop-blur-sm border-b border-zinc-700/30",
           isActive ? "border-b border-cyan-400/30" : ""
         )}
-        onPointerDown={handlePointerDown}
-        onDoubleClick={onActivate}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {avatarUrl && (
-            <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-          )}
-          <span className={cn("text-sm font-medium truncate", isActive ? "text-cyan-400" : "text-zinc-200")}>
-            {characterName}
-          </span>
-          {isActive && (
-            <span className="text-xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded shrink-0">
-              Active
+        <div
+          className="flex items-center gap-2 min-w-0 flex-1 cursor-grab"
+          onPointerDown={handlePointerDown}
+          onClick={onActivate}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {avatarUrl && (
+              <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+            )}
+            <span className={cn("text-sm font-medium truncate", isActive ? "text-cyan-400" : "text-zinc-200")}>
+              {characterName}
             </span>
-          )}
+            {isActive ? (
+              <span className="text-xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded shrink-0">
+                Message Mode
+              </span>
+            ) : (
+              <span className="text-xs bg-zinc-700/50 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
+                Read Mode
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={() => onOpenChange?.(false)}
