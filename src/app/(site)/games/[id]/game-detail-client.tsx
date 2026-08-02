@@ -1952,13 +1952,9 @@ export default function GamePage() {
           (typeof storyObj?.description === "string" ? storyObj.description.trim() : "") ||
           resolvedTitle.trim() ||
           `Game ${id}`;
-        setChatMessages([
-          {
-            id: "story-opening",
-            from: "agent",
-            text: openingText,
-          },
-          ...nextHistory.map((entry) => ({
+        // Only load chat history - story opening is now in the narrator dialog
+        setChatMessages(
+          nextHistory.map((entry) => ({
             id: entry.id,
             from: entry.from,
             text: entry.text,
@@ -1967,7 +1963,7 @@ export default function GamePage() {
                 ? player?.name?.trim() || "You"
                 : npc?.name?.trim() || "NPC",
           })),
-        ]);
+        );
       } catch (e) {
         console.error("Failed to load game data", e);
       } finally {
