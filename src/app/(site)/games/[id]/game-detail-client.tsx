@@ -2196,6 +2196,13 @@ export default function GamePage() {
                 </div>
               </div>
 
+              {/* Fixed Connection button - top left, won't be covered by dialogs */}
+              <div className="pointer-events-auto fixed left-2 top-2 z-[100]">
+                <ConnectionSheet
+                  triggerClassName="h-10 border-white/30 bg-black/70 text-white hover:bg-black/90 px-3"
+                />
+              </div>
+
               {/* Multi-character chat dialogs */}
               <CharacterChatDialog
                 open
