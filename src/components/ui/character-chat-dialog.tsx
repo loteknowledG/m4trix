@@ -214,24 +214,21 @@ export function CharacterChatDialog({
         )}
       >
         <div
-          className="flex items-center gap-2 min-w-0 flex-1"
+          className="flex items-center gap-2 min-w-0 flex-1 cursor-grab"
+          onPointerDown={handlePointerDown}
         >
-          {/* Drag handle area */}
-          <div
-            className="flex items-center gap-2 min-w-0 flex-1 cursor-grab"
-            onPointerDown={handlePointerDown}
-          >
-            {avatarUrl && (
-              <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-            )}
-          </div>
-          {/* Click area for activation */}
+          {/* Avatar */}
+          {avatarUrl && (
+            <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+          )}
+          {/* Click area for activation - drag still works because we don't stopPropagation */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onActivate?.();
             }}
+            onPointerDown={(e) => e.stopPropagation()}
             className={cn(
               "flex items-center gap-2 px-2 py-1 rounded text-xs shrink-0 cursor-pointer hover:bg-zinc-700/50 transition-colors",
               isActive ? "bg-cyan-500/20 text-cyan-400" : "bg-zinc-700/50 text-zinc-400"
