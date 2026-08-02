@@ -2179,11 +2179,6 @@ export default function GamePage() {
                   <span className="truncate">{title}</span>
                 </div>
                 <div className="pointer-events-auto">
-                  <ConnectionSheet
-                    triggerClassName="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
-                  />
-                </div>
-                <div className="pointer-events-auto">
                   <GrokImagePromptButton
                     agents={grokChatMapping.agents}
                     className="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
@@ -2194,6 +2189,13 @@ export default function GamePage() {
                     story={grokStoryText}
                   />
                 </div>
+              </div>
+
+              {/* Fixed Connection button - top left, won't be covered by dialogs */}
+              <div className="pointer-events-auto fixed left-2 top-2 z-[100]">
+                <ConnectionSheet
+                  triggerClassName="h-10 border-white/30 bg-black/70 text-white hover:bg-black/90 px-3"
+                />
               </div>
 
               {/* Multi-character chat dialogs */}
