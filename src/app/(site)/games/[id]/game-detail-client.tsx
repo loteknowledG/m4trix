@@ -1388,13 +1388,14 @@ export default function GamePage() {
             // The helper handles clientProxy - response may be text (streamed) or JSON
             const contentType = response.headers.get('content-type') || '';
             let reply = '';
+            let data: any = null;
 
             if (contentType.includes('text/plain')) {
               // Streamed response
               const text = await response.text();
               reply = text.trim();
             } else {
-              const data = await response.json();
+              data = await response.json();
               // API response format: { messages: [{from, text, agentId}], mode, debug } or { messages: [{content}] }
               reply = data?.messages?.[0]?.text?.trim()
                 || data?.messages?.[0]?.content?.trim()
