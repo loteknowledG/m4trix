@@ -182,7 +182,7 @@ export function CharacterChatDialog({
     <div
       data-dialog-content
       className={cn(
-        "fixed z-50 flex flex-col bg-zinc-900/95 border border-zinc-700 shadow-2xl overflow-hidden rounded-lg",
+        "fixed z-50 flex flex-col bg-zinc-900/60 border border-zinc-700/70 shadow-2xl overflow-hidden rounded-lg backdrop-blur-md",
         "backdrop-blur-sm",
         activeBorderColor,
         className
@@ -209,7 +209,7 @@ export function CharacterChatDialog({
       {/* Title bar */}
       <div
         className={cn(
-          "flex items-center justify-between bg-zinc-800/90 px-3 py-2 cursor-grab select-none shrink-0",
+          "flex items-center justify-between bg-zinc-800/50 px-3 py-2 cursor-grab select-none shrink-0 backdrop-blur-sm",
           isActive ? "border-b border-cyan-400/30" : ""
         )}
         onPointerDown={handlePointerDown}
