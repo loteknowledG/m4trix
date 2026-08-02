@@ -1392,8 +1392,10 @@ export default function GamePage() {
 
           if (response.ok) {
             const data = await response.json();
-            const reply = data?.choices?.[0]?.message?.content?.trim()
-              || data?.messages?.[0]?.text?.trim()
+            // API response format: { agents, messages: [{from, text, agentId}], mode, debug }
+            // messages is an array of agent responses
+            const reply = data?.messages?.[0]?.text?.trim()
+              || data?.choices?.[0]?.message?.content?.trim()
               || data?.content?.trim()
               || (typeof data === 'string' ? data : '')
               || '';
@@ -1410,10 +1412,10 @@ export default function GamePage() {
                 [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
               }));
             } else {
-              const errText = await response.text().catch(() => '');
-              throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
+              // No content - log the raw response for debugging
+              console.warn('AI returned empty content for', currentResponder, JSON.stringify(data).slice(0, 500));
+              // Continue without adding a message
             }
-          }
           }
         } catch (loopErr) {
           console.error('AI response error for', currentResponder, loopErr);
