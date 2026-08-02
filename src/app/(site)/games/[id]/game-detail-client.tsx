@@ -1412,6 +1412,7 @@ export default function GamePage() {
             const errText = await response.text().catch(() => '');
             throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
           }
+          }
         } catch (loopErr) {
           console.error('AI response error for', currentResponder, loopErr);
           const aiResponse: CustomChatMessage = {
