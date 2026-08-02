@@ -1412,8 +1412,9 @@ export default function GamePage() {
                 [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
               }));
             } else {
-              const errText = await response.text().catch(() => '');
-              throw new Error(`AI returned ${response.status}: ${errText.slice(0, 200)}`);
+              // No content - log the raw response for debugging
+              console.warn('AI returned empty content for', currentResponder, JSON.stringify(data).slice(0, 500));
+              // Continue without adding a message
             }
           }
         } catch (loopErr) {
