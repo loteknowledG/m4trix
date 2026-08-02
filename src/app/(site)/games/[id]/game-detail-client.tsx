@@ -1363,25 +1363,27 @@ export default function GamePage() {
 
         // Call AI for this responder
         try {
+          const requestBody = {
+            prompt: promptText,
+            model: connectionModel || undefined,
+            provider: activeProvider,
+            lmstudioUrl,
+            zenApiKey,
+            googleApiKey,
+            hfApiKey,
+            nvidiaApiKey,
+            character: {
+              id: currentResponderCharacter.id,
+              name: currentResponderName,
+              description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
+            },
+            maxTokens: 100,
+          };
+          console.log('[DEBUG] AI request:', JSON.stringify({ provider: activeProvider, model: connectionModel, hasKey: !!zenApiKey, lmstudioUrl }).slice(0, 300));
           const response = await fetch('/api/agents/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: promptText,
-              model: connectionModel || undefined,
-              provider: activeProvider,
-              lmstudioUrl,
-              zenApiKey,
-              googleApiKey,
-              hfApiKey,
-              nvidiaApiKey,
-              character: {
-                id: currentResponderCharacter.id,
-                name: currentResponderName,
-                description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
-              },
-              maxTokens: 100,
-            }),
+            body: JSON.stringify(requestBody),
           });
 
           if (response.ok) {
