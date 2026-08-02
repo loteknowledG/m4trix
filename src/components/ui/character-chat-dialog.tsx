@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "@/components/icons"
+import { FaCog, FaTimes } from "react-icons/fa"
 import { cn } from "@/lib/utils"
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window"
 
@@ -25,6 +25,22 @@ type CharacterChatDialogProps = {
   style?: React.CSSProperties
   playerMode?: 'say' | 'do' | 'think'
   onPlayerModeChange?: (mode: 'say' | 'do' | 'think') => void
+  textOptions?: TextOptions
+  onTextOptionsChange?: (options: TextOptions) => void
+}
+
+export type TextOptions = {
+  font: string
+  fontSize: number
+  textColor: string
+  bgColor: string
+}
+
+const DEFAULT_TEXT_OPTIONS: TextOptions = {
+  font: 'sans',
+  fontSize: 14,
+  textColor: '#ffffff',
+  bgColor: 'transparent',
 }
 
 const PANEL_STORAGE_KEY = 'm4trix:game-panel-state'
@@ -68,9 +84,12 @@ export function CharacterChatDialog({
   style,
   playerMode = 'say',
   onPlayerModeChange,
+  textOptions = DEFAULT_TEXT_OPTIONS,
+  onTextOptionsChange,
 }: CharacterChatDialogProps) {
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null)
   const [size, setSize] = React.useState<{ width: number; height: number } | null>(null)
+  const [showSettings, setShowSettings] = React.useState(false)
   const draggingRef = React.useRef<{ startX: number; startY: number; left: number; top: number } | null>(null)
   const resizingRef = React.useRef<{ startX: number; startY: number; width: number; height: number } | null>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
@@ -262,7 +281,108 @@ export function CharacterChatDialog({
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 relative">
+        {isActive && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSettings(!showSettings);
+            }}
+            className="absolute top-1 right-1 z-10 h-6 w-6 flex items-center justify-center rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-white/20"
+            aria-label="Text settings"
+            title="Text settings"
+          >
+            <FaCog className="h-3 w-3" />
+          </button>
+        )}
+
+        {showSettings && isActive && (
+          <div
+            className="absolute top-10 right-1 z-20 w-56 rounded-lg bg-zinc-900/95 border border-zinc-700 p-3 shadow-xl space-y-3"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-zinc-200">Text Format</span>
+              <button
+                type="button"
+                onClick={() => setShowSettings(false)}
+                className="text-zinc-400 hover:text-white"
+              >
+                <FaTimes className="h-3 w-3" />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400">Font</label>
+              <select
+                value={textOptions.font}
+                onChange={(e) => onTextOptionsChange?.({ ...textOptions, font: e.target.value })}
+                className="w-full px-2 py-1 text-xs rounded bg-zinc-800 text-white border border-zinc-600"
+              >
+                <option value="sans">Sans Serif</option>
+                <option value="serif">Serif</option>
+                <option value="mono">Monospace</option>
+                <option value="cursive">Cursive</option>
+                <option value="satisfy">Satisfy</option>
+                <option value="fantasy">Fantasy</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400">Size: {textOptions.fontSize}px</label>
+              <input
+                type="range"
+                min={10}
+                max={32}
+                value={textOptions.fontSize}
+                onChange={(e) => onTextOptionsChange?.({ ...textOptions, fontSize: Number(e.target.value) })}
+                className="w-full"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400">Text Color</label>
+              <div className="flex gap-1">
+                {['#ffffff', '#000000', '#ff5555', '#55ff55', '#5555ff', '#ffff55', '#ff55ff', '#55ffff'].map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => onTextOptionsChange?.({ ...textOptions, textColor: c })}
+                    className={cn(
+                      "w-5 h-5 rounded border-2",
+                      textOptions.textColor === c ? "border-cyan-400" : "border-zinc-600"
+                    )}
+                    style={{ backgroundColor: c }}
+                    aria-label={`Text color ${c}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] text-zinc-400">Background</label>
+              <div className="flex gap-1">
+                {['transparent', '#000000', '#1f2937', '#374151', '#7c3aed', '#dc2626', '#059669'].map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => onTextOptionsChange?.({ ...textOptions, bgColor: c })}
+                    className={cn(
+                      "w-5 h-5 rounded border-2",
+                      textOptions.bgColor === c ? "border-cyan-400" : "border-zinc-600",
+                      c === 'transparent' && "bg-[linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%)]"
+                    )}
+                    style={c !== 'transparent' ? { backgroundColor: c } : {}}
+                    aria-label={`Background ${c}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <div className="text-center text-zinc-500 text-sm py-8">
             {isActive ? "Type a message to start the conversation..." : "Waiting for other characters..."}
@@ -272,11 +392,17 @@ export function CharacterChatDialog({
             <div
               key={msg.id}
               className={cn(
-                "rounded-lg px-3 py-2 text-sm max-w-[85%]",
+                "rounded-lg px-3 py-2 max-w-[85%]",
                 msg.from === 'user'
-                  ? "bg-cyan-600/60 text-white ml-auto"
-                  : "bg-zinc-700/60 text-zinc-100 mr-auto"
+                  ? "ml-auto"
+                  : "mr-auto"
               )}
+              style={{
+                fontFamily: textOptions.font,
+                fontSize: `${textOptions.fontSize}px`,
+                color: textOptions.textColor,
+                backgroundColor: textOptions.bgColor,
+              }}
             >
               <div className="text-xs opacity-60 mb-0.5">{msg.from === 'user' ? characterName : 'AI'}</div>
               <div className="whitespace-pre-wrap break-words">{msg.text}</div>
