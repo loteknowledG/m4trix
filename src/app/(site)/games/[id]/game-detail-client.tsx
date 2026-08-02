@@ -195,6 +195,42 @@ export default function GamePage() {
   });
   const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
 
+  // Derive combined chatMessages for legacy code that expects a single array
+  const chatMessages: CustomChatMessage[] = [
+    ...(conversations.protagonist || []),
+    ...(conversations.antagonist || []),
+    ...(conversations.narrator || []),
+  ];
+
+  // Legacy setChatMessages wrapper that updates the right character conversation
+  const setChatMessages = (
+    updater: CustomChatMessage[] | ((prev: CustomChatMessage[]) => CustomChatMessage[])
+  ) => {
+    setConversations((prev) => {
+      // Combine all current messages
+      const combined = [
+        ...(prev.protagonist || []),
+        ...(prev.antagonist || []),
+        ...(prev.narrator || []),
+      ];
+
+      const next = typeof updater === 'function' ? updater(combined) : updater;
+
+      // Put all messages in the protagonist conversation
+      return {
+        ...prev,
+        protagonist: next,
+        antagonist: prev.antagonist,
+        narrator: prev.narrator,
+      };
+    });
+  };
+
+  const chatInput = characterInputs[activeCharacter] || '';
+  const setChatInput = (value: string) => {
+    setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: value }));
+  };
+
   const [connected, setConnected] = useState(false);
   console.debug('[game] connected state:', connected);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
