@@ -89,7 +89,7 @@ async function writeBlobRecord(record: BlobRecord): Promise<void> {
   const idb = await openMediaStore();
   return new Promise((resolve, reject) => {
     const transaction = idb.transaction(STORE_NAME, 'readwrite');
-    transaction.objectStore(STORE_NAME).put(record);
+    transaction.objectStore(STORE_NAME).put(record, record.id);
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
   });
