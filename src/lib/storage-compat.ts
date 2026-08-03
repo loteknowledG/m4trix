@@ -1,4 +1,4 @@
-import { del, get, keys, set } from 'idb-keyval';
+import { kvDel, kvGet, kvKeys, kvSet } from './sqlite-kv';
 
 function canUseLocalStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -38,8 +38,10 @@ function writeLocalStorage(key: string, value: unknown) {
 }
 
 export async function safeGet<T>(key: string) {
+  if (typeof window === 'undefined') return undefined;
+
   try {
-    const value = await get<T>(key);
+    const value = await kvGet<T>(key);
     if (value !== undefined) {
       return value;
     }
@@ -51,11 +53,13 @@ export async function safeGet<T>(key: string) {
 }
 
 export async function safeSet<T>(key: string, value: T) {
+  if (typeof window === 'undefined') return;
+
   try {
-    await set(key, value);
+    await kvSet(key, value);
     return;
   } catch {
-    // IndexedDB failed, fall back to localStorage
+    // SQLite failed, fall back to localStorage
   }
 
   try {
@@ -66,8 +70,10 @@ export async function safeSet<T>(key: string, value: T) {
 }
 
 export async function safeDel(key: string) {
+  if (typeof window === 'undefined') return;
+
   try {
-    await del(key);
+    await kvDel(key);
   } catch {
     // ignore and fall back to localStorage
   }
@@ -78,8 +84,10 @@ export async function safeDel(key: string) {
 }
 
 export async function safeKeys() {
+  if (typeof window === 'undefined') return [];
+
   try {
-    return await keys();
+    return await kvKeys();
   } catch {
     if (!canUseLocalStorage()) return [];
     const output: string[] = [];

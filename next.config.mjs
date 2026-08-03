@@ -14,11 +14,16 @@ const buildTarget =
 	process.env.M4TRIX_BUILD_TARGET || (isGithubActions ? "pages" : "server");
 const isDesktopBuild = buildTarget === "desktop";
 const isPagesBuild = buildTarget === "pages" && !isDev;
-
+const basePath = isPagesBuild && repositoryName ? `/${repositoryName}` : "";
+const kvStoreShim = path.resolve(__dirname, "src/lib/kv-store-shim.ts");
+const legacyIdbKeyval = path.resolve(__dirname, "node_modules/idb-keyval/dist/index.js");
 const videoJsPath = path.resolve(__dirname, "node_modules/video.js");
 
 const nextConfig = {
 	devIndicators: false,
+	env: {
+		NEXT_PUBLIC_BASE_PATH: basePath,
+	},
 	...(isDesktopBuild
 		? {
 				output: "standalone",
@@ -47,12 +52,16 @@ const nextConfig = {
 	turbopack: {
 		resolveAlias: {
 			"video.js": "./node_modules/video.js",
+			"idb-keyval": kvStoreShim,
+			"idb-keyval-legacy": legacyIdbKeyval,
 		},
 	},
 	webpack: (config) => {
 		config.resolve.alias = {
 			...config.resolve.alias,
 			"video.js": videoJsPath,
+			"idb-keyval": kvStoreShim,
+			"idb-keyval-legacy": legacyIdbKeyval,
 		};
 		return config;
 	},
