@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { CharacterTtsProfileEditor } from '@/components/character-tts-profile-editor';
@@ -28,6 +27,7 @@ import {
 import { useAvatarCropper } from '@/app/(site)/characters/use-avatar-cropper';
 import { Trash2, ChevronLeft, ImagePlus, User } from '@/components/icons';
 import { getImageFileFromPasteEvent } from '@/lib/clipboard-image';
+import { readStorageKey, writeStorageKey } from '@/lib/storage-ready';
 import { toast } from 'sonner';
 
 type Agent = {
@@ -67,6 +67,8 @@ export default function CharacterDetailClient() {
   const agentId = searchParams.get('id')?.trim() ?? '';
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [descriptionValue, setDescriptionValue] = useState('');
@@ -84,7 +86,7 @@ export default function CharacterDetailClient() {
 
   const persistAgentRecord = useCallback(async (record: Agent) => {
     const persist = async () => {
-      const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+      const stored = (await readStorageKey<Agent[]>(AGENTS_KEY)) as Agent[] | undefined;
       const trimmedName = nameValue.trim() || 'Untitled';
       const trimmedDescription = descriptionValue.trim();
       const normalizedDialogStyle = normalizeCharacterDialogStyle(dialogStyle);
@@ -99,8 +101,14 @@ export default function CharacterDetailClient() {
         ttsVoice: normalizedTtsVoice,
         ttsProfile: undefined,
       };
+      if (record.avatarUrl !== undefined) {
+        saved.avatarUrl = record.avatarUrl;
+      }
+      if ('avatarCrop' in record) {
+        saved.avatarCrop = record.avatarCrop;
+      }
       const updated = (stored ?? []).map(a => (a.id === saved.id ? saved : a));
-      await idbSet(AGENTS_KEY, updated);
+      await writeStorageKey(AGENTS_KEY, updated);
       agentRef.current = saved;
       setAgent(saved);
       lastSavedStyleRef.current = JSON.stringify({
@@ -118,16 +126,30 @@ export default function CharacterDetailClient() {
   }, [descriptionValue, dialogStyle, nameValue, ttsVoice]);
 
   const updateAgentAvatar = useCallback(
-    (id: string, updates: Partial<Pick<Agent, 'avatarUrl' | 'avatarCrop'>>) => {
+    async (id: string, updates: Partial<Pick<Agent, 'avatarUrl' | 'avatarCrop'>>) => {
       const current = agentRef.current ?? agent;
-      if (!current || current.id !== id) return;
+      if (!current || current.id !== id) {
+        throw new Error('Character not ready to save avatar.');
+      }
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      void persistAgentRecord({ ...current, ...updates }).then(() => {
-        toast.success('Avatar portrait updated.');
-      });
+
+      const next: Agent = { ...current, ...updates };
+      agentRef.current = next;
+      setAgent(next);
+
+      try {
+        await persistAgentRecord(next);
+        toast.success(
+          updates.avatarCrop ? 'Animated avatar crop saved.' : 'Avatar portrait updated.',
+        );
+      } catch (error) {
+        agentRef.current = current;
+        setAgent(current);
+        throw error;
+      }
     },
     [agent, persistAgentRecord],
   );
@@ -139,6 +161,7 @@ export default function CharacterDetailClient() {
     croppingImage,
     handleApplyCrop,
     handleAvatarUpload,
+    isApplying,
     isGif,
     isHoveringEdge,
     setCrop,
@@ -180,56 +203,73 @@ export default function CharacterDetailClient() {
   useEffect(() => {
     if (!agentId) {
       setLoading(false);
+      setLoadError(null);
       return;
     }
 
-    let mounted = true;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+
     (async () => {
-      const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
-      if (!mounted) return;
-      const found = (stored || []).find(a => a.id === agentId);
+      try {
+        const stored = (await readStorageKey<Agent[]>(AGENTS_KEY)) as Agent[] | undefined;
+        if (cancelled) return;
+        const found = (stored || []).find(a => a.id === agentId);
 
-      if (found) {
-        setAgent(found);
-        setNameValue(found.name);
-        setDescriptionValue(normalizeDescription(found.description));
-        const loadedDialogStyle = normalizeCharacterDialogStyle(found.dialogStyle) ?? {};
-        const loadedTtsVoice = resolveCharacterTtsVoice(found.ttsVoice, found.ttsProfile);
-        setDialogStyle(loadedDialogStyle);
-        setTtsVoice(loadedTtsVoice);
-        lastSavedStyleRef.current = JSON.stringify({
-          dialogStyle: loadedDialogStyle,
-          ttsVoice: loadedTtsVoice,
-        });
-        setIsEditingName(found.name.trim() === '');
-      } else {
-        const newAgent = {
-          id: agentId,
-          name: '',
-          description: '',
-          avatarUrl: undefined,
-          avatarCrop: { x: 0, y: 0, zoom: 1 },
-        };
-        const next = (stored ?? []).concat(newAgent);
-        await idbSet(AGENTS_KEY, next);
-        setAgent(newAgent);
-        setNameValue('');
-        setDescriptionValue('');
-        setDialogStyle({});
-        setTtsVoice(resolveCharacterTtsVoice(null));
-        lastSavedStyleRef.current = JSON.stringify({
-          dialogStyle: {},
-          ttsVoice: resolveCharacterTtsVoice(null),
-        });
-        setIsEditingName(true);
+        if (found) {
+          setAgent(found);
+          setNameValue(found.name);
+          setDescriptionValue(normalizeDescription(found.description));
+          const loadedDialogStyle = normalizeCharacterDialogStyle(found.dialogStyle) ?? {};
+          const loadedTtsVoice = resolveCharacterTtsVoice(found.ttsVoice, found.ttsProfile);
+          setDialogStyle(loadedDialogStyle);
+          setTtsVoice(loadedTtsVoice);
+          lastSavedStyleRef.current = JSON.stringify({
+            dialogStyle: loadedDialogStyle,
+            ttsVoice: loadedTtsVoice,
+          });
+          setIsEditingName(found.name.trim() === '');
+        } else {
+          const newAgent = {
+            id: agentId,
+            name: '',
+            description: '',
+            avatarUrl: undefined,
+            avatarCrop: { x: 0, y: 0, zoom: 1 },
+          };
+          const next = (stored ?? []).concat(newAgent);
+          await writeStorageKey(AGENTS_KEY, next);
+          if (cancelled) return;
+          setAgent(newAgent);
+          setNameValue('');
+          setDescriptionValue('');
+          setDialogStyle({});
+          setTtsVoice(resolveCharacterTtsVoice(null));
+          lastSavedStyleRef.current = JSON.stringify({
+            dialogStyle: {},
+            ttsVoice: resolveCharacterTtsVoice(null),
+          });
+          setIsEditingName(true);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('[character-detail] failed to load agent', error);
+        setAgent(null);
+        setLoadError(
+          error instanceof Error ? error.message : 'Failed to load character from local storage.',
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     })();
+
     return () => {
-      mounted = false;
+      cancelled = true;
     };
-  }, [agentId]);
+  }, [agentId, loadAttempt]);
 
   if (!agentId) {
     return (
@@ -263,7 +303,34 @@ export default function CharacterDetailClient() {
           </Link>
         }
       >
-        <p>Loading...</p>
+        <p className="text-sm text-muted-foreground">Loading character…</p>
+      </ContentLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ContentLayout
+        title="Character"
+        navLeft={
+          <Link href="/characters/list">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-red-300">{loadError}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => setLoadAttempt(attempt => attempt + 1)}>
+              Retry
+            </Button>
+            <Link href="/characters/list">
+              <Button variant="outline">Back to characters list</Button>
+            </Link>
+          </div>
+        </div>
       </ContentLayout>
     );
   }
@@ -337,13 +404,13 @@ export default function CharacterDetailClient() {
     if (!confirmed) return;
 
     try {
-      const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+      const stored = (await readStorageKey<Agent[]>(AGENTS_KEY)) as Agent[] | undefined;
       const nextAgents = (stored ?? []).filter(a => a.id !== agent.id);
-      await idbSet(AGENTS_KEY, nextAgents);
+      await writeStorageKey(AGENTS_KEY, nextAgents);
 
-      const currentTrash = (await idbGet('trash-characters')) as Agent[] | undefined;
+      const currentTrash = (await readStorageKey<Agent[]>('trash-characters')) as Agent[] | undefined;
       const removed = stored?.find(a => a.id === agent.id) ?? agent;
-      await idbSet('trash-characters', currentTrash ? [...currentTrash, removed] : [removed]);
+      await writeStorageKey('trash-characters', currentTrash ? [...currentTrash, removed] : [removed]);
       window.dispatchEvent(new Event('characters-updated'));
       router.push('/characters/list');
     } catch (err) {
@@ -373,6 +440,13 @@ export default function CharacterDetailClient() {
       <Trash2 className="h-4 w-4" />
     </Button>
   );
+
+  const avatarDisplayKey = [
+    agent.avatarUrl ?? '',
+    agent.avatarCrop?.x ?? 0,
+    agent.avatarCrop?.y ?? 0,
+    agent.avatarCrop?.zoom ?? 1,
+  ].join(':');
 
   return (
     <ContentLayout title="" navLeft={navLeft} navRight={navRight}>
@@ -445,7 +519,7 @@ export default function CharacterDetailClient() {
                     }}
                   >
                     <img
-                      key={agent.avatarUrl}
+                      key={avatarDisplayKey}
                       src={agent.avatarUrl}
                       alt=""
                       draggable={false}
@@ -455,7 +529,7 @@ export default function CharacterDetailClient() {
                   </div>
                 ) : (
                   <img
-                    key={agent.avatarUrl}
+                    key={avatarDisplayKey}
                     src={agent.avatarUrl}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover"
@@ -551,6 +625,7 @@ export default function CharacterDetailClient() {
         crop={crop}
         setCrop={setCrop}
         isGif={isGif}
+        isApplying={isApplying}
         isHoveringEdge={isHoveringEdge}
         setIsHoveringEdge={setIsHoveringEdge}
         onApplyCrop={handleApplyCrop}

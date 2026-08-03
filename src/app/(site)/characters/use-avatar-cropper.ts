@@ -10,10 +10,13 @@ type AgentLike = {
 };
 
 type UseAvatarCropperArgs<TAgent extends AgentLike> = {
-  updateAgent: (id: string, updates: Partial<Pick<TAgent, 'avatarUrl' | 'avatarCrop'>>) => void;
+  updateAgent: (
+    id: string,
+    updates: Partial<Pick<TAgent, 'avatarUrl' | 'avatarCrop'>>,
+  ) => void | Promise<void>;
   updatePrompterAgent: (
-    updates: Partial<Pick<TAgent, 'avatarUrl' | 'avatarCrop'>>
-  ) => void;
+    updates: Partial<Pick<TAgent, 'avatarUrl' | 'avatarCrop'>>,
+  ) => void | Promise<void>;
 };
 
 export function useAvatarCropper<TAgent extends AgentLike>({
@@ -25,6 +28,7 @@ export function useAvatarCropper<TAgent extends AgentLike>({
   const [crop, setCrop] = useState({ x: 0, y: 0, zoom: 1 });
   const [isGif, setIsGif] = useState(false);
   const [isHoveringEdge, setIsHoveringEdge] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
   function clearCropper() {
     setCroppingImage(null);
@@ -51,44 +55,53 @@ export function useAvatarCropper<TAgent extends AgentLike>({
     reader.readAsDataURL(file);
   }
 
-  function applyGifImmediately() {
-    if (!croppingImage || !croppingTarget) return;
+  async function applyGifImmediately() {
+    if (!croppingImage || !croppingTarget || isApplying) return;
 
-    if (croppingTarget === 'user') {
-      updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: undefined });
-    } else {
-      updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: undefined });
+    setIsApplying(true);
+    try {
+      if (croppingTarget === 'user') {
+        await updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: undefined });
+      } else {
+        await updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: undefined });
+      }
+      clearCropper();
+    } catch (error) {
+      console.error('[avatar-crop] skip crop failed', error);
+      toast.error('Could not save avatar. Try again.');
+    } finally {
+      setIsApplying(false);
     }
-
-    clearCropper();
   }
 
   async function handleApplyCrop() {
-    if (!croppingImage || !croppingTarget) return;
+    if (!croppingImage || !croppingTarget || isApplying) return;
 
+    setIsApplying(true);
     try {
       if (isGif) {
         if (croppingTarget === 'user') {
-          updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: { ...crop } });
+          await updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: { ...crop } });
         } else {
-          updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: { ...crop } });
+          await updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: { ...crop } });
         }
         clearCropper();
-        toast.success('Animated crop applied!');
         return;
       }
 
       const croppedDataUrl = await cropAvatarFromImage(croppingImage, crop);
       if (croppingTarget === 'user') {
-        updatePrompterAgent({ avatarUrl: croppedDataUrl, avatarCrop: undefined });
+        await updatePrompterAgent({ avatarUrl: croppedDataUrl, avatarCrop: undefined });
       } else {
-        updateAgent(croppingTarget, { avatarUrl: croppedDataUrl, avatarCrop: undefined });
+        await updateAgent(croppingTarget, { avatarUrl: croppedDataUrl, avatarCrop: undefined });
       }
 
       clearCropper();
     } catch (error) {
       console.error('[avatar-crop] apply failed', error);
       toast.error('Could not apply avatar crop. Try a smaller image or Skip Crop for GIFs.');
+    } finally {
+      setIsApplying(false);
     }
   }
 
@@ -100,6 +113,7 @@ export function useAvatarCropper<TAgent extends AgentLike>({
     croppingTarget,
     handleApplyCrop,
     handleAvatarUpload,
+    isApplying,
     isGif,
     isHoveringEdge,
     setCrop,

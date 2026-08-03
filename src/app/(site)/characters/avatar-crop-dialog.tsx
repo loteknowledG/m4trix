@@ -27,9 +27,10 @@ type AvatarCropDialogProps = {
   isGif: boolean;
   isHoveringEdge: boolean;
   onApplyCrop: () => void | Promise<void>;
-  onApplyGifImmediately: () => void;
+  onApplyGifImmediately: () => void | Promise<void>;
   onClose: () => void;
   open: boolean;
+  isApplying?: boolean;
   setCrop: Dispatch<SetStateAction<Crop>>;
   setIsHoveringEdge: Dispatch<SetStateAction<boolean>>;
 };
@@ -38,6 +39,7 @@ export function AvatarCropDialog({
   crop,
   croppingImage,
   isGif,
+  isApplying = false,
   isHoveringEdge: _isHoveringEdge,
   onApplyCrop,
   onApplyGifImmediately,
@@ -285,7 +287,8 @@ export function AvatarCropDialog({
                   variant="outline"
                   size="sm"
                   className="border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
-                  onClick={onApplyGifImmediately}
+                  disabled={isApplying}
+                  onClick={() => void onApplyGifImmediately()}
                 >
                   Skip Crop
                 </Button>
@@ -293,9 +296,10 @@ export function AvatarCropDialog({
               <Button
                 size="sm"
                 className="bg-primary px-4 font-semibold text-primary-foreground hover:bg-primary/90"
-                onClick={onApplyCrop}
+                disabled={isApplying}
+                onClick={() => void onApplyCrop()}
               >
-                {isGif ? 'Apply Animated Crop' : 'Apply Crop'}
+                {isApplying ? 'Saving…' : isGif ? 'Apply Animated Crop' : 'Apply Crop'}
               </Button>
             </div>
           </DialogFooter>

@@ -3,6 +3,7 @@
 import { Footer } from "@/components/admin-panel/footer";
 import { Sidebar } from "@/components/admin-panel/sidebar";
 import { SidebarToggle } from "@/components/admin-panel/sidebar-toggle";
+import { StorageWarmup } from "@/components/providers/storage-warmup";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { useStore } from "@/hooks/use-store";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ export default function AdminPanelLayout({
   const { getOpenState, settings, isOpen, toggleOpen } = sidebar;
   return (
     <>
+      <StorageWarmup />
       <Sidebar />
       {!settings.disabled && <SidebarToggle isOpen={isOpen} setIsOpen={toggleOpen} />}
       <main
