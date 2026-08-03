@@ -1,5 +1,15 @@
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 
+import {
+  createRelationalSchema,
+  isRelationalKey,
+  migrateRelationalFromKv,
+  relationalDel,
+  relationalGet,
+  relationalMigrationDone,
+  relationalSet,
+} from './sqlite-relational';
+
 const IDB_NAME = 'm4trix-sqlite-kv';
 const STORE_NAME = 'database';
 const DATABASE_KEY = 'm4trix.db';
@@ -83,6 +93,8 @@ function createSchema(db: Database) {
 
 type SqlValue = string | number | null | Uint8Array;
 
+export type { SqlValue };
+
 function queryObjects<T extends Record<string, SqlValue>>(db: Database, sql: string, bind: SqlValue[] = []): T[] {
   const stmt = db.prepare(sql);
   stmt.bind(bind);
@@ -131,11 +143,32 @@ async function initializeDatabase() {
   const bytes = await readDatabaseBytes();
   database = bytes ? new SQL.Database(bytes) : new SQL.Database();
   createSchema(database);
+  createRelationalSchema(database);
 
   if (!migrationDone(database)) {
     await migrateFromLegacyIdbKeyval(database);
     await writeDatabaseBytes(database.export());
   }
+
+  if (!relationalMigrationDone(database)) {
+    await migrateRelationalFromKv(database, kvReadRaw, runQueuedWrite);
+    await writeDatabaseBytes(database.export());
+  }
+}
+
+function kvReadRaw(db: Database, key: string): unknown | undefined {
+  const rows = queryObjects<{ value: string }>(db, 'SELECT value FROM kv WHERE key = ?', [key]);
+  if (!rows[0]) return undefined;
+  return deserialize(rows[0].value);
+}
+
+async function runQueuedWrite(fn: (db: Database) => void | Promise<void>) {
+  if (!database) return;
+  writeQueue = writeQueue.then(async () => {
+    await fn(database!);
+    await persistDatabase();
+  });
+  await writeQueue;
 }
 
 async function ensureReady() {
@@ -159,6 +192,10 @@ async function persistDatabase() {
 
 export async function kvGet<T>(key: string): Promise<T | undefined> {
   await ensureReady();
+  if (isRelationalKey(key)) {
+    const value = await relationalGet(key, queryObjects, database!);
+    return value as T | undefined;
+  }
   const rows = queryObjects<{ value: string }>(database!, 'SELECT value FROM kv WHERE key = ?', [key]);
 
   if (!rows[0]) return undefined;
@@ -167,6 +204,10 @@ export async function kvGet<T>(key: string): Promise<T | undefined> {
 
 export async function kvSet(key: string, value: unknown): Promise<void> {
   await ensureReady();
+  if (isRelationalKey(key)) {
+    await relationalSet(key, value, queryObjects, runQueuedWrite);
+    return;
+  }
   writeQueue = writeQueue.then(async () => {
     const encoded = serialize(value);
     if (encoded === null) {
@@ -181,6 +222,10 @@ export async function kvSet(key: string, value: unknown): Promise<void> {
 
 export async function kvDel(key: string): Promise<void> {
   await ensureReady();
+  if (isRelationalKey(key)) {
+    await relationalDel(key, runQueuedWrite);
+    return;
+  }
   writeQueue = writeQueue.then(async () => {
     database!.run('DELETE FROM kv WHERE key = ?', [key]);
     await persistDatabase();

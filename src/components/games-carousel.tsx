@@ -10,8 +10,7 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel';
 import { safeGet } from '@/lib/storage-compat';
-
-type StoryMeta = { id: string; title?: string; count?: number; titleMomentId?: string };
+import { storyPreviewMap, type StoryMeta } from '@/lib/stories';
 
 type GamesCarouselProps = {
   onTitleChange?: (title: string) => void;
@@ -50,38 +49,10 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
     let mounted = true;
     (async () => {
       try {
-        const saved = (await safeGet<any[]>('stories')) || [];
+        const saved = (await safeGet<StoryMeta[]>('stories')) || [];
         if (!mounted) return;
         setStories(saved);
-
-        const previewEntries = await Promise.all(
-          saved.map(async s => {
-            try {
-              const items = (await safeGet<any>(`story:${s.id}`)) || [];
-              const titleMomentId = s.titleMomentId || (items && items.titleMomentId);
-              let momentsArr = Array.isArray(items)
-                ? items
-                : items && Array.isArray(items.items)
-                ? items.items
-                : [];
-              let src = null;
-              if (titleMomentId && Array.isArray(momentsArr)) {
-                const titleMoment = momentsArr.find((m: any) => m.id === titleMomentId);
-                src = titleMoment ? titleMoment.src || titleMoment : null;
-              }
-              if (!src && Array.isArray(momentsArr) && momentsArr.length > 0) {
-                src = momentsArr[0].src || momentsArr[0];
-              }
-              return [s.id, src] as const;
-            } catch {
-              return [s.id, null] as const;
-            }
-          })
-        );
-        if (!mounted) return;
-        const map: Record<string, string | null> = {};
-        previewEntries.forEach(([id, src]) => (map[id] = src));
-        setPreviews(map);
+        setPreviews(storyPreviewMap(saved));
         setCurrentIndex(0);
       } catch (err) {
         console.error('Failed to load stories', err);

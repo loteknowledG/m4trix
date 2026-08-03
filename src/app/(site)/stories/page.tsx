@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { MomentMedia } from '@/components/moment-media';
-import { createEmptyStory, storyEditorHref, type StoryMeta } from '@/lib/stories';
+import { createEmptyStory, storyEditorHref, storyPreviewMap, type StoryMeta } from '@/lib/stories';
 
 export default function StoriesPage() {
   const router = useRouter();
@@ -88,38 +88,7 @@ export default function StoriesPage() {
         const saved = (await get<StoryMeta[]>('stories')) || [];
         if (!mounted) return;
         setStories(saved);
-
-        // load preview (first item src) for each story
-        const previewEntries = await Promise.all(
-          saved.map(async s => {
-            try {
-              const items = (await get<any>(`story:${s.id}`)) || [];
-              let src = null;
-              // Check for titleMomentId in story meta or object
-              const titleMomentId = s.titleMomentId || (items && items.titleMomentId);
-              let momentsArr = Array.isArray(items)
-                ? items
-                : items && Array.isArray(items.items)
-                ? items.items
-                : [];
-              if (titleMomentId && Array.isArray(momentsArr)) {
-                const titleMoment = momentsArr.find((m: any) => m.id === titleMomentId);
-                src = titleMoment ? titleMoment.src || titleMoment : null;
-              }
-              // fallback to first moment if no title moment
-              if (!src && Array.isArray(momentsArr) && momentsArr.length > 0) {
-                src = momentsArr[0].src || momentsArr[0];
-              }
-              return [s.id, src] as const;
-            } catch (e) {
-              return [s.id, null] as const;
-            }
-          })
-        );
-        if (!mounted) return;
-        const map: Record<string, string | null> = {};
-        previewEntries.forEach(([id, src]) => (map[id] = src));
-        setPreviews(map);
+        setPreviews(storyPreviewMap(saved));
       } catch (err) {
         logger.error('Failed to load stories', err);
       } finally {

@@ -5,6 +5,19 @@ export type StoryMeta = {
   title?: string;
   count?: number;
   titleMomentId?: string;
+  previewSrc?: string | null;
+  description?: string;
+  npcId?: string;
+  playerId?: string;
+  npcAppearance?: string;
+  playerAppearance?: string;
+  storyArc?: unknown;
+  storyArcCurrentStage?: number;
+  stagedMomentsByStage?: Record<number, string[]>;
+  npcKnowsPlayer?: boolean;
+  narratorEnabled?: boolean;
+  directorNotes?: string;
+  dialogLines?: unknown[];
 };
 
 export function newStoryId() {
@@ -13,6 +26,14 @@ export function newStoryId() {
 
 export function storyEditorHref(storyId: string) {
   return `/stories/edit/?story=${encodeURIComponent(storyId)}`;
+}
+
+export function storyPreviewMap(stories: StoryMeta[]): Record<string, string | null> {
+  const map: Record<string, string | null> = {};
+  for (const story of stories) {
+    map[story.id] = story.previewSrc ?? null;
+  }
+  return map;
 }
 
 /** Create an empty story (same outcome as heap → Add to Story → New story with no moments). */

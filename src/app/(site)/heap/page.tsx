@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ToastProvider, useToast } from '@/components/ui/toast';
 import { MomentMedia } from '@/components/moment-media';
 import { isEphemeralMomentSrc, isMomentMediaFile, isMomentMediaUrl, materializeMomentSrc } from '@/lib/moments';
-import { createEmptyStory, storyEditorHref } from '@/lib/stories';
+import { createEmptyStory, storyEditorHref, storyPreviewMap } from '@/lib/stories';
 
 // Local TextScramble removed (unused)
 
@@ -171,31 +171,9 @@ function HeapInner() {
   const [storyPreviews, setStoryPreviews] = useState<Record<string, string | null>>({});
   const loadStories = useCallback(async () => {
     try {
-      const saved = (await get<Story[]>('stories')) || [];
+      const saved = (await get<{ id: string; title: string; count?: number; previewSrc?: string | null }[]>('stories')) || [];
       if (Array.isArray(saved)) setStories(saved);
-      try {
-        const previewEntries = await Promise.all(
-          (Array.isArray(saved) ? saved : []).map(async s => {
-            try {
-              const items = (await get<any>(`story:${s.id}`)) || [];
-              const first =
-                Array.isArray(items) && items.length > 0
-                  ? items[0]
-                  : (items && items.items && items.items[0]) || null;
-              const src = first ? first.src || first : null;
-              return [s.id, src] as const;
-            } catch (e) {
-              return [s.id, null] as const;
-            }
-          })
-        );
-        const map: Record<string, string | null> = {};
-        previewEntries.forEach(([id, src]) => (map[id] = src));
-        setStoryPreviews(map);
-      } catch (e) {
-        console.warn('Failed to load story previews', e);
-        setStoryPreviews({});
-      }
+      setStoryPreviews(storyPreviewMap(saved));
     } catch (e) {
       logger.warn('Failed to load stories', e);
     }
