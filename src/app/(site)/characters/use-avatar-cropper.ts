@@ -55,9 +55,9 @@ export function useAvatarCropper<TAgent extends AgentLike>({
     if (!croppingImage || !croppingTarget) return;
 
     if (croppingTarget === 'user') {
-      updatePrompterAgent({ avatarUrl: croppingImage });
+      updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: undefined });
     } else {
-      updateAgent(croppingTarget, { avatarUrl: croppingImage });
+      updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: undefined });
     }
 
     clearCropper();
@@ -66,25 +66,30 @@ export function useAvatarCropper<TAgent extends AgentLike>({
   async function handleApplyCrop() {
     if (!croppingImage || !croppingTarget) return;
 
-    if (isGif) {
-      if (croppingTarget === 'user') {
-        updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: { ...crop } });
-      } else {
-        updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: { ...crop } });
+    try {
+      if (isGif) {
+        if (croppingTarget === 'user') {
+          updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: { ...crop } });
+        } else {
+          updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: { ...crop } });
+        }
+        clearCropper();
+        toast.success('Animated crop applied!');
+        return;
       }
+
+      const croppedDataUrl = await cropAvatarFromImage(croppingImage, crop);
+      if (croppingTarget === 'user') {
+        updatePrompterAgent({ avatarUrl: croppedDataUrl, avatarCrop: undefined });
+      } else {
+        updateAgent(croppingTarget, { avatarUrl: croppedDataUrl, avatarCrop: undefined });
+      }
+
       clearCropper();
-      toast.success('Animated crop applied!');
-      return;
+    } catch (error) {
+      console.error('[avatar-crop] apply failed', error);
+      toast.error('Could not apply avatar crop. Try a smaller image or Skip Crop for GIFs.');
     }
-
-    const croppedDataUrl = await cropAvatarFromImage(croppingImage, crop);
-    if (croppingTarget === 'user') {
-      updatePrompterAgent({ avatarUrl: croppedDataUrl, avatarCrop: undefined });
-    } else {
-      updateAgent(croppingTarget, { avatarUrl: croppedDataUrl, avatarCrop: undefined });
-    }
-
-    clearCropper();
   }
 
   return {

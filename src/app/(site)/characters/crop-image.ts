@@ -21,6 +21,12 @@ export async function cropAvatarFromImage(
   size = 256,
 ): Promise<string> {
   const img = await loadImage(imageSrc);
-  const output = captureAvatarCropCircle(img, img.width, img.height, crop, size);
+  const output = captureAvatarCropCircle(
+    img,
+    img.naturalWidth,
+    img.naturalHeight,
+    crop,
+    size,
+  );
   return output.toDataURL('image/webp', 0.9);
 }

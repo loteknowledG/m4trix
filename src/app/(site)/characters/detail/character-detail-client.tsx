@@ -74,38 +74,58 @@ export default function CharacterDetailClient() {
   const [ttsVoice, setTtsVoice] = useState<CharacterTtsVoice>(resolveCharacterTtsVoice(null));
   const [avatarDragActive, setAvatarDragActive] = useState(false);
   const lastSavedStyleRef = useRef<string>('');
+  const agentRef = useRef<Agent | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
 
   const persistAgentRecord = useCallback(async (record: Agent) => {
-    const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
-    const trimmedName = nameValue.trim() || 'Untitled';
-    const trimmedDescription = descriptionValue.trim();
-    const normalizedDialogStyle = normalizeCharacterDialogStyle(dialogStyle);
-    const normalizedTtsVoice = normalizeCharacterTtsVoice(ttsVoice);
-    const saved: Agent = {
-      ...record,
-      name: trimmedName,
-      description: trimmedDescription,
-      dialogStyle: normalizedDialogStyle,
-      ttsVoice: normalizedTtsVoice,
-      ttsProfile: undefined,
-    };
-    const updated = (stored ?? []).map(a => (a.id === saved.id ? saved : a));
-    await idbSet(AGENTS_KEY, updated);
-    setAgent(saved);
-    lastSavedStyleRef.current = JSON.stringify({
-      dialogStyle: normalizedDialogStyle ?? {},
-      ttsVoice: normalizedTtsVoice,
-    });
+    const persist = async () => {
+      const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+      const trimmedName = nameValue.trim() || 'Untitled';
+      const trimmedDescription = descriptionValue.trim();
+      const normalizedDialogStyle = normalizeCharacterDialogStyle(dialogStyle);
+      const normalizedTtsVoice = normalizeCharacterTtsVoice(ttsVoice);
+      const latest = agentRef.current?.id === record.id ? agentRef.current : null;
+      const saved: Agent = {
+        ...(latest ?? record),
+        ...record,
+        name: trimmedName,
+        description: trimmedDescription,
+        dialogStyle: normalizedDialogStyle,
+        ttsVoice: normalizedTtsVoice,
+        ttsProfile: undefined,
+      };
+      const updated = (stored ?? []).map(a => (a.id === saved.id ? saved : a));
+      await idbSet(AGENTS_KEY, updated);
+      agentRef.current = saved;
+      setAgent(saved);
+      lastSavedStyleRef.current = JSON.stringify({
+        dialogStyle: normalizedDialogStyle ?? {},
+        ttsVoice: normalizedTtsVoice,
+      });
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('characters-updated'));
-    }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('characters-updated'));
+      }
+    };
+
+    persistQueueRef.current = persistQueueRef.current.then(persist, persist);
+    await persistQueueRef.current;
   }, [descriptionValue, dialogStyle, nameValue, ttsVoice]);
 
   const updateAgentAvatar = useCallback(
     (id: string, updates: Partial<Pick<Agent, 'avatarUrl' | 'avatarCrop'>>) => {
-      if (!agent || agent.id !== id) return;
-      void persistAgentRecord({ ...agent, ...updates }).then(() => {
+      const current = agentRef.current ?? agent;
+      if (!current || current.id !== id) return;
+      if (saveTimerRef.current != null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      void persistAgentRecord({ ...current, ...updates }).then(() => {
         toast.success('Avatar portrait updated.');
       });
     },
@@ -129,8 +149,7 @@ export default function CharacterDetailClient() {
   });
 
   const saveAgent = useCallback(async (updatedAgent?: Agent) => {
-    if (!agent && !updatedAgent) return;
-    const currentAgent = updatedAgent ?? agent;
+    const currentAgent = updatedAgent ?? agentRef.current ?? agent;
     if (!currentAgent) return;
     await persistAgentRecord(currentAgent);
   }, [agent, persistAgentRecord]);
@@ -145,10 +164,17 @@ export default function CharacterDetailClient() {
     if (serialized === lastSavedStyleRef.current) return;
 
     const saveTimer = window.setTimeout(() => {
+      saveTimerRef.current = null;
       void saveAgent();
     }, 350);
+    saveTimerRef.current = saveTimer;
 
-    return () => window.clearTimeout(saveTimer);
+    return () => {
+      window.clearTimeout(saveTimer);
+      if (saveTimerRef.current === saveTimer) {
+        saveTimerRef.current = null;
+      }
+    };
   }, [agent, dialogStyle, loading, saveAgent, ttsVoice]);
 
   useEffect(() => {
@@ -419,6 +445,7 @@ export default function CharacterDetailClient() {
                     }}
                   >
                     <img
+                      key={agent.avatarUrl}
                       src={agent.avatarUrl}
                       alt=""
                       draggable={false}
@@ -428,6 +455,7 @@ export default function CharacterDetailClient() {
                   </div>
                 ) : (
                   <img
+                    key={agent.avatarUrl}
                     src={agent.avatarUrl}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover"

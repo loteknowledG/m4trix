@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   AVATAR_CROP_WORKSPACE,
+  avatarCropPreviewStyle,
   clampCropZoom,
   renderAvatarCropWorkspace,
 } from '@/app/(site)/characters/avatar-crop-math';
@@ -67,7 +68,7 @@ export function AvatarCropDialog({
   }, [open, croppingImage]);
 
   useEffect(() => {
-    if (!open || !croppingImage) {
+    if (!open || !croppingImage || isGif) {
       imageRef.current = null;
       setImageLoaded(false);
       return;
@@ -85,10 +86,10 @@ export function AvatarCropDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, croppingImage]);
+  }, [open, croppingImage, isGif]);
 
   useEffect(() => {
-    if (!imageLoaded) return;
+    if (isGif || !imageLoaded) return;
     const canvas = canvasRef.current;
     const img = imageRef.current;
     if (!canvas || !img) return;
@@ -99,7 +100,7 @@ export function AvatarCropDialog({
     if (!ctx) return;
 
     renderAvatarCropWorkspace(ctx, img, img.naturalWidth, img.naturalHeight, crop);
-  }, [crop, imageLoaded]);
+  }, [crop, imageLoaded, isGif]);
 
   const startPan = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-resize-handle]')) return;
@@ -206,13 +207,23 @@ export function AvatarCropDialog({
               setCrop(prev => ({ ...prev, zoom: newZoom }));
             }}
           >
-            {croppingImage && (
-              <canvas
-                ref={canvasRef}
-                aria-label="Crop preview"
-                className="pointer-events-none h-full w-full max-w-none"
-              />
-            )}
+            {croppingImage &&
+              (isGif ? (
+                <img
+                  src={croppingImage}
+                  alt=""
+                  draggable={false}
+                  aria-label="Crop preview"
+                  className="pointer-events-none absolute inset-0 h-full w-full max-w-none object-contain"
+                  style={avatarCropPreviewStyle(crop, workspacePx)}
+                />
+              ) : (
+                <canvas
+                  ref={canvasRef}
+                  aria-label="Crop preview"
+                  className="pointer-events-none h-full w-full max-w-none"
+                />
+              ))}
 
             <div className="pointer-events-none absolute right-4 top-4 z-30">
               <div className="rounded border border-white/10 bg-black/60 px-2 py-1 font-mono text-[10px] text-white/80 shadow-xl backdrop-blur-md">
