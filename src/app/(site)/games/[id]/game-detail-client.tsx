@@ -1360,6 +1360,7 @@ export default function GamePage() {
           : currentResponder === 'antagonist'
             ? (assignedNpc || { id: 'antagonist', name: 'Antagonist', description: 'A character in a story' })
             : null;
+        if (!currentResponderCharacter) continue;
         const currentResponderName = currentResponderCharacter.name;
 
         // Build prompt based on who is speaking
