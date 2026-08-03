@@ -203,3 +203,10 @@ export async function externalizeMediaString(src: string | undefined | null): Pr
 export async function hydrateMediaString(src: string | undefined | null): Promise<string> {
   return resolveMediaSrc(src);
 }
+
+/** Map a hydrated blob URL back to its durable m4trix-media ref when possible. */
+export function stableMediaRefForSrc(src: string | undefined | null): string | null {
+  if (!src) return null;
+  if (isMediaReference(src)) return src;
+  return reverseUrlCache.get(src) ?? null;
+}

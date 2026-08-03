@@ -1,3 +1,5 @@
+import { MEDIA_REF_PREFIX, stableMediaRefForSrc } from '@/lib/media-blob-store';
+
 export type StoryMomentRecord = {
   id: string;
   src: string;
@@ -70,10 +72,16 @@ export function normalizeStoryMomentList(rawItems: unknown[]): StoryMomentRecord
   const normalized: StoryMomentRecord[] = [];
   const seenIds = new Set<string>();
   const seenSrc = new Set<string>();
+  const seenFingerprints = new Set<string>();
 
   for (const raw of rawItems) {
     const moment = normalizeStoryMomentEntry(raw);
     if (!moment || seenIds.has(moment.id)) continue;
+
+    if (moment.fingerprint) {
+      if (seenFingerprints.has(moment.fingerprint)) continue;
+      seenFingerprints.add(moment.fingerprint);
+    }
 
     const srcKey = momentSrcDedupeKey(moment.src);
     if (srcKey && seenSrc.has(srcKey)) continue;
@@ -90,7 +98,13 @@ export function normalizeStoryMomentList(rawItems: unknown[]): StoryMomentRecord
 export function momentSrcDedupeKey(src: string | undefined | null): string {
   const trimmed = (src ?? "").trim();
   if (!trimmed) return "";
+  if (trimmed.startsWith(MEDIA_REF_PREFIX)) return trimmed;
+
+  const stableRef = stableMediaRefForSrc(trimmed);
+  if (stableRef) return stableRef;
+
   if (trimmed.startsWith("data:")) return trimmed;
+
   const withoutQuery = trimmed.split("?")[0] ?? trimmed;
   try {
     const url = new URL(trimmed);
@@ -98,6 +112,24 @@ export function momentSrcDedupeKey(src: string | undefined | null): string {
   } catch {
     return withoutQuery;
   }
+}
+
+export function reorderStoryMoments<T>(moments: T[], from: number, to: number): T[] {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= moments.length ||
+    to >= moments.length
+  ) {
+    return [...moments];
+  }
+
+  const result = [...moments];
+  const [moved] = result.splice(from, 1);
+  const insertAt = from < to ? to - 1 : to;
+  result.splice(insertAt, 0, moved);
+  return result;
 }
 
 export function dedupeStoryMomentsBySrc(moments: StoryMomentRecord[]): StoryMomentRecord[] {
@@ -109,9 +141,9 @@ export function storyMomentSrcExists(
   src: string,
   fingerprint?: string,
 ): boolean {
-  const srcKey = momentSrcDedupeKey(src);
   return moments.some((moment) => {
     if (fingerprint && moment.fingerprint && moment.fingerprint === fingerprint) return true;
+    const srcKey = momentSrcDedupeKey(src);
     return srcKey !== "" && momentSrcDedupeKey(moment.src) === srcKey;
   });
 }

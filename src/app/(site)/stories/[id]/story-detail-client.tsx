@@ -59,6 +59,7 @@ import {
   momentSrcDedupeKey,
   normalizeStoryMomentList,
   readStoryMomentItems,
+  reorderStoryMoments,
   storyMomentSrcExists,
   type StoryMomentRecord,
 } from "@/lib/story-moments";
@@ -239,6 +240,7 @@ export default function StoryPage() {
   const scope = "stories";
 
   const dragIndexRef = useRef<number | null>(null);
+  const reorderDropHandledRef = useRef(false);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollDirectionRef = useRef<number | null>(null);
   const scrollAnimRef = useRef<number | null>(null);
@@ -472,6 +474,7 @@ export default function StoryPage() {
   }, [selectedIds, moments, id, clearSelection, scope, saveStoryItems]);
 
   const onDragStart = useCallback((e: React.DragEvent, idx: number) => {
+    reorderDropHandledRef.current = false;
     dragIndexRef.current = idx;
     try {
       e.dataTransfer.setData(MOMENT_REORDER_MIME, String(idx));
@@ -535,6 +538,8 @@ export default function StoryPage() {
     async (e: React.DragEvent, idx: number) => {
       e.preventDefault();
       e.stopPropagation();
+      if (reorderDropHandledRef.current) return;
+
       const fromStr = (() => {
         try {
           return (
@@ -548,19 +553,22 @@ export default function StoryPage() {
       const from = fromStr ? Number(fromStr) : null;
       const to = idx;
       setDragOverIndex(null);
-      dragIndexRef.current = null;
       stopAutoScroll();
-      if (from === null || Number.isNaN(from) || from === to) return;
+      if (from === null || Number.isNaN(from) || from === to) {
+        dragIndexRef.current = null;
+        return;
+      }
 
-      const reordered = [...moments];
-      const [moved] = reordered.splice(from, 1);
-      reordered.splice(to, 0, moved);
+      reorderDropHandledRef.current = true;
+      dragIndexRef.current = null;
 
-      const next = dedupeStoryMomentsBySrc(reordered);
+      let next: Moment[] = [];
+      setMoments((prev) => {
+        next = dedupeStoryMomentsBySrc(reorderStoryMoments(prev, from, to));
+        return next;
+      });
 
-      setMoments(next);
       try {
-        // Persist while preserving local story metadata fields.
         await saveStoryItems(next);
         try {
           window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
@@ -571,16 +579,18 @@ export default function StoryPage() {
         logger.error("Failed to persist reordered story", err);
       }
     },
-    [moments, id, saveStoryItems],
+    [id, saveStoryItems],
   );
 
   const handleExternalDrop = useCallback(
     async (e: React.DragEvent, insertAtIdx?: number) => {
       e.preventDefault();
 
+      const transferTypes = Array.from(e.dataTransfer.types);
       const isInternalReorder =
+        reorderDropHandledRef.current ||
         dragIndexRef.current !== null ||
-        Array.from(e.dataTransfer.types).includes(MOMENT_REORDER_MIME);
+        transferTypes.includes(MOMENT_REORDER_MIME);
       if (isInternalReorder) return;
 
       const addSrc = async (src: string, fingerprint?: string, insertAt?: number) => {
@@ -658,6 +668,7 @@ export default function StoryPage() {
   useEffect(() => {
     const onDragEndWin = () => {
       dragIndexRef.current = null;
+      reorderDropHandledRef.current = false;
       setDragOverIndex(null);
       stopAutoScroll();
     };
@@ -1554,6 +1565,7 @@ export default function StoryPage() {
                               onDragStart={onDragStart}
                               onDragEnd={(_idx: number) => {
                                 dragIndexRef.current = null;
+                                reorderDropHandledRef.current = false;
                                 setDragOverIndex(null);
                                 stopAutoScroll();
                               }}
@@ -1572,6 +1584,7 @@ export default function StoryPage() {
                         onDragStart={onDragStart}
                         onDragEnd={(_idx: number) => {
                           dragIndexRef.current = null;
+                          reorderDropHandledRef.current = false;
                           setDragOverIndex(null);
                           stopAutoScroll();
                         }}
