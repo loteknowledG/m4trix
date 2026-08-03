@@ -19,9 +19,11 @@ export function SidebarToggle({ isOpen, setIsOpen }: SidebarToggleProps) {
     >
       <Button
         onClick={() => setIsOpen?.()}
-        className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active"
+        className="m4-sidebar-toggle rounded-md"
         variant="outline"
         size="icon"
+        aria-label={isOpen === false ? "Expand sidebar" : "Collapse sidebar"}
+        title={isOpen === false ? "Expand sidebar" : "Collapse sidebar"}
       >
         <ChevronLeft
           className={cn(

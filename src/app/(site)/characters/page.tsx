@@ -896,7 +896,7 @@ export default function CharactersPage() {
                 onClick={addAgent}
                 size="icon"
                 variant="default"
-                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow"
+                className="m4-fab"
                 aria-label="Add New Character"
               >
                 <Plus className="h-5 w-5" />

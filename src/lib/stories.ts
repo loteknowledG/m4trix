@@ -1,4 +1,4 @@
-import { get, set } from 'idb-keyval';
+import { del, get, set } from 'idb-keyval';
 
 export type StoryMeta = {
   id: string;
@@ -50,4 +50,50 @@ export async function createEmptyStory(): Promise<StoryMeta> {
     /* ignore */
   }
   return meta;
+}
+
+/** Move stories to trash (snapshot payloads before relational rows are removed). */
+export async function moveStoriesToTrash(storyIds: string[]): Promise<number> {
+  const ids = [...new Set(storyIds.filter(Boolean))];
+  if (ids.length === 0) return 0;
+
+  const allStories = (await get<StoryMeta[]>('stories')) || [];
+  const idSet = new Set(ids);
+  const toTrash = allStories.filter((story) => idSet.has(story.id));
+  if (toTrash.length === 0) return 0;
+
+  const payloads = await Promise.all(
+    ids.map(async (id) => ({
+      id,
+      payload: await get<unknown>(`story:${id}`),
+    })),
+  );
+
+  const existingTrash = (await get<StoryMeta[]>('trash-stories')) || [];
+  const trashIds = new Set(toTrash.map((story) => story.id));
+  await set('trash-stories', [
+    ...toTrash,
+    ...existingTrash.filter((story) => !trashIds.has(story.id)),
+  ]);
+
+  await Promise.all(
+    payloads.map(async ({ id, payload }) => {
+      if (payload !== undefined) {
+        await set(`trash-story:${id}`, payload);
+      }
+    }),
+  );
+
+  const remainingStories = allStories.filter((story) => !idSet.has(story.id));
+  await set('stories', remainingStories);
+
+  await Promise.all(ids.map((id) => del(`story:${id}`)));
+
+  try {
+    window.dispatchEvent(new CustomEvent('stories-updated', { detail: {} }));
+  } catch {
+    /* ignore */
+  }
+
+  return toTrash.length;
 }

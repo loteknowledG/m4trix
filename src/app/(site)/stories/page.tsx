@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { del, get, set } from 'idb-keyval';
+import { useCallback, useEffect, useState } from 'react';
+import { get } from 'idb-keyval';
 import { logger } from '@/lib/logger';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
 import { SquarePen, Trash2 } from '@/components/icons';
@@ -12,7 +12,14 @@ import { Card } from '@/components/ui/card';
 import { Marquee } from '@/components/ui/marquee';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { MomentMedia } from '@/components/moment-media';
-import { createEmptyStory, storyEditorHref, storyPreviewMap, type StoryMeta } from '@/lib/stories';
+import {
+  createEmptyStory,
+  moveStoriesToTrash,
+  storyEditorHref,
+  storyPreviewMap,
+  type StoryMeta,
+} from '@/lib/stories';
+import { toast } from 'sonner';
 
 export default function StoriesPage() {
   const router = useRouter();
@@ -45,41 +52,42 @@ export default function StoriesPage() {
     }
   };
 
-  const moveSelectedToTrash = async () => {
-    if (selectedStoryIds.length === 0) return;
+  const moveSelectedToTrash = useCallback(async () => {
+    const ids = Object.keys(selectedStories).filter((id) => selectedStories[id]);
+    if (ids.length === 0) return;
+
+    const ok =
+      typeof window !== 'undefined'
+        ? window.confirm(
+            ids.length === 1
+              ? 'Move this story to trash?'
+              : `Move ${ids.length} stories to trash?`,
+          )
+        : true;
+    if (!ok) return;
 
     try {
-      const selectedSet = new Set(selectedStoryIds);
-      const remainingStories = stories.filter(story => !selectedSet.has(story.id));
-      const toTrash = stories.filter(story => selectedSet.has(story.id));
-      const existingTrash = (await get<StoryMeta[]>('trash-stories')) || [];
+      const moved = await moveStoriesToTrash(ids);
+      if (moved === 0) {
+        toast.error('Could not move stories — try refreshing the page');
+        return;
+      }
 
-      await set('stories', remainingStories);
-      await set('trash-stories', [...toTrash, ...existingTrash]);
-      await Promise.all(
-        selectedStoryIds.map(async id => {
-          const storyPayload = await get<any>(`story:${id}`);
-          if (storyPayload !== undefined) {
-            await set(`trash-story:${id}`, storyPayload);
-          }
-          await del(`story:${id}`);
-        })
-      );
-
-      setStories(remainingStories);
+      setStories((prev) => prev.filter((story) => !ids.includes(story.id)));
       setSelectedStories({});
-      setPreviews(prev => {
+      setPreviews((prev) => {
         const next = { ...prev };
-        selectedStoryIds.forEach(id => {
+        ids.forEach((id) => {
           delete next[id];
         });
         return next;
       });
-      window.dispatchEvent(new CustomEvent('stories-updated', { detail: {} }));
+      toast.success(moved === 1 ? 'Story moved to trash' : `${moved} stories moved to trash`);
     } catch (err) {
       logger.error('Failed to move selected stories to trash', err);
+      toast.error('Failed to move stories to trash');
     }
-  };
+  }, [selectedStories]);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +110,20 @@ export default function StoriesPage() {
   }, []);
 
   useEffect(() => {
+    const reload = async () => {
+      try {
+        const saved = (await get<StoryMeta[]>('stories')) || [];
+        setStories(saved);
+        setPreviews(storyPreviewMap(saved));
+      } catch (err) {
+        logger.error('Failed to reload stories', err);
+      }
+    };
+    window.addEventListener('stories-updated', reload);
+    return () => window.removeEventListener('stories-updated', reload);
+  }, []);
+
+  useEffect(() => {
     const prev = document.title;
     document.title = 'm4trix - stories';
     return () => {
@@ -120,7 +142,12 @@ export default function StoriesPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={moveSelectedToTrash}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void moveSelectedToTrash();
+                    }}
                     className="m4-circle-action bg-destructive/10 text-destructive hover:bg-destructive/20"
                     aria-label="Move to Trash"
                   >
@@ -214,7 +241,7 @@ export default function StoriesPage() {
                 size="icon"
                 variant="default"
                 disabled={creating}
-                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
+                className="m4-fab disabled:opacity-70"
                 aria-label="New story"
               >
                 <SquarePen className="h-5 w-5" />
