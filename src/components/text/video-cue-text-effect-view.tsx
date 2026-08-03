@@ -1,7 +1,8 @@
 'use client';
 
-import { BlurText } from '@/components/text/blur-text';
-import { BouncingText } from '@/components/text/bouncing-text';
+import type { ReactNode } from 'react';
+import { motion } from 'motion/react';
+import { BlurText } from '@/components/text/blur-text';import { BouncingText } from '@/components/text/bouncing-text';
 import { EmbossText } from '@/components/text/emboss-text';
 import { DriftText } from '@/components/text/drift-text';
 import { EchoText } from '@/components/text/echo-text';
@@ -30,6 +31,8 @@ import { CUE_TEXT_WRAP_CLASS, CueTextByWords } from '@/lib/cue-text-word-wrap';
 import {
   cueWordRotateWords,
   normalizeVideoCueTextEffect,
+  resolveActiveTextEffects,
+  videoCueTextEffectsKey,
   type VideoCueTextAnimatePreset,
   type VideoCueTextEffect,
 } from '@/lib/video-cue-text-effects';
@@ -37,7 +40,8 @@ import { cn } from '@/lib/utils';
 
 export type VideoCueTextEffectViewProps = {
   text: string;
-  effect?: VideoCueTextEffect | string | null;
+  effect?: VideoCueTextEffect | VideoCueTextEffect[] | string | null;
+  effects?: VideoCueTextEffect | VideoCueTextEffect[] | string | null;
   color?: string;
   shadowColor?: string;
   className?: string;
@@ -46,7 +50,127 @@ export type VideoCueTextEffectViewProps = {
   animated?: boolean;
 };
 
-export function VideoCueTextEffectView({
+function wrapOuterTextEffect(
+  effect: VideoCueTextEffect,
+  content: ReactNode,
+  text: string,
+  props: VideoCueTextEffectViewProps,
+): ReactNode {
+  const {
+    color = '#ffffff',
+    shadowColor = '#000000',
+    className,
+    lineKey = 'line',
+    replayKey,
+    animated = true,
+  } = props;
+  const animationKey = `${replayKey ?? lineKey}-wrap-${effect}`;
+  const wrappedClass = cn('inline text-[length:inherit] font-[inherit]', className);
+
+  if (!animated) {
+    return <span className={wrappedClass}>{content}</span>;
+  }
+
+  switch (effect) {
+    case 'breathingText':
+      return (
+        <motion.span
+          key={animationKey}
+          className={wrappedClass}
+          animate={{ scale: [1, 1.05, 1], opacity: [0.72, 1, 0.72] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          {content}
+        </motion.span>
+      );
+    case 'shimmeringText':
+      return (
+        <span
+          key={animationKey}
+          className={cn(
+            'inline-block bg-[length:200%_100%] bg-clip-text text-transparent animate-dialog-shimmer',
+            'bg-gradient-to-r from-current via-white/95 to-current',
+            wrappedClass,
+          )}
+        >
+          {content}
+        </span>
+      );
+    case 'gradientText':
+      return (
+        <span
+          key={animationKey}
+          className={cn(
+            'inline-block bg-[length:200%_auto] bg-clip-text text-transparent animate-dialog-gradient',
+            'bg-gradient-to-r from-sky-300 via-fuchsia-300 to-lime-300',
+            wrappedClass,
+          )}
+        >
+          {content}
+        </span>
+      );
+    case 'lineShadowText':
+      return (
+        <LineShadowText key={animationKey} shadowColor={shadowColor} as="span" className={wrappedClass}>
+          {text}
+        </LineShadowText>
+      );
+    case 'sparklesText':
+      return (
+        <SparklesText
+          key={animationKey}
+          colors={{ first: color, second: shadowColor }}
+          sparklesCount={8}
+          className={cn('inline text-[length:inherit] font-[inherit] font-normal', className)}
+        >
+          {text}
+        </SparklesText>
+      );
+    case 'spinningText':
+      return (
+        <SpinningText
+          key={animationKey}
+          radius={2.5}
+          duration={10}
+          className={cn(
+            'inline-flex min-h-[5ch] min-w-[5ch] items-center justify-center text-[length:inherit] font-[inherit]',
+            className,
+          )}
+          style={{ color }}
+        >
+          {text}
+        </SpinningText>
+      );
+    case 'fadeIn':
+    case 'blurIn':
+    case 'blurInUp':
+    case 'blurInDown':
+    case 'slideUp':
+    case 'slideDown':
+    case 'slideLeft':
+    case 'slideRight':
+    case 'scaleUp':
+    case 'scaleDown':
+      return (
+        <TextAnimate
+          key={animationKey}
+          animation={effect as VideoCueTextAnimatePreset}
+          by="word"
+          startOnView={false}
+          once
+          as="span"
+          className={cn('inline', className)}
+          segmentClassName="whitespace-nowrap"
+        >
+          {text}
+        </TextAnimate>
+      );
+    default:
+      return <span className={wrappedClass}>{content}</span>;
+  }
+}
+
+function VideoCueTextEffectSingle({
   text,
   effect,
   color = '#ffffff',
@@ -55,11 +179,10 @@ export function VideoCueTextEffectView({
   lineKey = 'line',
   replayKey,
   animated = true,
-}: VideoCueTextEffectViewProps) {
+}: VideoCueTextEffectViewProps & { effect: VideoCueTextEffect }) {
   const textEffect = normalizeVideoCueTextEffect(effect);
   const animationKey = replayKey ?? lineKey;
   const displayText = !text || !text.trim() ? '…' : text;
-
   if (textEffect === 'lineShadowText') {
     return (
       <LineShadowText
@@ -333,4 +456,55 @@ export function VideoCueTextEffectView({
       {displayText}
     </TextAnimate>
   );
+}
+
+export function VideoCueTextEffectView({
+  text,
+  effect,
+  effects,
+  className,
+  ...rest
+}: VideoCueTextEffectViewProps) {
+  const activeEffects = resolveActiveTextEffects(effects ?? effect);
+  const displayText = !text || !text.trim() ? '…' : text;
+
+  if (activeEffects.length === 0) {
+    return (
+      <span className={cn(CUE_TEXT_WRAP_CLASS, 'whitespace-pre-wrap', className)}>{displayText}</span>
+    );
+  }
+
+  if (activeEffects.length === 1) {
+    return (
+      <VideoCueTextEffectSingle
+        text={displayText}
+        effect={activeEffects[0]}
+        className={className}
+        {...rest}
+      />
+    );
+  }
+
+  const stackKey = videoCueTextEffectsKey(activeEffects);
+  let node: ReactNode = (
+    <VideoCueTextEffectSingle
+      key={`${stackKey}-inner`}
+      text={displayText}
+      effect={activeEffects[activeEffects.length - 1]}
+      className={className}
+      {...rest}
+    />
+  );
+
+  for (let index = activeEffects.length - 2; index >= 0; index -= 1) {
+    const currentEffect = activeEffects[index];
+    node = wrapOuterTextEffect(
+      currentEffect,
+      node,
+      displayText,
+      { text: displayText, className, ...rest },
+    );
+  }
+
+  return <span className={cn('inline', className)}>{node}</span>;
 }

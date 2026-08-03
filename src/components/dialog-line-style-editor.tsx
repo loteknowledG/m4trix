@@ -1,26 +1,15 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
-import {
-  VIDEO_CUE_TEXT_EFFECTS,
-  normalizeMomentDialogTextEffect,
-  type VideoCueTextEffect,
-} from '@/lib/video-cue-text-effects';
+import { TextEffectsMultiSelect } from '@/components/text-effects-multi-select';
+import type { CharacterDialogStyle } from '@/lib/character-dialog-style';
 import {
   normalizeCueColor,
   normalizeCueFont,
   VIDEO_CUE_FONT_OPTIONS,
-  type VideoCueFontId,
 } from '@/lib/video-timed-cues';
 
-export type DialogLineStyleValues = {
-  textEffect?: VideoCueTextEffect;
-  font?: VideoCueFontId;
-  fontScale?: number;
-  color?: string;
-  shadowColor?: string;
-  speakerColor?: string;
-};
+export type DialogLineStyleValues = CharacterDialogStyle;
 
 type DialogLineStyleEditorProps = {
   values: DialogLineStyleValues;
@@ -28,7 +17,6 @@ type DialogLineStyleEditorProps = {
 };
 
 export function DialogLineStyleEditor({ values, onChange }: DialogLineStyleEditorProps) {
-  const textEffect = normalizeMomentDialogTextEffect(values.textEffect);
   const font = values.font ?? 'system';
   const fontScale = values.fontScale ?? 0.04;
 
@@ -36,22 +24,10 @@ export function DialogLineStyleEditor({ values, onChange }: DialogLineStyleEdito
     <div className="space-y-2 rounded-md border border-border/50 bg-muted/20 p-2">
       <div className="text-[11px] font-medium text-muted-foreground">Style</div>
 
-      <label className="grid gap-1">
-        <span className="text-[11px] text-muted-foreground">Text effect</span>
-        <select
-          value={textEffect}
-          onChange={event =>
-            onChange({ textEffect: normalizeMomentDialogTextEffect(event.target.value) })
-          }
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        >
-          {VIDEO_CUE_TEXT_EFFECTS.map(option => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <TextEffectsMultiSelect
+        value={values.textEffects ?? values.textEffect}
+        onChange={textEffects => onChange({ textEffects, textEffect: undefined })}
+      />
 
       <label className="grid gap-1">
         <span className="text-[11px] text-muted-foreground">Font</span>

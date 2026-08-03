@@ -1,0 +1,1013 @@
+{
+  "af-ZA": {
+    "name": "Afrikaans",
+    "voices": {
+      "AdriNeural": "Female",
+      "WillemNeural": "Male"
+    }
+  },
+  "am-ET": {
+    "name": "Amharic",
+    "voices": {
+      "AmehaNeural": "Male",
+      "MekdesNeural": "Female"
+    }
+  },
+  "ar-AE": {
+    "name": "Arabic (UAE)",
+    "voices": {
+      "FatimaNeural": "Female",
+      "HamdanNeural": "Male"
+    }
+  },
+  "ar-BH": {
+    "name": "Arabic (Bahrain)",
+    "voices": {
+      "AliNeural": "Male",
+      "LailaNeural": "Female"
+    }
+  },
+  "ar-DZ": {
+    "name": "Arabic (Algeria)",
+    "voices": {
+      "AminaNeural": "Female",
+      "IsmaelNeural": "Male"
+    }
+  },
+  "ar-EG": {
+    "name": "Arabic (Egypt)",
+    "voices": {
+      "SalmaNeural": "Female",
+      "ShakirNeural": "Male"
+    }
+  },
+  "ar-IQ": {
+    "name": "Arabic (Iraq)",
+    "voices": {
+      "BasselNeural": "Male",
+      "RanaNeural": "Female"
+    }
+  },
+  "ar-JO": {
+    "name": "Arabic (Jordan)",
+    "voices": {
+      "SanaNeural": "Female",
+      "TaimNeural": "Male"
+    }
+  },
+  "ar-KW": {
+    "name": "Arabic (Kuwait)",
+    "voices": {
+      "FahedNeural": "Male",
+      "NouraNeural": "Female"
+    }
+  },
+  "ar-LB": {
+    "name": "Arabic (Lebanon)",
+    "voices": {
+      "LavlaNeural": "Female",
+      "RamiNeural": "Male"
+    }
+  },
+  "ar-LY": {
+    "name": "Arabic (Libya)",
+    "voices": {
+      "ImanNeural": "Female",
+      "OmarNeural": "Male"
+    }
+  },
+  "ar-MA": {
+    "name": "Arabic (Morocco)",
+    "voices": {
+      "JamalNeural": "Male",
+      "MounaNeural": "Female"
+    }
+  },
+  "ar-OM": {
+    "name": "Arabic (Oman)",
+    "voices": {
+      "AbdullahNeural": "Male",
+      "AvshaNeural": "Female"
+    }
+  },
+  "ar-QA": {
+    "name": "Arabic (Qatar)",
+    "voices": {
+      "AmalNeural": "Female",
+      "MoazNeural": "Male"
+    }
+  },
+  "ar-SA": {
+    "name": "Arabic (Saudi Arabia)",
+    "voices": {
+      "HamedNeural": "Male",
+      "ZarivahNeural": "Female"
+    }
+  },
+  "ar-SY": {
+    "name": "Arabic (Syria)",
+    "voices": {
+      "AmanyNeural": "Female",
+      "LaithNeural": "Male"
+    }
+  },
+  "ar-TN": {
+    "name": "Arabic (Tunisia)",
+    "voices": {
+      "HediNeural": "Male",
+      "ReemNeural": "Female"
+    }
+  },
+  "ar-YE": {
+    "name": "Arabic (Yemen)",
+    "voices": {
+      "MaryamNeural": "Female",
+      "SalehNeural": "Male"
+    }
+  },
+  "az-AZ": {
+    "name": "Azerbaijani",
+    "voices": {
+      "BabekNeural": "Male",
+      "BanuNeural": "Female"
+    }
+  },
+  "bn-BD": {
+    "name": "Bengali (Bangladesh)",
+    "voices": {
+      "NabanitaNeural": "Female",
+      "PradeepNeural": "Male"
+    }
+  },
+  "bn-IN": {
+    "name": "Bengali (India)",
+    "voices": {
+      "BashkarNeural": "Male",
+      "TanishaaNeural": "Female"
+    }
+  },
+  "bs-BA": {
+    "name": "Bosnian",
+    "voices": {
+      "GoranNeural": "Male",
+      "VesnaNeural": "Female"
+    }
+  },
+  "bg-BG": {
+    "name": "Bulgarian",
+    "voices": {
+      "BorislavNeural": "Male",
+      "KalinaNeural": "Female"
+    }
+  },
+  "my-MM": {
+    "name": "Burmese",
+    "voices": {
+      "NilarNeural": "Female",
+      "ThihaNeural": "Male"
+    }
+  },
+  "ca-ES": {
+    "name": "Catalan",
+    "voices": {
+      "EnricNeural": "Male",
+      "JoanaNeural": "Female"
+    }
+  },
+  "zh-CN": {
+    "name": "Chinese (Simplified)",
+    "voices": {
+      "XiaoxiaoNeural": "Female",
+      "XiaoyiNeural": "Female",
+      "YunjianNeural": "Male",
+      "YunxiNeural": "Male",
+      "YunxiaNeural": "Male",
+      "YunyangNeural": "Male"
+    }
+  },
+  "zh-CN-liaoning": {
+    "name": "Chinese (Liaoning)",
+    "voices": {
+      "XiaobeiNeural": "Female"
+    }
+  },
+  "zh-CN-shaanxi": {
+    "name": "Chinese (Shaanxi)",
+    "voices": {
+      "XiaoniNeural": "Female"
+    }
+  },
+  "zh-HK": {
+    "name": "Chinese (Hong Kong)",
+    "voices": {
+      "HiuGaaiNeural": "Female",
+      "HiuMaanNeural": "Female",
+      "WanLungNeural": "Male"
+    }
+  },
+  "zh-TW": {
+    "name": "Chinese (Traditional)",
+    "voices": {
+      "HsiaoChenNeural": "Female",
+      "HsiaoYuNeural": "Female",
+      "YunJheNeural": "Male"
+    }
+  },
+  "hr-HR": {
+    "name": "Croatian",
+    "voices": {
+      "GabrijelaNeural": "Female",
+      "SreckoNeural": "Male"
+    }
+  },
+  "cs-CZ": {
+    "name": "Czech",
+    "voices": {
+      "AntoninNeural": "Male",
+      "VlastaNeural": "Female"
+    }
+  },
+  "da-DK": {
+    "name": "Danish",
+    "voices": {
+      "ChristelNeural": "Female",
+      "JeppeNeural": "Male"
+    }
+  },
+  "nl-BE": {
+    "name": "Dutch (Belgium)",
+    "voices": {
+      "ArnaudNeural": "Male",
+      "DenaNeural": "Female"
+    }
+  },
+  "nl-NL": {
+    "name": "Dutch (Netherlands)",
+    "voices": {
+      "ColetteNeural": "Female",
+      "FennaNeural": "Female",
+      "MaartenNeural": "Male"
+    }
+  },
+  "en-AU": {
+    "name": "English (Australia)",
+    "voices": {
+      "NatashaNeural": "Female",
+      "WilliamNeural": "Male"
+    }
+  },
+  "en-CA": {
+    "name": "English (Canada)",
+    "voices": {
+      "ClaraNeural": "Female",
+      "LiamNeural": "Male"
+    }
+  },
+  "en-GB": {
+    "name": "English (UK)",
+    "voices": {
+      "LibbyNeural": "Female",
+      "MaisieNeural": "Female",
+      "RyanNeural": "Male",
+      "SoniaNeural": "Female",
+      "ThomasNeural": "Male"
+    }
+  },
+  "en-HK": {
+    "name": "English (Hong Kong)",
+    "voices": {
+      "SamNeural": "Male",
+      "YanNeural": "Female"
+    }
+  },
+  "en-IE": {
+    "name": "English (Ireland)",
+    "voices": {
+      "ConnorNeural": "Male",
+      "EmilyNeural": "Female"
+    }
+  },
+  "en-IN": {
+    "name": "English (India)",
+    "voices": {
+      "NeeriaExpressiveNeural": "Female",
+      "NeerjaNeural": "Female",
+      "PrabhatNeural": "Male"
+    }
+  },
+  "en-KE": {
+    "name": "English (Kenya)",
+    "voices": {
+      "AsiliaNeural": "Female",
+      "ChilembaNeural": "Male"
+    }
+  },
+  "en-NG": {
+    "name": "English (Nigeria)",
+    "voices": {
+      "AbeoNeural": "Male",
+      "EzinneNeural": "Female"
+    }
+  },
+  "en-NZ": {
+    "name": "English (New Zealand)",
+    "voices": {
+      "MitchellNeural": "Male",
+      "MollyNeural": "Female"
+    }
+  },
+  "en-PH": {
+    "name": "English (Philippines)",
+    "voices": {
+      "JamesNeural": "Male",
+      "RosaNeural": "Female"
+    }
+  },
+  "en-SG": {
+    "name": "English (Singapore)",
+    "voices": {
+      "LunaNeural": "Female",
+      "WayneNeural": "Male"
+    }
+  },
+  "en-ZA": {
+    "name": "English (South Africa)",
+    "voices": {
+      "LeahNeural": "Female",
+      "LukeNeural": "Male"
+    }
+  },
+  "en-TZ": {
+    "name": "English (Tanzania)",
+    "voices": {
+      "ElimuNeural": "Male",
+      "ImaniNeural": "Female"
+    }
+  },
+  "en-US": {
+    "name": "English (US)",
+    "voices": {
+      "AnaNeural": "Female",
+      "AndrewMultilingualNeural": "Male",
+      "AndrewNeural": "Male",
+      "AriaNeural": "Female",
+      "AvaMultilingualNeural": "Female",
+      "AvaNeural": "Female",
+      "BrianMultilingualNeural": "Male",
+      "BrianNeural": "Male",
+      "ChristopherNeural": "Male",
+      "EmmaMultilingualNeural": "Female",
+      "EmmaNeural": "Female",
+      "EricNeural": "Male",
+      "GuyNeural": "Male",
+      "JennyNeural": "Female",
+      "MichelleNeural": "Female",
+      "RogerNeural": "Male",
+      "SteffanNeural": "Male"
+    }
+  },
+  "et-EE": {
+    "name": "Estonian",
+    "voices": {
+      "AnuNeural": "Female",
+      "KertNeural": "Male"
+    }
+  },
+  "fil-PH": {
+    "name": "Filipino",
+    "voices": {
+      "AngeloNeural": "Male",
+      "BlessicaNeural": "Female"
+    }
+  },
+  "fi-FI": {
+    "name": "Finnish",
+    "voices": {
+      "HarriNeural": "Male",
+      "NooraNeural": "Female"
+    }
+  },
+  "fr-BE": {
+    "name": "French (Belgium)",
+    "voices": {
+      "CharlineNeural": "Female",
+      "GerardNeural": "Male"
+    }
+  },
+  "fr-CA": {
+    "name": "French (Canada)",
+    "voices": {
+      "AntoineNeural": "Male",
+      "JeanNeural": "Male",
+      "SylvieNeural": "Female",
+      "ThierryNeural": "Male"
+    }
+  },
+  "fr-CH": {
+    "name": "French (Switzerland)",
+    "voices": {
+      "ArianeNeural": "Female",
+      "FabriceNeural": "Male"
+    }
+  },
+  "fr-FR": {
+    "name": "French (France)",
+    "voices": {
+      "DeniseNeural": "Female",
+      "EloiseNeural": "Female",
+      "HenriNeural": "Male",
+      "RemyMultilingualNeural": "Male",
+      "VivienneMultilingualNeural": "Female"
+    }
+  },
+  "gl-ES": {
+    "name": "Galician",
+    "voices": {
+      "RoiNeural": "Male",
+      "SabelaNeural": "Female"
+    }
+  },
+  "ka-GE": {
+    "name": "Georgian",
+    "voices": {
+      "EkaNeural": "Female",
+      "GiorgiNeural": "Male"
+    }
+  },
+  "de-AT": {
+    "name": "German (Austria)",
+    "voices": {
+      "IngridNeural": "Female",
+      "JonasNeural": "Male"
+    }
+  },
+  "de-DE": {
+    "name": "German (Germany)",
+    "voices": {
+      "AmalaNeural": "Female",
+      "ConradNeural": "Male",
+      "FlorianMultilingualNeural": "Male",
+      "KatjaNeural": "Female",
+      "KillianNeural": "Male",
+      "SeraphinaMultilingualNeural": "Female"
+    }
+  },
+  "de-CH": {
+    "name": "German (Switzerland)",
+    "voices": {
+      "JanNeural": "Male",
+      "LeniNeural": "Female"
+    }
+  },
+  "el-GR": {
+    "name": "Greek",
+    "voices": {
+      "AthinaNeural": "Female",
+      "NestorasNeural": "Male"
+    }
+  },
+  "gu-IN": {
+    "name": "Gujarati",
+    "voices": {
+      "DhwaniNeural": "Female",
+      "NiranjanNeural": "Male"
+    }
+  },
+  "he-IL": {
+    "name": "Hebrew",
+    "voices": {
+      "AvriNeural": "Male",
+      "HilaNeural": "Female"
+    }
+  },
+  "hi-IN": {
+    "name": "Hindi",
+    "voices": {
+      "MadhurNeural": "Male",
+      "SwaraNeural": "Female"
+    }
+  },
+  "hu-HU": {
+    "name": "Hungarian",
+    "voices": {
+      "NoemiNeural": "Female",
+      "TamasNeural": "Male"
+    }
+  },
+  "is-IS": {
+    "name": "Icelandic",
+    "voices": {
+      "GudrunNeural": "Female",
+      "GunnarNeural": "Male"
+    }
+  },
+  "id-ID": {
+    "name": "Indonesian",
+    "voices": {
+      "ArdiNeural": "Male",
+      "GadisNeural": "Female"
+    }
+  },
+  "ga-IE": {
+    "name": "Irish",
+    "voices": {
+      "ColmNeural": "Male",
+      "OrlaNeural": "Female"
+    }
+  },
+  "it-IT": {
+    "name": "Italian",
+    "voices": {
+      "DiegoNeural": "Male",
+      "ElsaNeural": "Female",
+      "GiuseppeMultilingualNeural": "Male",
+      "IsabellaNeural": "Female"
+    }
+  },
+  "ja-JP": {
+    "name": "Japanese",
+    "voices": {
+      "KeitaNeural": "Male",
+      "NanamiNeural": "Female"
+    }
+  },
+  "jv-ID": {
+    "name": "Javanese",
+    "voices": {
+      "DimasNeural": "Male",
+      "SitiNeural": "Female"
+    }
+  },
+  "kn-IN": {
+    "name": "Kannada",
+    "voices": {
+      "GaganNeural": "Male",
+      "SapnaNeural": "Female"
+    }
+  },
+  "kk-KZ": {
+    "name": "Kazakh",
+    "voices": {
+      "AigulNeural": "Female",
+      "DauletNeural": "Male"
+    }
+  },
+  "km-KH": {
+    "name": "Khmer",
+    "voices": {
+      "PisethNeural": "Male",
+      "SrevmomNeural": "Female"
+    }
+  },
+  "ko-KR": {
+    "name": "Korean",
+    "voices": {
+      "HyunsuMultilingualNeural": "Male",
+      "InJoonNeural": "Male",
+      "SunHiNeural": "Female"
+    }
+  },
+  "lo-LA": {
+    "name": "Lao",
+    "voices": {
+      "ChanthavongNeural": "Male",
+      "KeomanyNeural": "Female"
+    }
+  },
+  "lv-LV": {
+    "name": "Latvian",
+    "voices": {
+      "EveritaNeural": "Female",
+      "NilsNeural": "Male"
+    }
+  },
+  "lt-LT": {
+    "name": "Lithuanian",
+    "voices": {
+      "LeonasNeural": "Male",
+      "OnaNeural": "Female"
+    }
+  },
+  "mk-MK": {
+    "name": "Macedonian",
+    "voices": {
+      "AleksandarNeural": "Male",
+      "MarijaNeural": "Female"
+    }
+  },
+  "ms-MY": {
+    "name": "Malay",
+    "voices": {
+      "OsmanNeural": "Male",
+      "YasminNeural": "Female"
+    }
+  },
+  "ml-IN": {
+    "name": "Malayalam",
+    "voices": {
+      "MidhunNeural": "Male",
+      "SobhanaNeural": "Female"
+    }
+  },
+  "mt-MT": {
+    "name": "Maltese",
+    "voices": {
+      "GraceNeural": "Female",
+      "JosephNeural": "Male"
+    }
+  },
+  "mr-IN": {
+    "name": "Marathi",
+    "voices": {
+      "AarohiNeural": "Female",
+      "ManoharNeural": "Male"
+    }
+  },
+  "mn-MN": {
+    "name": "Mongolian",
+    "voices": {
+      "BataaNeural": "Male",
+      "YesuiNeural": "Female"
+    }
+  },
+  "ne-NP": {
+    "name": "Nepali",
+    "voices": {
+      "HemkalaNeural": "Female",
+      "SagarNeural": "Male"
+    }
+  },
+  "nb-NO": {
+    "name": "Norwegian Bokmål",
+    "voices": {
+      "FinnNeural": "Male",
+      "PernilleNeural": "Female"
+    }
+  },
+  "ps-AF": {
+    "name": "Pashto",
+    "voices": {
+      "GulNawazNeural": "Male",
+      "LatifaNeural": "Female"
+    }
+  },
+  "fa-IR": {
+    "name": "Persian",
+    "voices": {
+      "DilaraNeural": "Female",
+      "FaridNeural": "Male"
+    }
+  },
+  "pl-PL": {
+    "name": "Polish",
+    "voices": {
+      "MarekNeural": "Male",
+      "ZofiaNeural": "Female"
+    }
+  },
+  "pt-BR": {
+    "name": "Portuguese (Brazil)",
+    "voices": {
+      "AntonioNeural": "Male",
+      "FranciscaNeural": "Female",
+      "ThalitaMultilingualNeural": "Female"
+    }
+  },
+  "pt-PT": {
+    "name": "Portuguese (Portugal)",
+    "voices": {
+      "DuarteNeural": "Male",
+      "RaquelNeural": "Female"
+    }
+  },
+  "ro-RO": {
+    "name": "Romanian",
+    "voices": {
+      "AlinaNeural": "Female",
+      "EmilNeural": "Male"
+    }
+  },
+  "ru-RU": {
+    "name": "Russian",
+    "voices": {
+      "DmitryNeural": "Male",
+      "SvetlanaNeural": "Female"
+    }
+  },
+  "sr-RS": {
+    "name": "Serbian",
+    "voices": {
+      "NicholasNeural": "Male",
+      "SophieNeural": "Female"
+    }
+  },
+  "si-LK": {
+    "name": "Sinhala",
+    "voices": {
+      "SameeraNeural": "Male",
+      "ThiliniNeural": "Female"
+    }
+  },
+  "sk-SK": {
+    "name": "Slovak",
+    "voices": {
+      "LukasNeural": "Male",
+      "ViktoriaNeural": "Female"
+    }
+  },
+  "sl-SI": {
+    "name": "Slovenian",
+    "voices": {
+      "PetraNeural": "Female",
+      "RokNeural": "Male"
+    }
+  },
+  "so-SO": {
+    "name": "Somali",
+    "voices": {
+      "MuuseNeural": "Male",
+      "UbaxNeural": "Female"
+    }
+  },
+  "es-AR": {
+    "name": "Spanish (Argentina)",
+    "voices": {
+      "ElenaNeural": "Female",
+      "TomasNeural": "Male"
+    }
+  },
+  "es-BO": {
+    "name": "Spanish (Bolivia)",
+    "voices": {
+      "MarceloNeural": "Male",
+      "SofiaNeural": "Female"
+    }
+  },
+  "es-CL": {
+    "name": "Spanish (Chile)",
+    "voices": {
+      "CatalinaNeural": "Female",
+      "LorenzoNeural": "Male"
+    }
+  },
+  "es-CO": {
+    "name": "Spanish (Colombia)",
+    "voices": {
+      "GonzaloNeural": "Male",
+      "SalomeNeural": "Female"
+    }
+  },
+  "es-CR": {
+    "name": "Spanish (Costa Rica)",
+    "voices": {
+      "JuanNeural": "Male",
+      "MariaNeural": "Female"
+    }
+  },
+  "es-CU": {
+    "name": "Spanish (Cuba)",
+    "voices": {
+      "BelkysNeural": "Female",
+      "ManuelNeural": "Male"
+    }
+  },
+  "es-DO": {
+    "name": "Spanish (Dominican Republic)",
+    "voices": {
+      "EmilioNeural": "Male",
+      "RamonaNeural": "Female"
+    }
+  },
+  "es-EC": {
+    "name": "Spanish (Ecuador)",
+    "voices": {
+      "AndreaNeural": "Female",
+      "LuisNeural": "Male"
+    }
+  },
+  "es-SV": {
+    "name": "Spanish (El Salvador)",
+    "voices": {
+      "LorenaNeural": "Female",
+      "RodrigoNeural": "Male"
+    }
+  },
+  "es-GQ": {
+    "name": "Spanish (Equatorial Guinea)",
+    "voices": {
+      "JavierNeural": "Male",
+      "TeresaNeural": "Female"
+    }
+  },
+  "es-GT": {
+    "name": "Spanish (Guatemala)",
+    "voices": {
+      "AndresNeural": "Male",
+      "MartaNeural": "Female"
+    }
+  },
+  "es-HN": {
+    "name": "Spanish (Honduras)",
+    "voices": {
+      "CarlosNeural": "Male",
+      "KarlaNeural": "Female"
+    }
+  },
+  "es-MX": {
+    "name": "Spanish (Mexico)",
+    "voices": {
+      "DaliaNeural": "Female",
+      "JorgeNeural": "Male"
+    }
+  },
+  "es-NI": {
+    "name": "Spanish (Nicaragua)",
+    "voices": {
+      "FedericoNeural": "Male",
+      "YolandaNeural": "Female"
+    }
+  },
+  "es-PA": {
+    "name": "Spanish (Panama)",
+    "voices": {
+      "MargaritaNeural": "Female",
+      "RobertoNeural": "Male"
+    }
+  },
+  "es-PY": {
+    "name": "Spanish (Paraguay)",
+    "voices": {
+      "MarioNeural": "Male",
+      "TaniaNeural": "Female"
+    }
+  },
+  "es-PE": {
+    "name": "Spanish (Peru)",
+    "voices": {
+      "AlexNeural": "Male",
+      "CamilaNeural": "Female"
+    }
+  },
+  "es-PR": {
+    "name": "Spanish (Puerto Rico)",
+    "voices": {
+      "KarinaNeural": "Female",
+      "VictorNeural": "Male"
+    }
+  },
+  "es-ES": {
+    "name": "Spanish (Spain)",
+    "voices": {
+      "AlvaroNeural": "Male",
+      "ElviraNeural": "Female",
+      "XimenaNeural": "Female"
+    }
+  },
+  "es-US": {
+    "name": "Spanish (US)",
+    "voices": {
+      "AlonsoNeural": "Male",
+      "PalomaNeural": "Female"
+    }
+  },
+  "es-UY": {
+    "name": "Spanish (Uruguay)",
+    "voices": {
+      "MateoNeural": "Male",
+      "ValentinaNeural": "Female"
+    }
+  },
+  "es-VE": {
+    "name": "Spanish (Venezuela)",
+    "voices": {
+      "PaolaNeural": "Female",
+      "SebastianNeural": "Male"
+    }
+  },
+  "su-ID": {
+    "name": "Sundanese",
+    "voices": {
+      "JajangNeural": "Male",
+      "TutiNeural": "Female"
+    }
+  },
+  "sw-KE": {
+    "name": "Swahili (Kenya)",
+    "voices": {
+      "RafikiNeural": "Male",
+      "ZuriNeural": "Female"
+    }
+  },
+  "sw-TZ": {
+    "name": "Swahili (Tanzania)",
+    "voices": {
+      "DaudiNeural": "Male",
+      "RehemaNeural": "Female"
+    }
+  },
+  "sv-SE": {
+    "name": "Swedish",
+    "voices": {
+      "MattiasNeural": "Male",
+      "SofieNeural": "Female"
+    }
+  },
+  "ta-IN": {
+    "name": "Tamil (India)",
+    "voices": {
+      "PallaviNeural": "Female",
+      "ValluvarNeural": "Male"
+    }
+  },
+  "ta-LK": {
+    "name": "Tamil (Sri Lanka)",
+    "voices": {
+      "KumarNeural": "Male",
+      "SaranyaNeural": "Female"
+    }
+  },
+  "ta-MY": {
+    "name": "Tamil (Malaysia)",
+    "voices": {
+      "KaniNeural": "Female",
+      "SuryaNeural": "Male"
+    }
+  },
+  "ta-SG": {
+    "name": "Tamil (Singapore)",
+    "voices": {
+      "AnbuNeural": "Male",
+      "VenbaNeural": "Female"
+    }
+  },
+  "te-IN": {
+    "name": "Telugu",
+    "voices": {
+      "MohanNeural": "Male",
+      "ShrutiNeural": "Female"
+    }
+  },
+  "th-TH": {
+    "name": "Thai",
+    "voices": {
+      "NiwatNeural": "Male",
+      "PremwadeeNeural": "Female"
+    }
+  },
+  "tr-TR": {
+    "name": "Turkish",
+    "voices": {
+      "AhmetNeural": "Male",
+      "EmelNeural": "Female"
+    }
+  },
+  "uk-UA": {
+    "name": "Ukrainian",
+    "voices": {
+      "OstapNeural": "Male",
+      "PolinaNeural": "Female"
+    }
+  },
+  "ur-IN": {
+    "name": "Urdu (India)",
+    "voices": {
+      "GulNeural": "Female",
+      "SalmanNeural": "Male"
+    }
+  },
+  "ur-PK": {
+    "name": "Urdu (Pakistan)",
+    "voices": {
+      "AsadNeural": "Male",
+      "UzmaNeural": "Female"
+    }
+  },
+  "uz-UZ": {
+    "name": "Uzbek",
+    "voices": {
+      "MadinaNeural": "Female",
+      "SardorNeural": "Male"
+    }
+  },
+  "vi-VN": {
+    "name": "Vietnamese",
+    "voices": {
+      "HoaiMyNeural": "Female",
+      "NamMinhNeural": "Male"
+    }
+  },
+  "cy-GB": {
+    "name": "Welsh",
+    "voices": {
+      "AledNeural": "Male",
+      "NiaNeural": "Female"
+    }
+  },
+  "zu-ZA": {
+    "name": "Zulu",
+    "voices": {
+      "ThandoNeural": "Female",
+      "ThembaNeural": "Male"
+    }
+  }
+}

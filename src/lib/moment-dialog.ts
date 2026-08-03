@@ -3,6 +3,8 @@ import { NARRATOR_CHARACTER_ID } from "@/lib/game/narrator-agent";
 import { normalizePlayerMode, formatPlayerMemoryLabel, formatDialogModeLabel, type PlayerMode } from "@/lib/player-mode";
 import {
   normalizeMomentDialogTextEffect,
+  normalizeVideoCueTextEffects,
+  resolveActiveTextEffects,
   type VideoCueTextEffect,
 } from "@/lib/video-cue-text-effects";
 import {
@@ -33,7 +35,9 @@ export type MomentDialogLine = {
   text: string;
   /** Say/do/think — used for player and NPC dialog lines. */
   playerMode?: PlayerMode;
+  /** @deprecated Use textEffects */
   textEffect?: VideoCueTextEffect;
+  textEffects?: VideoCueTextEffect[];
   /** Seconds when this line becomes visible */
   start?: number;
   /** Seconds when this line hides */
@@ -111,7 +115,7 @@ export function resolveMomentDialogSpeakerName(
 }
 
 export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
-  textEffect: "none" as VideoCueTextEffect,
+  textEffects: [] as VideoCueTextEffect[],
   font: "system" as VideoCueFontId,
   fontScale: 0.04,
   color: "#ffffff",
@@ -119,8 +123,10 @@ export const DEFAULT_MOMENT_DIALOG_LINE_STYLE = {
 };
 
 export function resolveMomentDialogLineStyle(line: Partial<MomentDialogLine>) {
+  const textEffects = resolveActiveTextEffects(line.textEffects ?? line.textEffect);
   return {
-    textEffect: normalizeMomentDialogTextEffect(line.textEffect),
+    textEffects,
+    textEffect: textEffects[0] ?? ("none" as VideoCueTextEffect),
     font: line.font ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.font,
     fontScale: line.fontScale ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.fontScale,
     color: line.color ?? DEFAULT_MOMENT_DIALOG_LINE_STYLE.color,
@@ -411,8 +417,11 @@ function normalizeLegacyDialogLines(value: unknown): MomentDialogLine[] {
       characterId,
       speaker,
       text,
-      textEffect: normalizeMomentDialogTextEffect(record.textEffect),
     };
+    const textEffects = normalizeVideoCueTextEffects(record.textEffects ?? record.textEffect);
+    if (textEffects.length > 0) {
+      entry.textEffects = textEffects;
+    }
     const playerMode = normalizePlayerMode(
       typeof record.playerMode === "string" ? record.playerMode : null,
     );

@@ -222,7 +222,7 @@ function MomentDialogBubble({
           >
             <VideoCueTextEffectView
               text={line.text}
-              effect={style.textEffect}
+              effects={style.textEffects}
               color={style.color}
               shadowColor={style.shadowColor}
               lineKey={line.id}

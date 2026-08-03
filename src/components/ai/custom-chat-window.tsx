@@ -13,7 +13,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConnectionSheet } from '@/components/connection-sheet';
-import { speakWithJennyVoice } from '@/lib/tts';
+import { speakWithCharacterTtsVoice } from '@/lib/tts';
+import type { CharacterTtsVoice } from '@/lib/character-tts-profile';
+import type { CharacterDialogStyle } from '@/lib/character-dialog-style';
 import { cn } from '@/lib/utils';
 import { normalizePlayerMode, type PlayerMode } from '@/lib/player-mode';
 
@@ -60,6 +62,12 @@ export interface CustomChatMessage {
   details?: string[];
   /** Distinguish narrator beats from NPC dialogue in VN chat. */
   messageKind?: 'narrator' | 'npc' | 'opening';
+  /** Per-message TTS voice (overrides window-level ttsVoice). */
+  ttsVoice?: CharacterTtsVoice;
+  /** Per-message dialog styling (overrides panel defaults). */
+  dialogStyle?: CharacterDialogStyle;
+  /** @deprecated use ttsVoice */
+  ttsProfile?: string;
 }
 
 interface CustomChatWindowProps {
@@ -84,6 +92,8 @@ interface CustomChatWindowProps {
   playerMode?: PlayerMode;
   onPlayerModeChange?: (v: PlayerMode) => void;
   playerIdentityHint?: string;
+  ttsVoice?: CharacterTtsVoice;
+  /** @deprecated use ttsVoice */
   ttsProfile?: string;
   /** Visual-novel overlay: dialogue sits on the scene instead of a side panel. */
   variant?: 'default' | 'visualNovel';
@@ -110,6 +120,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
   playerMode,
   onPlayerModeChange,
   playerIdentityHint,
+  ttsVoice,
   ttsProfile,
   variant = 'default',
 }) => {
@@ -154,36 +165,6 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
     return (container.textContent || '').replace(/\u00a0/g, ' ').trim();
   };
 
-  const speakMuthurInBrowser = (text: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
-    if (!text.trim()) return false;
-
-    try {
-      const synth = window.speechSynthesis;
-      const utterance = new SpeechSynthesisUtterance(text);
-      const voices = synth.getVoices();
-
-      const preferredVoice = voices.find(v => {
-        const name = v.name.toLowerCase();
-        return name.includes('aria');
-      });
-
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-      // Align with server MUTHUR profile: slightly slower, slightly lower (not heavy robot).
-      utterance.rate = 0.88;
-      utterance.pitch = 0.88;
-      utterance.volume = 1;
-
-      synth.cancel();
-      synth.speak(utterance);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   // keep list scrolled to bottom when messages change
   useEffect(() => {
     if (scrollRef.current) {
@@ -221,10 +202,16 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
       if (!speechText) return;
 
       lastSpokenIdRef.current = currentLatest.id;
-      if ((ttsProfile || '').toLowerCase() === 'muthur' && speakMuthurInBrowser(speechText)) {
-        return;
-      }
-      void speakWithJennyVoice(speechText);
+      const messageVoice = currentLatest.ttsVoice ?? ttsVoice;
+      const legacyProfile = currentLatest.ttsVoice?.profileId
+        ? undefined
+        : currentLatest.ttsProfile ?? ttsProfile;
+      void speakWithCharacterTtsVoice(
+        speechText,
+        messageVoice ?? undefined,
+        legacyProfile,
+        { allowFallback: true },
+      );
     }, 350);
 
     return () => {
@@ -233,7 +220,7 @@ export const CustomChatWindow: React.FC<CustomChatWindowProps> = ({
         speakTimerRef.current = null;
       }
     };
-  }, [latestAgentMessage?.id, latestAgentMessage?.text, messages, ttsProfile, voiceEnabled]);
+  }, [latestAgentMessage?.id, latestAgentMessage?.text, messages, ttsProfile, ttsVoice, voiceEnabled]);
 
   useEffect(() => {
     if (voiceEnabled || typeof window === 'undefined') return;

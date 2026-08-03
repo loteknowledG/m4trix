@@ -66,7 +66,6 @@ function VnDialogMessage({
   line,
   paletteIndex: _paletteIndex,
   align = "start",
-  textEffect,
   lineKey,
   momentId,
   compact = false,
@@ -75,7 +74,6 @@ function VnDialogMessage({
   line?: MomentDialogLine;
   paletteIndex: number;
   align?: "start" | "end";
-  textEffect?: VideoCueTextEffect;
   lineKey: string;
   momentId?: string | null;
   compact?: boolean;
@@ -117,7 +115,7 @@ function VnDialogMessage({
       >
         <VideoCueTextEffectView
           text={message.text}
-          effect={textEffect ?? style.textEffect}
+          effects={style.textEffects}
           color={dialogColor}
           shadowColor={style.shadowColor}
           lineKey={lineKey}
@@ -210,7 +208,6 @@ function DraggableDialogBubble({
         line={entry.line}
         paletteIndex={entry.paletteIndex}
         align={entry.side === "right" ? "end" : "start"}
-        textEffect={entry.line.textEffect}
         lineKey={entry.line.id}
         momentId={momentId}
         compact
@@ -284,7 +281,6 @@ function SideOverlayColumn({
             line={line}
             paletteIndex={Math.max(0, characterIndex)}
             align={side === "right" ? "end" : "start"}
-            textEffect={line?.textEffect}
             lineKey={message.id}
             momentId={momentId}
           />
@@ -330,7 +326,6 @@ function SideLetterboxColumn({
             line={line}
             paletteIndex={Math.max(0, characterIndex)}
             align={side === "right" ? "end" : "start"}
-            textEffect={line?.textEffect}
             lineKey={message.id}
             momentId={momentId}
           />
@@ -384,7 +379,6 @@ function NarratorZonePanel({
                 message={message}
                 line={line}
                 paletteIndex={Math.max(0, script.characterOrder.length + index)}
-                textEffect={line?.textEffect}
                 lineKey={message.id}
                 momentId={momentId}
               />
@@ -416,7 +410,6 @@ function NarratorZonePanel({
               message={message}
               line={line}
               paletteIndex={Math.max(0, characterIndex)}
-              textEffect={line?.textEffect}
               lineKey={message.id}
               momentId={momentId}
             />

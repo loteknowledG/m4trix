@@ -10,7 +10,7 @@ import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
-import { CharacterChatDialog, type TextOptions } from "@/components/ui/character-chat-dialog";
+import { CharacterChatDialog } from "@/components/ui/character-chat-dialog";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
@@ -48,6 +48,17 @@ import { stripAssistantPromptLeak, stripHistoryMessageText, stripHtmlImages } fr
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
+import { NARRATOR_CHARACTER_DIALOG_STYLE } from "@/lib/character-dialog-style";
+import { normalizeCharacterDialogStyle } from "@/lib/character-dialog-style";
+import {
+  normalizeCharacterTtsVoice,
+  resolveCharacterTtsVoice,
+} from "@/lib/character-tts-profile";
+import {
+  buildCharacterReplyPrompt,
+  normalizeProtagonistDialogue,
+  PROTAGONIST_DIALOGUE_MAX_CHARS,
+} from "@/lib/game/dialogue-limits";
 import {
   buildSceneSummary,
   resolveGameAgentContext,
@@ -197,11 +208,10 @@ export default function GamePage() {
     narrator: '',
   });
   const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
-  const [characterTextOptions, setCharacterTextOptions] = useState<Record<CharacterId, TextOptions>>({
-    protagonist: { font: 'system', fontSize: 14, textColor: '#ffffff', bgColor: 'transparent' },
-    antagonist: { font: 'system', fontSize: 14, textColor: '#ffffff', bgColor: 'transparent' },
-    narrator: { font: 'system', fontSize: 14, textColor: '#ffffff', bgColor: 'transparent' },
-  });
+  const narratorTtsVoice = useMemo(
+    () => resolveCharacterTtsVoice({ engine: "profile", profileId: "narrator" }),
+    [],
+  );
 
   // Derive combined chatMessages for legacy code that expects a single array
   const chatMessages: CustomChatMessage[] = [
@@ -253,20 +263,8 @@ export default function GamePage() {
     modelCount?: number;
   }>({ state: "idle" });
 
-  const [assignedNpc, setAssignedNpc] = useState<{
-    id: string;
-    name: string;
-    description: string;
-    appearance?: string;
-    avatarUrl?: string;
-  } | null>(null);
-  const [assignedPlayer, setAssignedPlayer] = useState<{
-    id: string;
-    name: string;
-    description: string;
-    appearance?: string;
-    avatarUrl?: string;
-  } | null>(null);
+  const [assignedNpc, setAssignedNpc] = useState<GameCharacterContext>(null);
+  const [assignedPlayer, setAssignedPlayer] = useState<GameCharacterContext>(null);
 
   const [debugOpen, setDebugOpen] = useState(false);
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
@@ -991,16 +989,17 @@ export default function GamePage() {
       if (!narratorEnabled) return;
 
       const pendingId = `pending-narrator-${Date.now()}`;
-      setChatMessages((messages) => [
-        ...messages,
-        {
-          id: pendingId,
-          from: "agent",
-          name: "Narrator",
-          text: "…",
-          messageKind: "narrator",
-        },
-      ]);
+      setConversations((prev) => ({
+        ...prev,
+        narrator: [
+          ...(prev.narrator || []),
+          {
+            id: pendingId,
+            from: "agent",
+            text: "…",
+          },
+        ],
+      }));
 
       const beat = await runNarratorBeat({
         connected,
@@ -1042,18 +1041,18 @@ export default function GamePage() {
         narratorText += `\n\nStage ${resolvedArcStageNumber} complete. Stage ${evaluation.nextStage.stageNumber} begins${stageLabel}.`;
       }
 
-      setChatMessages((messages) =>
-        messages.map((message) =>
+      setConversations((prev) => ({
+        ...prev,
+        narrator: (prev.narrator || []).map((message) =>
           message.id === pendingId
             ? {
                 ...message,
                 id: `narrator-${Date.now()}`,
                 text: narratorText,
-                messageKind: "narrator" as const,
               }
             : message,
         ),
-      );
+      }));
     },
     [
       assignedNpc?.name,
@@ -1305,11 +1304,15 @@ export default function GamePage() {
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    const spokenText =
+      characterId === "protagonist" ? normalizeProtagonistDialogue(trimmed) : trimmed;
+    if (!spokenText) return;
+
     // Add user message to character's conversation
     const userMessage: CustomChatMessage = {
       id: `user-${Date.now()}`,
       from: 'user',
-      text: trimmed,
+      text: spokenText,
     };
 
     setConversations((prev) => ({
@@ -1350,6 +1353,7 @@ export default function GamePage() {
     const nvidiaApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || undefined;
 
     try {
+      let lastReply = "";
       // Process each responder (one at a time so they can react to each other)
       for (let i = 0; i < responders.length; i++) {
         const currentResponder = responders[i];
@@ -1365,9 +1369,13 @@ export default function GamePage() {
 
         // Build prompt based on who is speaking
         const isNarratorSpeaking = characterId === 'narrator';
-        const promptText = isNarratorSpeaking
-          ? `The narrator describes: "${trimmed}". ${currentResponderName}, what would you say in response? Reply with ONE short sentence of dialogue in character.`
-          : `${speakerName} said: "${trimmed}". ${currentResponderName}, reply with exactly ONE short sentence in character.`;
+        const promptText = buildCharacterReplyPrompt({
+          speakerName,
+          line: spokenText,
+          responderName: currentResponderName,
+          protagonistReply: currentResponder === 'protagonist',
+          narratorScene: isNarratorSpeaking,
+        });
 
         // Call AI for this responder
         try {
@@ -1413,6 +1421,7 @@ export default function GamePage() {
             }
 
             if (reply) {
+              lastReply = reply;
               const aiResponse: CustomChatMessage = {
                 id: `agent-${Date.now()}-${currentResponder}`,
                 from: 'agent',
@@ -1432,7 +1441,7 @@ export default function GamePage() {
             const debugDataValue = contentType.includes('text/plain')
               ? { reply }
               : data;
-            setDebugData({ request: requestBody, response: debugDataValue, prompt: trimmed });
+            setDebugData({ request: requestBody, response: debugDataValue, prompt: spokenText });
           }
         } catch (loopErr) {
           // Silently log - don't add error to conversation since AI should only respond with one sentence
@@ -1440,8 +1449,28 @@ export default function GamePage() {
         }
       }
 
-      // Narrator only speaks when the player explicitly chose narrator
-      // (No auto-trigger for character dialogs)
+      const shouldRunNarratorAfterProtagonist =
+        characterId !== "narrator" && narratorEnabled && lastReply.trim();
+      if (shouldRunNarratorAfterProtagonist) {
+        const sceneSummary = buildSceneSummary({
+          title,
+          currentMomentName: currentMoment?.name ?? "",
+          npc: assignedNpc,
+          player: assignedPlayer,
+          npcKnowsPlayer: npcKnowsPlayerEffective,
+        });
+        const storyContext = [gameContextText, storySummary].filter(Boolean).join("\n\n");
+        const userText = characterId === "protagonist" ? spokenText : lastReply;
+        const npcText = characterId === "protagonist" ? lastReply : spokenText;
+        await appendNarratorBeat({
+          userText,
+          npcText,
+          history: storyHistory,
+          sceneSummary,
+          storyContext,
+          currentTurnNpcKnewPlayer: npcKnowsPlayerEffective,
+        });
+      }
     } catch (err) {
       console.error('AI response error:', err);
     }
@@ -1874,6 +1903,8 @@ export default function GamePage() {
                 description: npc.description ?? "",
                 appearance: typeof storyMeta?.npcAppearance === "string" ? storyMeta.npcAppearance : "",
                 avatarUrl: npc.avatarUrl,
+                dialogStyle: normalizeCharacterDialogStyle(npc.dialogStyle),
+                ttsVoice: normalizeCharacterTtsVoice(npc.ttsVoice, npc.ttsProfile),
               }
             : null,
         );
@@ -1887,6 +1918,8 @@ export default function GamePage() {
                 appearance:
                   typeof storyMeta?.playerAppearance === "string" ? storyMeta.playerAppearance : "",
                 avatarUrl: player.avatarUrl,
+                dialogStyle: normalizeCharacterDialogStyle(player.dialogStyle),
+                ttsVoice: normalizeCharacterTtsVoice(player.ttsVoice, player.ttsProfile),
               }
             : null,
         );
@@ -2199,6 +2232,7 @@ export default function GamePage() {
               <CharacterChatDialog
                 open
                 characterName={assignedPlayer?.name || 'Protagonist'}
+                avatarUrl={assignedPlayer?.avatarUrl}
                 messages={conversations.protagonist}
                 input={characterInputs.protagonist}
                 onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, protagonist: v }))}
@@ -2207,12 +2241,16 @@ export default function GamePage() {
                 onActivate={() => setActiveCharacter('protagonist')}
                 playerMode={playerMode}
                 onPlayerModeChange={setPlayerMode}
-                textOptions={characterTextOptions.protagonist}
-                onTextOptionsChange={(opts) => setCharacterTextOptions((prev) => ({ ...prev, protagonist: opts }))}
+                dialogStyle={assignedPlayer?.dialogStyle}
+                agentDialogStyle={assignedNpc?.dialogStyle}
+                ttsVoice={assignedPlayer?.ttsVoice}
+                agentTtsVoice={assignedNpc?.ttsVoice}
+                inputMaxLength={PROTAGONIST_DIALOGUE_MAX_CHARS}
               />
               <CharacterChatDialog
                 open
                 characterName={assignedNpc?.name || 'Antagonist'}
+                avatarUrl={assignedNpc?.avatarUrl}
                 messages={conversations.antagonist}
                 input={characterInputs.antagonist}
                 onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, antagonist: v }))}
@@ -2221,8 +2259,10 @@ export default function GamePage() {
                 onActivate={() => setActiveCharacter('antagonist')}
                 playerMode={playerMode}
                 onPlayerModeChange={setPlayerMode}
-                textOptions={characterTextOptions.antagonist}
-                onTextOptionsChange={(opts) => setCharacterTextOptions((prev) => ({ ...prev, antagonist: opts }))}
+                dialogStyle={assignedNpc?.dialogStyle}
+                agentDialogStyle={assignedPlayer?.dialogStyle}
+                ttsVoice={assignedNpc?.ttsVoice}
+                agentTtsVoice={assignedPlayer?.ttsVoice}
               />
               <CharacterChatDialog
                 open
@@ -2235,6 +2275,8 @@ export default function GamePage() {
                 onActivate={() => setActiveCharacter('narrator')}
                 playerMode={playerMode}
                 onPlayerModeChange={setPlayerMode}
+                dialogStyle={NARRATOR_CHARACTER_DIALOG_STYLE}
+                ttsVoice={narratorTtsVoice}
               />
             </div>
             )}

@@ -22,6 +22,8 @@ import type { StoryArcStage } from '@/lib/game/story-arc';
 
 import { getNextStoryArcStage } from '@/lib/game/story-arc';
 
+import { normalizeNarratorSummary } from '@/lib/game/dialogue-limits';
+
 
 
 export type NarratorBeatResult = {
@@ -66,6 +68,9 @@ export type RunNarratorBeatArgs = {
 
   completedTodoIds?: string[];
 
+  /** When true, summarize only this turn — no arc/todo scoring or plot invention. */
+  summarizeOnly?: boolean;
+
 };
 
 
@@ -84,6 +89,19 @@ function clipSnippet(value: string, max = 140): string {
 
 
 
+function summarizePlayerLine(
+  playerLine: string,
+  playerLabel: string,
+  playerMode?: OrchestratedMessage['playerMode'],
+): string {
+  const line = playerLine.trim();
+  if (!line) return '';
+  const punctuated = line.endsWith('.') || line.endsWith('!') || line.endsWith('?') ? line : `${line}.`;
+  if (playerMode === 'do') return `${playerLabel} ${punctuated}`;
+  if (playerMode === 'think') return `${playerLabel} thought: ${punctuated}`;
+  return `${playerLabel} said: "${line.replace(/^["']|["']$/g, '')}".`;
+}
+
 export function buildNarratorFallbackBeat(args: {
 
   userText: string;
@@ -94,31 +112,30 @@ export function buildNarratorFallbackBeat(args: {
 
   playerName?: string;
 
+  playerMode?: OrchestratedMessage['playerMode'];
+
 }): NarratorBeatResult {
 
-  const playerLine = clipSnippet(args.userText, 100);
+  const playerLine = clipSnippet(args.userText, 200);
 
-  const npcLine = clipSnippet(args.npcText, 160);
+  const npcLine = clipSnippet(args.npcText, 200);
 
   const playerLabel = args.playerName?.trim() || 'The player';
 
-
-
   const parts = [
 
-    playerLine
+    playerLine ? summarizePlayerLine(playerLine, playerLabel, args.playerMode) : '',
 
-      ? `${playerLabel} ${playerLine.endsWith('.') ? playerLine : `${playerLine}.`}`
-
-      : '',
-
-    npcLine ? `${args.npcName} ${npcLine.endsWith('.') ? npcLine : `${npcLine}.`}` : '',
+    npcLine ? `${args.npcName} said: "${npcLine.replace(/^["']|["']$/g, '')}".` : '',
 
   ].filter(Boolean);
 
-
-
-  return { text: parts.join(' '), completedTodoIds: [], stageComplete: false };
+  const text = normalizeNarratorSummary(parts.join(' ').trim(), !npcLine);
+  return {
+    text,
+    completedTodoIds: [],
+    stageComplete: false,
+  };
 
 }
 
@@ -154,11 +171,13 @@ export async function runNarratorBeat({
 
   completedTodoIds = [],
 
+  summarizeOnly = false,
+
 }: RunNarratorBeatArgs): Promise<NarratorBeatResult> {
 
   const fallback = () =>
 
-    buildNarratorFallbackBeat({ userText, npcText, npcName, playerName });
+    buildNarratorFallbackBeat({ userText, npcText, npcName, playerName, playerMode });
 
 
 
@@ -202,79 +221,120 @@ export async function runNarratorBeat({
 
 
 
-  const todoSection = formatOpenTodosForNarrator(arcStage, completedTodoIds);
+  const todoSection = summarizeOnly ? '' : formatOpenTodosForNarrator(arcStage, completedTodoIds);
 
-  const arcSection = arcStage
+  const arcSection =
+    summarizeOnly || !arcStage
+      ? ''
+      : [
+
+          `Current stage: ${arcStage.stageNumber}${arcStage.stageName ? ` — ${arcStage.stageName}` : ''}`,
+
+          arcStage.shortDescription ? `Stage note: ${arcStage.shortDescription}` : '',
+
+          todoSection ? `Stage todo goals:\n${todoSection}` : '',
+
+        ]
+
+          .filter(Boolean)
+
+          .join('\n');
+
+  const playerOnlyBeat = !npcText.trim();
+
+  const prompt = summarizeOnly
 
     ? [
 
-        `Current stage: ${arcStage.stageNumber}${arcStage.stageName ? ` — ${arcStage.stageName}` : ''}`,
+        'Summarize ONLY what happened on this turn.',
 
-        arcStage.shortDescription ? `Stage note: ${arcStage.shortDescription}` : '',
+        'Write one sentence when possible; never more than two short sentences.',
 
-        todoSection ? `Stage todo goals:\n${todoSection}` : '',
+        'Use third person past tense.',
+
+        'Restate the player line (and NPC line if present). Do not add new actions, dialogue, reactions, consequences, mood, or setting details that are not in the lines below.',
+
+        'Do not advance the plot, invent events, or say what happens next.',
+
+        'Do not assign points, stats, or rewards (that system is not active yet).',
+
+        '',
+
+        sceneSummary ? `Scene label:\n${sceneSummary}` : '',
+
+        '',
+
+        `Player turn (${formatSpeaker('user', playerMode, currentTurnNpcKnewPlayer)}):\n${userText}`,
+
+        playerOnlyBeat
+
+          ? ''
+
+          : `\nNPC turn (${npcName}):\n${npcText}`,
 
       ]
 
         .filter(Boolean)
 
-        .join('\n')
+        .join('\n\n')
 
-    : '';
+    : [
 
+        'Summarize ONLY what happened on this turn.',
 
+        'Write one sentence when possible; never more than two short sentences.',
 
-  const prompt = [
+        'Use third person past tense.',
 
-    'Write an observational narrator beat after this player/NPC exchange.',
+        'Restate what the player and NPC did or said. Do not invent new events, dialogue, or plot.',
 
-    'Recount what just happened in third person past tense (2–4 sentences).',
+        'Do not advance the story or say what happens next.',
 
-    'Include mood, body language, and setting — not new dialogue.',
+        todoSection
 
-    'Do not tell anyone what to do next or steer the scene. The player leads.',
+          ? 'Review the stage todo goals. If this exchange clearly completed any OPEN goals, append one line per goal: [DONE:todo-id]. If every goal for this stage is now done, also append [STAGE_COMPLETE] on its own line. Put these markers AFTER your summary.'
 
-    todoSection
+          : '',
 
-      ? 'Review the stage todo goals. If this exchange clearly completed any OPEN goals, append one line per goal: [DONE:todo-id]. If every goal for this stage is now done, also append [STAGE_COMPLETE] on its own line. Put these markers AFTER your narrator text.'
+        '',
 
-      : '',
+        storyContext ? `Story context:\n${storyContext}` : '',
 
-    '',
+        sceneSummary ? `Scene:\n${sceneSummary}` : '',
 
-    storyContext ? `Story context:\n${storyContext}` : '',
+        arcSection ? `Arc:\n${arcSection}` : '',
 
-    sceneSummary ? `Scene:\n${sceneSummary}` : '',
+        '',
 
-    arcSection ? `Arc:\n${arcSection}` : '',
+        `Latest ${formatSpeaker('user', playerMode, currentTurnNpcKnewPlayer)}:\n${userText}`,
 
-    '',
+        '',
 
-    `Latest ${formatSpeaker('user', playerMode, currentTurnNpcKnewPlayer)}:\n${userText}`,
+        playerOnlyBeat
 
-    '',
+          ? 'No NPC line this beat — summarize only the player turn above.'
 
-    `Latest ${formatSpeaker('agent')} (${npcName}):\n${npcText}`,
+          : `Latest ${formatSpeaker('agent')} (${npcName}):\n${npcText}`,
 
-    '',
+        '',
 
-    `Recent history:\n${history
+        `Recent history:\n${history
 
-      .slice(-8)
+          .slice(-8)
 
-      .map((msg) =>
+          .map((msg) =>
 
-        `${formatSpeaker(msg.from, msg.from === 'user' ? msg.playerMode : undefined, msg.npcKnewPlayer)}: ${msg.text}`,
+            `${formatSpeaker(msg.from, msg.from === 'user' ? msg.playerMode : undefined, msg.npcKnewPlayer)}: ${msg.text}`,
 
-      )
+          )
 
-      .join('\n')}`,
+          .join('\n')}`,
 
-  ]
+      ]
 
-    .filter(Boolean)
+        .filter(Boolean)
 
-    .join('\n\n');
+        .join('\n\n');
 
 
 
@@ -372,7 +432,10 @@ export async function runNarratorBeat({
 
     }
 
-    return parsed;
+    return {
+      ...parsed,
+      text: normalizeNarratorSummary(parsed.text, summarizeOnly && playerOnlyBeat),
+    };
 
   } catch (err) {
 

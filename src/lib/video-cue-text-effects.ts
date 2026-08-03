@@ -106,3 +106,41 @@ export function normalizeMomentDialogTextEffect(value: unknown): VideoCueTextEff
 export function videoCueTextEffectLabel(effect: VideoCueTextEffect): string {
   return VIDEO_CUE_TEXT_EFFECTS.find(entry => entry.id === effect)?.label ?? 'Plain';
 }
+
+export function normalizeVideoCueTextEffects(value: unknown): VideoCueTextEffect[] {
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map(item => normalizeVideoCueTextEffect(item))
+      .filter(effect => effect !== 'none');
+    return normalized;
+  }
+  if (typeof value === 'string') {
+    const single = normalizeMomentDialogTextEffect(value);
+    return single === 'none' ? [] : [single];
+  }
+  return [];
+}
+
+export function resolveActiveTextEffects(value: unknown): VideoCueTextEffect[] {
+  return normalizeVideoCueTextEffects(value);
+}
+
+export function toggleVideoCueTextEffect(
+  selected: VideoCueTextEffect[],
+  effect: VideoCueTextEffect,
+): VideoCueTextEffect[] {
+  if (effect === 'none') {
+    return [];
+  }
+  const next = new Set(selected.filter(entry => entry !== 'none'));
+  if (next.has(effect)) {
+    next.delete(effect);
+  } else {
+    next.add(effect);
+  }
+  return Array.from(next);
+}
+
+export function videoCueTextEffectsKey(effects: VideoCueTextEffect[]): string {
+  return effects.length > 0 ? effects.join('+') : 'none';
+}

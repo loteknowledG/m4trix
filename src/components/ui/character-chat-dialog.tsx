@@ -2,9 +2,21 @@
 
 import * as React from "react"
 import { X } from "@/components/icons"
-import { FaCog, FaTimes } from "react-icons/fa"
+import { VideoCueTextEffectView } from "@/components/text/video-cue-text-effect-view"
 import { cn } from "@/lib/utils"
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window"
+import {
+  characterDialogFontSize,
+  resolveCharacterDialogStyle,
+  type CharacterDialogStyle,
+} from "@/lib/character-dialog-style"
+import type { CharacterTtsVoice } from "@/lib/character-tts-profile"
+import { speakWithCharacterTtsVoice } from "@/lib/tts"
+import { videoCueTextEffectsKey } from "@/lib/video-cue-text-effects"
+import {
+  buildCueTextShadow,
+  resolveVideoCueFontFamily,
+} from "@/lib/video-timed-cues"
 
 type CharacterChatDialogProps = {
   open?: boolean
@@ -25,41 +37,14 @@ type CharacterChatDialogProps = {
   style?: React.CSSProperties
   playerMode?: 'say' | 'do' | 'think'
   onPlayerModeChange?: (mode: 'say' | 'do' | 'think') => void
-  textOptions?: TextOptions
-  onTextOptionsChange?: (options: TextOptions) => void
-}
-
-export type TextOptions = {
-  font: string
-  fontSize: number
-  textColor: string
-  bgColor: string
-}
-
-const DEFAULT_TEXT_OPTIONS: TextOptions = {
-  font: 'system',
-  fontSize: 14,
-  textColor: '#ffffff',
-  bgColor: 'transparent',
-}
-
-function resolveFontFamily(font?: string): string {
-  switch (font) {
-    case 'serif':
-      return 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif';
-    case 'mono':
-      return 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
-    case 'cursive':
-      return 'cursive';
-    case 'mrs':
-      return '"Mrs Saint Delafield", cursive';
-    case 'satisfy':
-      return 'Satisfy, cursive';
-    case 'crafty':
-      return '"Crafty Girls", cursive';
-    default:
-      return 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-  }
+  dialogStyle?: CharacterDialogStyle
+  /** Style for incoming agent lines (the other character speaking in this panel). */
+  agentDialogStyle?: CharacterDialogStyle
+  ttsVoice?: CharacterTtsVoice
+  /** Voice for incoming agent lines in this panel. */
+  agentTtsVoice?: CharacterTtsVoice
+  /** Twitter-style character cap for the input (shown with counter). */
+  inputMaxLength?: number
 }
 
 const PANEL_STORAGE_KEY = 'm4trix:game-panel-state'
@@ -103,15 +88,22 @@ export function CharacterChatDialog({
   style,
   playerMode = 'say',
   onPlayerModeChange,
-  textOptions = DEFAULT_TEXT_OPTIONS,
-  onTextOptionsChange,
+  dialogStyle,
+  agentDialogStyle,
+  ttsVoice,
+  agentTtsVoice,
+  inputMaxLength,
 }: CharacterChatDialogProps) {
+  const resolvedPanelStyle = resolveCharacterDialogStyle(dialogStyle)
+  const resolvedAgentPanelStyle = resolveCharacterDialogStyle(agentDialogStyle ?? dialogStyle)
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null)
   const [size, setSize] = React.useState<{ width: number; height: number } | null>(null)
-  const [showSettings, setShowSettings] = React.useState(false)
   const draggingRef = React.useRef<{ startX: number; startY: number; left: number; top: number } | null>(null)
   const resizingRef = React.useRef<{ startX: number; startY: number; width: number; height: number } | null>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
+  const lastSpokenIdRef = React.useRef<string | null>(null)
+  const speakTimerRef = React.useRef<number | null>(null)
+  const speakSequenceRef = React.useRef(0)
 
   const DEFAULT_WIDTH = 360
   const DEFAULT_HEIGHT = 480
@@ -185,7 +177,6 @@ export function CharacterChatDialog({
   }, [])
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
-    // Don't start drag if clicking a button inside the header
     const target = e.target as HTMLElement;
     if (target.closest('button')) return;
     if (target.closest('textarea, input')) return;
@@ -211,6 +202,19 @@ export function CharacterChatDialog({
     e.stopPropagation()
   }
 
+  const handleInputChange = (value: string) => {
+    if (inputMaxLength != null && value.length > inputMaxLength) {
+      onInputChange(value.slice(0, inputMaxLength))
+      return
+    }
+    onInputChange(value)
+  }
+
+  const inputLength = input.length
+  const inputNearLimit =
+    inputMaxLength != null && inputLength >= Math.max(0, inputMaxLength - 20)
+  const inputOverLimit = inputMaxLength != null && inputLength >= inputMaxLength
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -221,6 +225,69 @@ export function CharacterChatDialog({
   }
 
   const activeBorderColor = isActive ? 'border-l-4 border-l-cyan-400' : ''
+
+  const latestSpeakableMessage = [...messages]
+    .reverse()
+    .find(
+      (msg) =>
+        (msg.from === "user" || msg.from === "agent") &&
+        !msg.id.startsWith("pending-") &&
+        !msg.id.startsWith("streaming-") &&
+        msg.text.trim() &&
+        msg.text.trim() !== "…",
+    )
+
+  React.useEffect(() => {
+    if (!latestSpeakableMessage) return
+
+    if (speakTimerRef.current) {
+      window.clearTimeout(speakTimerRef.current)
+      speakTimerRef.current = null
+    }
+
+    if (latestSpeakableMessage.id === lastSpokenIdRef.current) return
+
+    const sequence = ++speakSequenceRef.current
+    speakTimerRef.current = window.setTimeout(() => {
+      if (sequence !== speakSequenceRef.current) return
+      const speechText = latestSpeakableMessage.text.trim()
+      if (!speechText || speechText === "…") return
+
+      lastSpokenIdRef.current = latestSpeakableMessage.id
+      const messageVoice =
+        latestSpeakableMessage.from === "user"
+          ? latestSpeakableMessage.ttsVoice ?? ttsVoice
+          : latestSpeakableMessage.ttsVoice ?? agentTtsVoice ?? ttsVoice
+      const legacyProfile = latestSpeakableMessage.ttsVoice?.profileId
+        ? undefined
+        : latestSpeakableMessage.ttsProfile
+      void speakWithCharacterTtsVoice(
+        speechText,
+        messageVoice ?? undefined,
+        legacyProfile,
+        { allowFallback: true },
+      )
+    }, 350)
+
+    return () => {
+      if (speakTimerRef.current) {
+        window.clearTimeout(speakTimerRef.current)
+        speakTimerRef.current = null
+      }
+    }
+  }, [
+    agentTtsVoice,
+    latestSpeakableMessage?.from,
+    latestSpeakableMessage?.id,
+    latestSpeakableMessage?.text,
+    messages,
+    ttsVoice,
+  ])
+
+  const resolveMessageStyle = (msg: CustomChatMessage) => {
+    if (msg.dialogStyle) return resolveCharacterDialogStyle(msg.dialogStyle)
+    return msg.from === 'agent' ? resolvedAgentPanelStyle : resolvedPanelStyle
+  }
 
   if (!open) return null
 
@@ -263,11 +330,9 @@ export function CharacterChatDialog({
           className="flex items-center gap-2 min-w-0 flex-1 cursor-grab"
           onMouseDown={handleHeaderMouseDown}
         >
-          {/* Avatar */}
           {avatarUrl && (
             <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
           )}
-          {/* Click area for activation */}
           <button
             type="button"
             onMouseDown={(e) => e.stopPropagation()}
@@ -301,28 +366,22 @@ export function CharacterChatDialog({
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 relative">
-        {isActive && (
-          <button
-            type="button"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowSettings(true);
-            }}
-            className="absolute top-1 right-1 z-10 h-6 w-6 flex items-center justify-center rounded-full bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-white/20"
-            aria-label="Text settings"
-            title="Text settings"
-          >
-            <FaCog className="h-3 w-3" />
-          </button>
-        )}
-
         {messages.length === 0 ? (
           <div className="text-center text-zinc-500 text-sm py-8">
             {isActive ? "Type a message to start the conversation..." : "Waiting for other characters..."}
           </div>
         ) : (
-          messages.map((msg) => (
+          messages.map((msg) => {
+            const messageStyle = resolveMessageStyle(msg)
+            const messageFontSize = characterDialogFontSize(messageStyle.fontScale, true)
+            const speakerColor =
+              messageStyle.speakerColor ??
+              (characterName === 'Narrator' ? '#fcd34d' : '#7dd3fc')
+            const speakerLabel =
+              msg.name?.trim() ||
+              (msg.from === 'user' ? characterName : 'AI')
+
+            return (
             <div
               key={msg.id}
               className={cn(
@@ -331,116 +390,36 @@ export function CharacterChatDialog({
                   ? "ml-auto"
                   : "mr-auto"
               )}
-              style={{
-                fontFamily: resolveFontFamily(textOptions.font),
-                fontSize: `${textOptions.fontSize}px`,
-                color: textOptions.textColor,
-                backgroundColor: textOptions.bgColor,
-              }}
             >
-              <div className="text-xs opacity-60 mb-0.5">{msg.from === 'user' ? characterName : 'AI'}</div>
-              <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+              <div
+                className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-90"
+                style={{
+                  color: speakerColor,
+                  textShadow: buildCueTextShadow(messageStyle.shadowColor),
+                }}
+              >
+                {speakerLabel}
+              </div>
+              <div
+                className="whitespace-pre-wrap break-words leading-relaxed"
+                style={{
+                  fontFamily: resolveVideoCueFontFamily(messageStyle.font),
+                  fontSize: messageFontSize,
+                  color: messageStyle.color,
+                  textShadow: buildCueTextShadow(messageStyle.shadowColor),
+                }}
+              >
+                <VideoCueTextEffectView
+                  key={videoCueTextEffectsKey(messageStyle.textEffects)}
+                  text={msg.text}
+                  effects={messageStyle.textEffects}
+                />
+              </div>
             </div>
-          ))
+            )
+          })
         )}
       </div>
-
-      {/* Settings Modal */}
-      {showSettings && isActive && (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-lg"
-          onClick={() => setShowSettings(false)}
-        >
-          <div
-            className="w-64 rounded-lg bg-zinc-900 border border-zinc-700 p-4 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-zinc-200">Text Format</span>
-              <button
-                type="button"
-                onClick={() => setShowSettings(false)}
-                className="text-zinc-400 hover:text-white"
-              >
-                <FaTimes className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-zinc-400">Font</label>
-              <select
-                value={textOptions.font}
-                onChange={(e) => onTextOptionsChange?.({ ...textOptions, font: e.target.value })}
-                className="w-full px-2 py-1 text-xs rounded bg-zinc-800 text-white border border-zinc-600"
-              >
-                <option value="system">System Sans</option>
-                <option value="serif">Serif</option>
-                <option value="mono">Monospace</option>
-                <option value="cursive">Cursive</option>
-                <option value="mrs">Mrs Saint Delafield</option>
-                <option value="satisfy">Satisfy</option>
-                <option value="crafty">Crafty Girls</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-zinc-400">Size: {textOptions.fontSize}px</label>
-              <input
-                type="range"
-                min={10}
-                max={32}
-                value={textOptions.fontSize}
-                onChange={(e) => onTextOptionsChange?.({ ...textOptions, fontSize: Number(e.target.value) })}
-                className="w-full"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-zinc-400">Text Color</label>
-              <div className="flex gap-1 flex-wrap">
-                {['#ffffff', '#000000', '#ff5555', '#55ff55', '#5555ff', '#ffff55', '#ff55ff', '#55ffff'].map(c => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => onTextOptionsChange?.({ ...textOptions, textColor: c })}
-                    className={cn(
-                      "w-6 h-6 rounded border-2",
-                      textOptions.textColor === c ? "border-cyan-400" : "border-zinc-600"
-                    )}
-                    style={{ backgroundColor: c }}
-                    aria-label={`Text color ${c}`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-zinc-400">Background</label>
-              <div className="flex gap-1 flex-wrap">
-                {['transparent', '#000000', '#1f2937', '#374151', '#7c3aed', '#dc2626', '#059669'].map(c => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => onTextOptionsChange?.({ ...textOptions, bgColor: c })}
-                    className={cn(
-                      "w-6 h-6 rounded border-2",
-                      textOptions.bgColor === c ? "border-cyan-400" : "border-zinc-600",
-                      c === 'transparent' && "bg-[linear-gradient(45deg,#ccc_25%,transparent_25%,transparent_75%,#ccc_75%)]"
-                    )}
-                    style={c !== 'transparent' ? { backgroundColor: c } : {}}
-                    aria-label={`Background ${c}`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-zinc-700">
-              <p className="text-[10px] text-zinc-500">Changes apply to messages in this dialog.</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Input area - only show if active */}
       {isActive && (
@@ -465,10 +444,15 @@ export function CharacterChatDialog({
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => onInputChange(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Speak as ${characterName}...`}
+              placeholder={
+                inputMaxLength != null
+                  ? `Speak as ${characterName} (max ${inputMaxLength} chars)...`
+                  : `Speak as ${characterName}...`
+              }
               disabled={disabled}
+              maxLength={inputMaxLength}
               className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-cyan-500 disabled:opacity-50"
               rows={2}
             />
@@ -480,6 +464,21 @@ export function CharacterChatDialog({
               Send
             </button>
           </div>
+          {inputMaxLength != null ? (
+            <div
+              className={cn(
+                "mt-1 text-right text-[10px] tabular-nums",
+                inputOverLimit
+                  ? "text-red-400"
+                  : inputNearLimit
+                    ? "text-amber-400"
+                    : "text-zinc-500",
+              )}
+              aria-live="polite"
+            >
+              {inputLength}/{inputMaxLength}
+            </div>
+          ) : null}
         </div>
       )}
 

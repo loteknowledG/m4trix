@@ -1,0 +1,241 @@
+{
+  "American English": {
+    "emoji": "🇺🇸",
+    "female": [
+      {
+        "code": "af_heart",
+        "name": "❤️ Heart"
+      },
+      {
+        "code": "af_bella",
+        "name": "🔥 Bella"
+      },
+      {
+        "code": "af_nicole",
+        "name": "🎧 Nicole"
+      },
+      {
+        "code": "af_aoede",
+        "name": "Aoede"
+      },
+      {
+        "code": "af_kore",
+        "name": "Kore"
+      },
+      {
+        "code": "af_sarah",
+        "name": "Sarah"
+      },
+      {
+        "code": "af_nova",
+        "name": "Nova"
+      },
+      {
+        "code": "af_sky",
+        "name": "Sky"
+      },
+      {
+        "code": "af_alloy",
+        "name": "Alloy"
+      },
+      {
+        "code": "af_jessica",
+        "name": "Jessica"
+      },
+      {
+        "code": "af_river",
+        "name": "River"
+      }
+    ],
+    "male": [
+      {
+        "code": "am_michael",
+        "name": "Michael"
+      },
+      {
+        "code": "am_fenrir",
+        "name": "Fenrir"
+      },
+      {
+        "code": "am_puck",
+        "name": "Puck"
+      },
+      {
+        "code": "am_echo",
+        "name": "Echo"
+      },
+      {
+        "code": "am_eric",
+        "name": "Eric"
+      },
+      {
+        "code": "am_liam",
+        "name": "Liam"
+      },
+      {
+        "code": "am_onyx",
+        "name": "Onyx"
+      },
+      {
+        "code": "am_santa",
+        "name": "🎅 Santa"
+      },
+      {
+        "code": "am_adam",
+        "name": "Adam"
+      }
+    ]
+  },
+  "British English": {
+    "emoji": "🇬🇧",
+    "female": [
+      {
+        "code": "bf_emma",
+        "name": "Emma"
+      },
+      {
+        "code": "bf_isabella",
+        "name": "Isabella"
+      },
+      {
+        "code": "bf_alice",
+        "name": "Alice"
+      },
+      {
+        "code": "bf_lily",
+        "name": "Lily"
+      }
+    ],
+    "male": [
+      {
+        "code": "bm_george",
+        "name": "George"
+      },
+      {
+        "code": "bm_fable",
+        "name": "Fable"
+      },
+      {
+        "code": "bm_lewis",
+        "name": "Lewis"
+      },
+      {
+        "code": "bm_daniel",
+        "name": "Daniel"
+      }
+    ]
+  },
+  "Japanese": {
+    "emoji": "🇯🇵",
+    "female": [
+      {
+        "code": "jf_alpha",
+        "name": "Alpha"
+      },
+      {
+        "code": "jf_gongitsune",
+        "name": "Gongitsune"
+      },
+      {
+        "code": "jf_nezumi",
+        "name": "Nezumi"
+      },
+      {
+        "code": "jf_tebukuro",
+        "name": "Tebukuro"
+      }
+    ],
+    "male": [
+      {
+        "code": "jm_kumo",
+        "name": "Kumo"
+      }
+    ]
+  },
+  "Spanish": {
+    "emoji": "🇪🇸",
+    "female": [
+      {
+        "code": "ef_dora",
+        "name": "Dora"
+      }
+    ],
+    "male": [
+      {
+        "code": "em_alex",
+        "name": "Alex"
+      },
+      {
+        "code": "em_santa",
+        "name": "🎅 Santa"
+      }
+    ]
+  },
+  "French": {
+    "emoji": "🇫🇷",
+    "female": [
+      {
+        "code": "ff_siwis",
+        "name": "Siwis"
+      }
+    ],
+    "male": []
+  },
+  "Italian": {
+    "emoji": "🇮🇹",
+    "female": [
+      {
+        "code": "if_sara",
+        "name": "Sara"
+      }
+    ],
+    "male": [
+      {
+        "code": "im_nicola",
+        "name": "Nicola"
+      }
+    ]
+  },
+  "Portuguese (Brazil)": {
+    "emoji": "🇧🇷",
+    "female": [
+      {
+        "code": "pf_dora",
+        "name": "Dora"
+      }
+    ],
+    "male": [
+      {
+        "code": "pm_alex",
+        "name": "Alex"
+      },
+      {
+        "code": "pm_santa",
+        "name": "🎅 Santa"
+      }
+    ]
+  },
+  "Hindi": {
+    "emoji": "🇮🇳",
+    "female": [
+      {
+        "code": "hf_alpha",
+        "name": "Alpha"
+      },
+      {
+        "code": "hf_beta",
+        "name": "Beta"
+      }
+    ],
+    "male": [
+      {
+        "code": "hm_omega",
+        "name": "Omega"
+      },
+      {
+        "code": "hm_psi",
+        "name": "Psi"
+      }
+    ]
+  }
+}

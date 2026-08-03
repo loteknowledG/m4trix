@@ -14,13 +14,15 @@ export const NARRATOR_AGENT: Agent = {
 
   description: [
 
-    'Third-person observational narrator for an interactive story.',
+    'Turn-summary narrator only.',
 
-    'After each player/NPC exchange, recount what just happened in 2–4 sentences.',
+    'Restate what the player (and NPC, if any) did or said on this turn in one sentence when possible, never more than two.',
 
-    'Describe mood and physical beats only — never dialogue, never directions, never what should happen next.',
+    'Third person past tense.',
 
-    'The player leads the scene; the narrator does not advance or steer it.',
+    'Never invent actions, dialogue, reactions, or plot.',
+
+    'Never advance the story or say what happens next.',
 
   ].join(' '),
 

@@ -782,14 +782,14 @@ export default function CharactersPage() {
               <CustomChatWindow
                 messages={messages.map(m => {
                   const isUser = m.from === 'user';
-                  const avatarUrl = isUser
-                    ? prompterAgent?.avatarUrl
-                    : agentsById[m.from as string]?.avatarUrl;
+                  const agent = isUser ? null : agentsById[m.from as string];
+                  const avatarUrl = isUser ? prompterAgent?.avatarUrl : agent?.avatarUrl;
                   return {
                     id: m.id,
                     from: isUser ? 'user' : 'agent',
                     text: m.text,
                     avatarUrl,
+                    ttsVoice: agent?.ttsVoice,
                   };
                 })}
                 input={prompt}
@@ -799,7 +799,6 @@ export default function CharactersPage() {
                 sendIcon={<Send className="h-4 w-4" />}
                 playerMode={playerMode}
                 onPlayerModeChange={v => setPlayerMode(v)}
-                ttsProfile="muthur"
               />
             </div>
             {error && (

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
+import { videoCueTextEffectsKey } from '@/lib/video-cue-text-effects';
 import {
   buildCueTextShadow,
   commitCueEndTime,
@@ -149,7 +150,6 @@ function SelectedMomentLineEditor({
   onRemove: () => void;
 }) {
   const style = resolveMomentDialogLineStyle(line);
-  const effect = style.textEffect;
   const timing = resolveMomentLineTiming(line);
 
   return (
@@ -271,7 +271,7 @@ function SelectedMomentLineEditor({
 
       <DialogLineStyleEditor
         values={{
-          textEffect: style.textEffect,
+          textEffects: style.textEffects,
           font: style.font,
           fontScale: style.fontScale,
           color: style.color,
@@ -293,11 +293,11 @@ function SelectedMomentLineEditor({
         >
           <VideoCueTextEffectView
             text={line.text}
-            effect={effect}
+            effects={style.textEffects}
             color={style.color}
             shadowColor={style.shadowColor}
             lineKey={line.id}
-            replayKey={`${line.id}-${effect}-preview`}
+            replayKey={`${line.id}-${videoCueTextEffectsKey(style.textEffects)}-preview`}
             className="text-inherit"
           />
         </div>

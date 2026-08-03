@@ -1,5 +1,11 @@
 import { get } from "idb-keyval";
 
+import type { CharacterDialogStyle } from "@/lib/character-dialog-style";
+import { normalizeCharacterDialogStyle } from "@/lib/character-dialog-style";
+import {
+  normalizeCharacterTtsVoice,
+  type CharacterTtsVoice,
+} from "@/lib/character-tts-profile";
 import { storyTextForPrompt } from "@/lib/game/story-moments";
 import { formatPlayerMemoryLabel, type PlayerMode } from "@/lib/player-mode";
 import { stripHtmlImages } from "@/lib/agents/providers";
@@ -12,6 +18,8 @@ export type GameCharacterContext = {
   description: string;
   appearance?: string;
   avatarUrl?: string;
+  dialogStyle?: CharacterDialogStyle;
+  ttsVoice?: CharacterTtsVoice;
 } | null;
 
 export function formatGameSpeakerLabel(
@@ -109,6 +117,8 @@ export async function resolveGameAgentContext(params: {
             description: npc.description ?? "",
             appearance: typeof storyMeta?.npcAppearance === "string" ? storyMeta.npcAppearance : "",
             avatarUrl: npc.avatarUrl,
+            dialogStyle: normalizeCharacterDialogStyle(npc.dialogStyle),
+            ttsVoice: normalizeCharacterTtsVoice(npc.ttsVoice, npc.ttsProfile),
           }
         : assignedNpc;
       currentPlayer = player
@@ -119,6 +129,8 @@ export async function resolveGameAgentContext(params: {
             appearance:
               typeof storyMeta?.playerAppearance === "string" ? storyMeta.playerAppearance : "",
             avatarUrl: player.avatarUrl,
+            dialogStyle: normalizeCharacterDialogStyle(player.dialogStyle),
+            ttsVoice: normalizeCharacterTtsVoice(player.ttsVoice, player.ttsProfile),
           }
         : assignedPlayer;
 

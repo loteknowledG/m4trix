@@ -1,14 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { Button } from '@/components/ui/button';
+import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
+import { CharacterTtsProfileEditor } from '@/components/character-tts-profile-editor';
 import { ContentLayout } from '@/components/admin-panel/content-layout';
 import { DescriptionEditor } from '@/components/description-editor';
 import { cn } from '@/lib/utils';
-import { Trash2, ChevronLeft } from '@/components/icons';
+import {
+  normalizeCharacterDialogStyle,
+  resolveCharacterDialogStyle,
+  type CharacterDialogStyle,
+} from '@/lib/character-dialog-style';
+import {
+  normalizeCharacterTtsVoice,
+  resolveCharacterTtsVoice,
+  type CharacterTtsVoice,
+} from '@/lib/character-tts-profile';
+import { AvatarCropDialog } from '@/app/(site)/characters/avatar-crop-dialog';
+import {
+  avatarCropPortraitStyle,
+  avatarCropPortraitWorkspacePx,
+} from '@/app/(site)/characters/avatar-crop-math';
+import { useAvatarCropper } from '@/app/(site)/characters/use-avatar-cropper';
+import { Trash2, ChevronLeft, ImagePlus, User } from '@/components/icons';
+import { getImageFileFromPasteEvent } from '@/lib/clipboard-image';
+import { toast } from 'sonner';
 
 type Agent = {
   id: string;
@@ -20,9 +40,16 @@ type Agent = {
     y: number;
     zoom: number;
   };
+  dialogStyle?: CharacterDialogStyle;
+  ttsVoice?: CharacterTtsVoice;
+  /** @deprecated migrated to ttsVoice */
+  ttsProfile?: string;
 };
 
 const AGENTS_KEY = 'PLAYGROUND_AGENTS';
+const PORTRAIT_SIZE_PX = 160;
+const PORTRAIT_WORKSPACE_PX = avatarCropPortraitWorkspacePx(PORTRAIT_SIZE_PX);
+const PORTRAIT_WORKSPACE_OFFSET_PX = (PORTRAIT_SIZE_PX - PORTRAIT_WORKSPACE_PX) / 2;
 
 function normalizeDescription(value: string) {
   if (!value) return '';
@@ -43,8 +70,86 @@ export default function CharacterDetailClient() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [descriptionValue, setDescriptionValue] = useState('');
-  const [isDragActive, setIsDragActive] = useState(false);
-  const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0, zoom: 1 });
+  const [dialogStyle, setDialogStyle] = useState<CharacterDialogStyle>({});
+  const [ttsVoice, setTtsVoice] = useState<CharacterTtsVoice>(resolveCharacterTtsVoice(null));
+  const [avatarDragActive, setAvatarDragActive] = useState(false);
+  const lastSavedStyleRef = useRef<string>('');
+
+  const persistAgentRecord = useCallback(async (record: Agent) => {
+    const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
+    const trimmedName = nameValue.trim() || 'Untitled';
+    const trimmedDescription = descriptionValue.trim();
+    const normalizedDialogStyle = normalizeCharacterDialogStyle(dialogStyle);
+    const normalizedTtsVoice = normalizeCharacterTtsVoice(ttsVoice);
+    const saved: Agent = {
+      ...record,
+      name: trimmedName,
+      description: trimmedDescription,
+      dialogStyle: normalizedDialogStyle,
+      ttsVoice: normalizedTtsVoice,
+      ttsProfile: undefined,
+    };
+    const updated = (stored ?? []).map(a => (a.id === saved.id ? saved : a));
+    await idbSet(AGENTS_KEY, updated);
+    setAgent(saved);
+    lastSavedStyleRef.current = JSON.stringify({
+      dialogStyle: normalizedDialogStyle ?? {},
+      ttsVoice: normalizedTtsVoice,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('characters-updated'));
+    }
+  }, [descriptionValue, dialogStyle, nameValue, ttsVoice]);
+
+  const updateAgentAvatar = useCallback(
+    (id: string, updates: Partial<Pick<Agent, 'avatarUrl' | 'avatarCrop'>>) => {
+      if (!agent || agent.id !== id) return;
+      void persistAgentRecord({ ...agent, ...updates }).then(() => {
+        toast.success('Avatar portrait updated.');
+      });
+    },
+    [agent, persistAgentRecord],
+  );
+
+  const {
+    applyGifImmediately,
+    clearCropper,
+    crop,
+    croppingImage,
+    handleApplyCrop,
+    handleAvatarUpload,
+    isGif,
+    isHoveringEdge,
+    setCrop,
+    setIsHoveringEdge,
+  } = useAvatarCropper<Agent>({
+    updateAgent: updateAgentAvatar,
+    updatePrompterAgent: () => {},
+  });
+
+  const saveAgent = useCallback(async (updatedAgent?: Agent) => {
+    if (!agent && !updatedAgent) return;
+    const currentAgent = updatedAgent ?? agent;
+    if (!currentAgent) return;
+    await persistAgentRecord(currentAgent);
+  }, [agent, persistAgentRecord]);
+
+  useEffect(() => {
+    if (loading || !agent) return;
+
+    const serialized = JSON.stringify({
+      dialogStyle: normalizeCharacterDialogStyle(dialogStyle) ?? {},
+      ttsVoice: normalizeCharacterTtsVoice(ttsVoice),
+    });
+    if (serialized === lastSavedStyleRef.current) return;
+
+    const saveTimer = window.setTimeout(() => {
+      void saveAgent();
+    }, 350);
+
+    return () => window.clearTimeout(saveTimer);
+  }, [agent, dialogStyle, loading, saveAgent, ttsVoice]);
 
   useEffect(() => {
     if (!agentId) {
@@ -62,6 +167,14 @@ export default function CharacterDetailClient() {
         setAgent(found);
         setNameValue(found.name);
         setDescriptionValue(normalizeDescription(found.description));
+        const loadedDialogStyle = normalizeCharacterDialogStyle(found.dialogStyle) ?? {};
+        const loadedTtsVoice = resolveCharacterTtsVoice(found.ttsVoice, found.ttsProfile);
+        setDialogStyle(loadedDialogStyle);
+        setTtsVoice(loadedTtsVoice);
+        lastSavedStyleRef.current = JSON.stringify({
+          dialogStyle: loadedDialogStyle,
+          ttsVoice: loadedTtsVoice,
+        });
         setIsEditingName(found.name.trim() === '');
       } else {
         const newAgent = {
@@ -76,7 +189,12 @@ export default function CharacterDetailClient() {
         setAgent(newAgent);
         setNameValue('');
         setDescriptionValue('');
-        setAvatarCrop({ x: 0, y: 0, zoom: 1 });
+        setDialogStyle({});
+        setTtsVoice(resolveCharacterTtsVoice(null));
+        lastSavedStyleRef.current = JSON.stringify({
+          dialogStyle: {},
+          ttsVoice: resolveCharacterTtsVoice(null),
+        });
         setIsEditingName(true);
       }
 
@@ -144,76 +262,38 @@ export default function CharacterDetailClient() {
     );
   }
 
-  const saveAgent = async (updatedAgent?: Agent) => {
-    if (!agent && !updatedAgent) return;
-    const stored = (await idbGet(AGENTS_KEY)) as Agent[] | undefined;
-    const currentAgent = updatedAgent ?? agent;
-    if (!currentAgent) return;
-    const trimmedName = nameValue.trim() || 'Untitled';
-    const trimmedDescription = descriptionValue.trim();
-    const updated = (stored ?? []).map(a =>
-      a.id === currentAgent.id
-        ? {
-            ...a,
-            name: trimmedName,
-            description: trimmedDescription,
-            avatarUrl: currentAgent.avatarUrl,
-          }
-        : a
-    );
-    await idbSet(AGENTS_KEY, updated);
-    const nextAgent = {
-      ...currentAgent,
-      name: trimmedName,
-      description: trimmedDescription,
-      avatarUrl: currentAgent.avatarUrl,
-      avatarCrop: avatarCrop,
-    };
-
-    setAgent(nextAgent);
-    setAvatarCrop(currentAgent.avatarCrop ?? { x: 0, y: 0, zoom: 1 });
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('characters-updated'));
-    }
+  const queueAvatarPortrait = (file: File) => {
+    if (!agent) return;
+    handleAvatarUpload(file, agent.id);
+    toast.success('Opening avatar crop…');
   };
 
-  const persistAvatar = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-
-    const reader = new FileReader();
-    reader.onload = async event => {
-      const dataUrl = event.target?.result as string;
-      if (!agent) return;
-      const updatedAgent = {
-        ...agent,
-        avatarUrl: dataUrl,
-      };
-      setAgent(updatedAgent);
-      await saveAgent(updatedAgent);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+  const onAvatarDragEnter = (e: DragEvent<HTMLLabelElement>) => {
+    if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragActive(true);
+    setAvatarDragActive(true);
   };
 
-  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragActive(false);
+  const onAvatarDragLeave = (e: DragEvent<HTMLLabelElement>) => {
+    if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return;
+    setAvatarDragActive(false);
   };
 
-  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+  const onAvatarDragOver = (e: DragEvent<HTMLLabelElement>) => {
+    if (!e.dataTransfer?.types || !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragActive(false);
+    e.dataTransfer.dropEffect = 'copy';
+    setAvatarDragActive(true);
+  };
+
+  const onAvatarDrop = (e: DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setAvatarDragActive(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      persistAvatar(file);
+      queueAvatarPortrait(file);
     }
   };
 
@@ -271,16 +351,10 @@ export default function CharacterDetailClient() {
   return (
     <ContentLayout title="" navLeft={navLeft} navRight={navRight}>
       <div className="flex h-[calc(100vh_-_var(--app-header-height,_56px)_-_4rem)] min-h-0 flex-col overflow-hidden">
-        <div
-          className={cn(
-            'flex-1 min-h-0 overflow-y-auto rounded-lg border border-dashed p-6',
-            isDragActive ? 'border-primary bg-primary/10' : 'border-transparent'
-          )}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-        >
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-lg p-6">
           <div className="w-full space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
           {isEditingName ? (
             <input
               className="w-full text-5xl font-light bg-transparent border border-zinc-600 rounded px-3 py-2"
@@ -309,27 +383,152 @@ export default function CharacterDetailClient() {
               {nameValue.trim() ? nameValue : 'Untitled'}
             </h1>
           )}
-          <DescriptionEditor
-            className="character-description-editor"
-            value={descriptionValue}
-            onChange={setDescriptionValue}
-            onBlur={() => {
-              void saveAgent();
-            }}
-            placeholder="No description"
-          />
-          {agent?.avatarUrl && (
-            <div className="mx-auto relative mt-4 h-56 w-56 overflow-hidden rounded-lg border border-zinc-700">
-              <img
-                src={agent.avatarUrl}
-                alt="Character avatar"
-                className="h-full w-full object-cover"
+            </div>
+
+            <div className="flex shrink-0 flex-col items-center gap-2 sm:items-end">
+              <span className="text-xs font-medium text-zinc-400">Avatar portrait</span>
+            <label
+              className={cn(
+                'group relative flex h-40 w-40 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/60',
+                'border-zinc-600/80 bg-zinc-950/40 hover:border-zinc-500',
+                avatarDragActive &&
+                  'border-cyan-400 border-solid bg-cyan-500/15 shadow-[0_0_0_2px_rgba(34,211,238,0.45)] ring-2 ring-cyan-300/50',
+              )}
+              tabIndex={0}
+              title="Drop an image to set avatar portrait, paste from clipboard, or click to choose a file"
+              onPaste={e => {
+                const file = getImageFileFromPasteEvent(e);
+                if (!file) return;
+                e.preventDefault();
+                queueAvatarPortrait(file);
+              }}
+              onDragEnter={onAvatarDragEnter}
+              onDragLeave={onAvatarDragLeave}
+              onDragOver={onAvatarDragOver}
+              onDrop={onAvatarDrop}
+            >
+              {agent.avatarUrl ? (
+                agent.avatarCrop ? (
+                  <div
+                    className="absolute aspect-square"
+                    style={{
+                      width: PORTRAIT_WORKSPACE_PX,
+                      height: PORTRAIT_WORKSPACE_PX,
+                      left: PORTRAIT_WORKSPACE_OFFSET_PX,
+                      top: PORTRAIT_WORKSPACE_OFFSET_PX,
+                    }}
+                  >
+                    <img
+                      src={agent.avatarUrl}
+                      alt=""
+                      draggable={false}
+                      className="pointer-events-none h-full w-full max-w-none object-contain"
+                      style={avatarCropPortraitStyle(agent.avatarCrop, PORTRAIT_SIZE_PX)}
+                    />
+                  </div>
+                ) : (
+                  <img
+                    src={agent.avatarUrl}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                )
+              ) : (
+                <User className="h-14 w-14 text-zinc-600" aria-hidden />
+              )}
+              <div
+                className={cn(
+                  'absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center transition-opacity',
+                  avatarDragActive
+                    ? 'bg-cyan-950/80 opacity-100'
+                    : agent.avatarUrl
+                      ? 'bg-black/50 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'
+                      : 'bg-black/25 opacity-100',
+                )}
+              >
+                <ImagePlus
+                  className={cn(
+                    'h-7 w-7 text-zinc-300 drop-shadow',
+                    avatarDragActive && 'text-cyan-100',
+                  )}
+                />
+                <span
+                  className={cn(
+                    'text-[10px] font-semibold uppercase tracking-wide text-zinc-300',
+                    avatarDragActive && 'text-cyan-50',
+                  )}
+                >
+                  {avatarDragActive ? 'Drop portrait' : 'Avatar portrait'}
+                </span>
+                <span className="text-[9px] leading-tight text-zinc-400">
+                  Drop, click, or paste
+                </span>
+              </div>
+              <input
+                type="file"
+                className="hidden"
+                accept="image/*"
+                aria-label="Upload avatar portrait"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) queueAvatarPortrait(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            </div>
+          </div>
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-medium text-zinc-300">Description & dialog style</h2>
+              <p className="text-xs text-zinc-500">
+                Edit the description on the left — styling updates live as you adjust controls.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+              <DescriptionEditor
+                className="character-description-editor lg:sticky lg:top-4"
+                value={descriptionValue}
+                onChange={setDescriptionValue}
+                onBlur={() => {
+                  void saveAgent();
+                }}
+                placeholder="No description"
+                dialogStyle={dialogStyle}
+              />
+              <DialogLineStyleEditor
+                values={resolveCharacterDialogStyle(dialogStyle)}
+                onChange={patch => {
+                  setDialogStyle(prev => ({ ...prev, ...patch }));
+                }}
+              />
+              <CharacterTtsProfileEditor
+                value={ttsVoice}
+                previewText={
+                  nameValue.trim()
+                    ? `Hello. I'm ${nameValue.trim()}. This is how I will sound.`
+                    : undefined
+                }
+                onChange={setTtsVoice}
               />
             </div>
-          )}
+          </section>
         </div>
       </div>
       </div>
+
+      <AvatarCropDialog
+        open={Boolean(croppingImage)}
+        croppingImage={croppingImage}
+        crop={crop}
+        setCrop={setCrop}
+        isGif={isGif}
+        isHoveringEdge={isHoveringEdge}
+        setIsHoveringEdge={setIsHoveringEdge}
+        onApplyCrop={handleApplyCrop}
+        onApplyGifImmediately={applyGifImmediately}
+        onClose={clearCropper}
+      />
     </ContentLayout>
   );
 }
