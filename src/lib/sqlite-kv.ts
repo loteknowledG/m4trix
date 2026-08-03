@@ -1,6 +1,10 @@
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 
 import {
+  externalizeMediaInValue,
+  hydrateMediaInValue,
+} from './media-blob-store';
+import {
   createRelationalSchema,
   isRelationalKey,
   migrateRelationalFromKv,
@@ -9,6 +13,7 @@ import {
   relationalMigrationDone,
   relationalSet,
 } from './sqlite-relational';
+import { migrateMediaInDatabase, mediaMigrationDone } from './sqlite-media-migrate';
 
 const IDB_NAME = 'm4trix-sqlite-kv';
 const STORE_NAME = 'database';
@@ -154,6 +159,11 @@ async function initializeDatabase() {
     await migrateRelationalFromKv(database, kvReadRaw, runQueuedWrite);
     await writeDatabaseBytes(database.export());
   }
+
+  if (!mediaMigrationDone(database, queryObjects)) {
+    await migrateMediaInDatabase(database, queryObjects, runQueuedWrite);
+    await writeDatabaseBytes(database.export());
+  }
 }
 
 function kvReadRaw(db: Database, key: string): unknown | undefined {
@@ -199,7 +209,8 @@ export async function kvGet<T>(key: string): Promise<T | undefined> {
   const rows = queryObjects<{ value: string }>(database!, 'SELECT value FROM kv WHERE key = ?', [key]);
 
   if (!rows[0]) return undefined;
-  return deserialize<T>(rows[0].value);
+  const value = deserialize<T>(rows[0].value);
+  return hydrateMediaInValue(value);
 }
 
 export async function kvSet(key: string, value: unknown): Promise<void> {
@@ -208,8 +219,9 @@ export async function kvSet(key: string, value: unknown): Promise<void> {
     await relationalSet(key, value, queryObjects, runQueuedWrite);
     return;
   }
+  const externalized = await externalizeMediaInValue(value);
   writeQueue = writeQueue.then(async () => {
-    const encoded = serialize(value);
+    const encoded = serialize(externalized);
     if (encoded === null) {
       database!.run('DELETE FROM kv WHERE key = ?', [key]);
     } else {

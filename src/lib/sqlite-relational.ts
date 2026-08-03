@@ -1,5 +1,12 @@
 import type { Database } from 'sql.js';
 
+import {
+  externalizeMediaInValue,
+  externalizeMediaString,
+  hydrateMediaInValue,
+  hydrateMediaString,
+  MEDIA_REF_PREFIX,
+} from '@/lib/media-blob-store';
 import type { PlaylistMeta, PlaylistVideo } from '@/lib/playlists';
 import {
   normalizeStoryMomentList,
@@ -137,7 +144,15 @@ function computePreviewSrc(moments: StoryMomentRecord[], titleMomentId?: string 
     const titleMoment = moments.find((moment) => moment.id === titleMomentId);
     if (titleMoment?.src) return titleMoment.src;
   }
-  return moments[0]?.src ?? null;
+  const firstSrc = moments[0]?.src ?? null;
+  return firstSrc;
+}
+
+function previewSrcForVideo(src: string, kind?: PlaylistVideo['kind']): string {
+  if (src.startsWith(MEDIA_REF_PREFIX) || src.startsWith('data:image/')) {
+    return src;
+  }
+  return getVideoThumbnail(src, kind);
 }
 
 function storyMetaFromRow(row: Record<string, SqlValue>): StoryMeta {
@@ -277,9 +292,9 @@ function resolvePlaylistCover(videos: PlaylistVideo[], meta: PlaylistMeta): stri
   if (meta.coverSrc) return meta.coverSrc;
   if (meta.titleVideoId) {
     const titleVideo = videos.find((video) => video.id === meta.titleVideoId);
-    if (titleVideo?.src) return getVideoThumbnail(titleVideo.src, titleVideo.kind);
+    if (titleVideo?.src) return previewSrcForVideo(titleVideo.src, titleVideo.kind);
   }
-  if (videos[0]?.src) return getVideoThumbnail(videos[0].src, videos[0].kind);
+  if (videos[0]?.src) return previewSrcForVideo(videos[0].src, videos[0].kind);
   return VIDEO_PLACEHOLDER;
 }
 
@@ -351,6 +366,66 @@ function loadStoryMoments(db: Database, storyId: string): StoryMomentRecord[] {
     storyId,
   ]);
   return rows.map(momentFromRow);
+}
+
+async function hydrateStoryMoments(moments: StoryMomentRecord[]): Promise<StoryMomentRecord[]> {
+  return Promise.all(
+    moments.map(async (moment) => ({
+      ...moment,
+      src: await hydrateMediaString(moment.src),
+    })),
+  );
+}
+
+async function externalizeStoryMoments(moments: StoryMomentRecord[]): Promise<StoryMomentRecord[]> {
+  return Promise.all(
+    moments.map(async (moment) => ({
+      ...moment,
+      src: await externalizeMediaString(moment.src),
+    })),
+  );
+}
+
+async function hydrateStoryMeta(meta: StoryMeta): Promise<StoryMeta> {
+  if (!meta.previewSrc) return meta;
+  return {
+    ...meta,
+    previewSrc: (await hydrateMediaString(meta.previewSrc)) || null,
+  };
+}
+
+async function externalizeStoryMeta(meta: StoryMeta): Promise<StoryMeta> {
+  if (!meta.previewSrc) return meta;
+  return {
+    ...meta,
+    previewSrc: await externalizeMediaString(meta.previewSrc),
+  };
+}
+
+async function hydratePlaylistMeta(meta: PlaylistMeta): Promise<PlaylistMeta> {
+  if (!meta.coverSrc) return meta;
+  return {
+    ...meta,
+    coverSrc: await hydrateMediaString(meta.coverSrc),
+  };
+}
+
+async function hydratePlaylistVideos(videos: PlaylistVideo[]): Promise<PlaylistVideo[]> {
+  return Promise.all(
+    videos.map(async (video) => ({
+      ...video,
+      src: await hydrateMediaString(video.src),
+    })),
+  );
+}
+
+async function externalizePlaylistVideos(videos: PlaylistVideo[]): Promise<PlaylistVideo[]> {
+  return Promise.all(
+    videos.map(async (video) => ({
+      ...video,
+      src: await externalizeMediaString(video.src),
+    })),
+  );
 }
 
 function queryObjects<T extends Record<string, SqlValue>>(
@@ -480,7 +555,7 @@ export async function listStoriesWithPreviews(
   db: Database,
 ): Promise<StoryMeta[]> {
   const rows = query(db, 'SELECT * FROM stories ORDER BY sort_order ASC, rowid ASC');
-  return rows.map(storyMetaFromRow);
+  return Promise.all(rows.map((row) => hydrateStoryMeta(storyMetaFromRow(row))));
 }
 
 export async function relationalGet(
@@ -496,21 +571,23 @@ export async function relationalGet(
     const storyId = key.slice('story:'.length);
     const rows = query(db, 'SELECT * FROM stories WHERE id = ?', [storyId]);
     if (!rows[0]) return undefined;
-    const moments = loadStoryMoments(db, storyId);
-    const extras = deserializeJson<Record<string, unknown>>(String(rows[0].extras_json ?? '{}'), {});
+    const moments = await hydrateStoryMoments(loadStoryMoments(db, storyId));
+    const extras = await hydrateMediaInValue(
+      deserializeJson<Record<string, unknown>>(String(rows[0].extras_json ?? '{}'), {}),
+    );
     return buildStoryPayload(moments, extras);
   }
 
   if (key === 'playlists') {
     const rows = query(db, 'SELECT * FROM playlists ORDER BY sort_order ASC, rowid ASC');
-    return rows.map(playlistMetaFromRow);
+    return Promise.all(rows.map((row) => hydratePlaylistMeta(playlistMetaFromRow(row))));
   }
 
   if (key.startsWith('playlist:')) {
     const playlistId = key.slice('playlist:'.length);
     const rows = query(db, 'SELECT id FROM playlists WHERE id = ?', [playlistId]);
     if (!rows[0]) return undefined;
-    return loadPlaylistVideos(db, playlistId);
+    return hydratePlaylistVideos(loadPlaylistVideos(db, playlistId));
   }
 
   return undefined;
@@ -524,20 +601,20 @@ export async function relationalSet(
 ): Promise<void> {
   if (key === 'stories') {
     const list = Array.isArray(value) ? (value as StoryMeta[]) : [];
+    const externalizedList = await Promise.all(list.map((meta) => externalizeStoryMeta(meta)));
     await withWrite(async (db) => {
       const existing = queryObjects<{ id: string }>(db, 'SELECT id FROM stories');
-      const nextIds = new Set(list.map((entry) => entry.id));
+      const nextIds = new Set(externalizedList.map((entry) => entry.id));
       for (const row of existing) {
         if (!nextIds.has(row.id)) {
           db.run('DELETE FROM story_moments WHERE story_id = ?', [row.id]);
           db.run('DELETE FROM stories WHERE id = ?', [row.id]);
         }
       }
-      list.forEach((meta, index) => {
+      for (const [index, meta] of externalizedList.entries()) {
         const moments = loadStoryMoments(db, meta.id);
         const previewSrc =
-          meta.previewSrc ??
-          computePreviewSrc(moments, meta.titleMomentId ?? null);
+          meta.previewSrc ?? computePreviewSrc(moments, meta.titleMomentId ?? null);
         upsertStoryRow(
           db,
           {
@@ -549,7 +626,7 @@ export async function relationalSet(
           undefined,
           previewSrc,
         );
-      });
+      }
     });
     return;
   }
@@ -557,7 +634,8 @@ export async function relationalSet(
   if (key.startsWith('story:')) {
     const storyId = key.slice('story:'.length);
     const { moments, extras } = parseStoryPayload(value);
-    const previewSrc = computePreviewSrc(moments);
+    const externalizedMoments = await externalizeStoryMoments(moments);
+    const externalizedExtras = await externalizeMediaInValue(extras);
     await withWrite(async (db) => {
       const rows = queryObjects<{ meta_json: string; title_moment_id: string | null }>(
         db,
@@ -573,21 +651,21 @@ export async function relationalSet(
           : rows[0]?.title_moment_id
             ? String(rows[0].title_moment_id)
             : null;
-      const resolvedPreview = computePreviewSrc(moments, titleMomentId);
+      const resolvedPreview = computePreviewSrc(externalizedMoments, titleMomentId);
       upsertStoryRow(
         db,
         {
           id: storyId,
-          count: moments.length,
+          count: externalizedMoments.length,
           previewSrc: resolvedPreview,
         },
         0,
-        serializeJson(extras),
+        serializeJson(externalizedExtras),
         resolvedPreview,
       );
-      replaceStoryMoments(db, storyId, moments);
+      replaceStoryMoments(db, storyId, externalizedMoments);
       db.run('UPDATE stories SET moment_count = ?, preview_src = ? WHERE id = ?', [
-        moments.length,
+        externalizedMoments.length,
         resolvedPreview,
         storyId,
       ]);
@@ -597,16 +675,22 @@ export async function relationalSet(
 
   if (key === 'playlists') {
     const list = Array.isArray(value) ? (value as PlaylistMeta[]) : [];
+    const externalizedList = await Promise.all(
+      list.map(async (meta) => ({
+        ...meta,
+        coverSrc: meta.coverSrc ? await externalizeMediaString(meta.coverSrc) : meta.coverSrc,
+      })),
+    );
     await withWrite(async (db) => {
       const existing = queryObjects<{ id: string }>(db, 'SELECT id FROM playlists');
-      const nextIds = new Set(list.map((entry) => entry.id));
+      const nextIds = new Set(externalizedList.map((entry) => entry.id));
       for (const row of existing) {
         if (!nextIds.has(row.id)) {
           db.run('DELETE FROM playlist_videos WHERE playlist_id = ?', [row.id]);
           db.run('DELETE FROM playlists WHERE id = ?', [row.id]);
         }
       }
-      list.forEach((meta, index) => {
+      externalizedList.forEach((meta, index) => {
         upsertPlaylistRow(db, meta, index);
       });
     });
@@ -616,8 +700,9 @@ export async function relationalSet(
   if (key.startsWith('playlist:')) {
     const playlistId = key.slice('playlist:'.length);
     const videos = Array.isArray(value) ? (value as PlaylistVideo[]) : [];
+    const externalizedVideos = await externalizePlaylistVideos(videos);
     await withWrite(async (db) => {
-      replacePlaylistVideos(db, playlistId, videos);
+      replacePlaylistVideos(db, playlistId, externalizedVideos);
       const rows = queryObjects<{ meta_json: string; title_video_id: string | null }>(
         db,
         'SELECT meta_json, title_video_id FROM playlists WHERE id = ?',
@@ -626,18 +711,18 @@ export async function relationalSet(
       const meta = rows[0]
         ? playlistMetaFromRow(rows[0] as Record<string, SqlValue>)
         : ({ id: playlistId } as PlaylistMeta);
-      const coverSrc = resolvePlaylistCover(videos, meta);
+      const coverSrc = resolvePlaylistCover(externalizedVideos, meta);
       upsertPlaylistRow(
         db,
         {
           ...meta,
-          count: videos.length,
+          count: externalizedVideos.length,
           coverSrc,
         },
         0,
       );
       db.run('UPDATE playlists SET video_count = ?, cover_src = ? WHERE id = ?', [
-        videos.length,
+        externalizedVideos.length,
         coverSrc ?? null,
         playlistId,
       ]);
