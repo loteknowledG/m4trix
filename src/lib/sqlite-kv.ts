@@ -100,7 +100,7 @@ function migrationDone(db: Database): boolean {
 }
 
 async function migrateFromLegacyIdbKeyval(db: Database) {
-  const legacy = await import('idb-keyval-legacy');
+  const legacy = await import('./legacy-idb-keyval');
   const legacyKeys = await legacy.keys();
   if (legacyKeys.length === 0) {
     db.run('INSERT OR REPLACE INTO kv(key, value) VALUES(?, ?)', [MIGRATION_KEY, '"done"']);
@@ -109,9 +109,10 @@ async function migrateFromLegacyIdbKeyval(db: Database) {
 
   db.run('BEGIN');
   try {
-    for (const key of legacyKeys) {
+    for (const rawKey of legacyKeys) {
+      const key = String(rawKey);
       if (key === MIGRATION_KEY) continue;
-      const value = await legacy.get(key);
+      const value = await legacy.get(rawKey);
       if (value === undefined) continue;
       const encoded = serialize(value);
       if (!encoded) continue;

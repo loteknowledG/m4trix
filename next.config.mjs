@@ -15,8 +15,7 @@ const buildTarget =
 const isDesktopBuild = buildTarget === "desktop";
 const isPagesBuild = buildTarget === "pages" && !isDev;
 const basePath = isPagesBuild && repositoryName ? `/${repositoryName}` : "";
-const kvStoreShim = path.resolve(__dirname, "src/lib/kv-store-shim.ts");
-const legacyIdbKeyval = path.resolve(__dirname, "node_modules/idb-keyval/dist/index.js");
+const kvStoreShim = "./src/lib/kv-store-shim.ts";
 const videoJsPath = path.resolve(__dirname, "node_modules/video.js");
 
 const nextConfig = {
@@ -52,16 +51,14 @@ const nextConfig = {
 	turbopack: {
 		resolveAlias: {
 			"video.js": "./node_modules/video.js",
-			"idb-keyval": kvStoreShim,
-			"idb-keyval-legacy": legacyIdbKeyval,
+			"idb-keyval$": kvStoreShim,
 		},
 	},
 	webpack: (config) => {
 		config.resolve.alias = {
 			...config.resolve.alias,
 			"video.js": videoJsPath,
-			"idb-keyval": kvStoreShim,
-			"idb-keyval-legacy": legacyIdbKeyval,
+			"idb-keyval$": path.resolve(__dirname, "src/lib/kv-store-shim.ts"),
 		};
 		return config;
 	},
