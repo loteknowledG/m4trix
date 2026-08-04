@@ -14,7 +14,10 @@ import { CollapseMenuButton } from '@/components/admin-panel/collapse-menu-butto
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { get } from 'idb-keyval';
 import { resolveActiveStoryId, storyEditorHref, type StoryMeta } from '@/lib/stories';
-import { characterDetailHref, isActiveCharacterDetail } from '@/lib/character-routes';
+import {
+  characterDetailHref,
+  resolveActiveCharacterId,
+} from '@/lib/character-routes';
 import { playlistEditorHref } from '@/lib/video-routes';
 
 // removed unused imports
@@ -161,6 +164,10 @@ export function Menu({ isOpen }: MenuProps) {
   const storiesHref = '/stories';
   const effectiveActiveStoryId =
     pathname === storiesHref ? null : activeStoryId;
+  const activeCharacterId = resolveActiveCharacterId(
+    pathname,
+    searchParams?.get('id'),
+  );
 
   const menuList = getMenuList();
 
@@ -276,7 +283,9 @@ export function Menu({ isOpen }: MenuProps) {
                             ? pathname === href && !activePlaylistId
                             : pathname === href
                           : label === 'Characters'
-                          ? pathname.startsWith('/characters')
+                          ? isOpen === false
+                            ? pathname === href && !activeCharacterId
+                            : pathname === href
                           : active === undefined
                           ? pathname.startsWith(href)
                           : active
@@ -319,11 +328,8 @@ export function Menu({ isOpen }: MenuProps) {
                               ...agentsList.map(a => ({
                                 href: characterDetailHref(a.id),
                                 label: a.name && a.name.trim() ? a.name : 'Untitled',
-                                active: isActiveCharacterDetail(
-                                  pathname,
-                                  a.id,
-                                  searchParams?.get('id'),
-                                ),
+                                active:
+                                  activeCharacterId != null && a.id === activeCharacterId,
                               })),
                             ]
                           : submenus
