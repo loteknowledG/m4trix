@@ -19,12 +19,15 @@ const DEFAULT_ZONES: Record<GameCharacterSlot, DialogSpeakerPosition> = {
   narrator: 'top',
 };
 
+/** Fraction of stage width; paired with 1:1 aspect ratio in game overlay for a square bubble. */
+const DEFAULT_GAME_DIALOG_WIDTH = 0.28;
+
 export function defaultGameDialogLayout(slot: GameCharacterSlot): GameDialogLayout {
   const xy = defaultXYForSpeakerZone(DEFAULT_ZONES[slot]);
   return {
     x: xy.x,
     y: xy.y,
-    width: slot === 'narrator' ? 0.82 : 0.72,
+    width: DEFAULT_GAME_DIALOG_WIDTH,
     fontScale: 0.04,
   };
 }
@@ -45,12 +48,17 @@ function normalizeLayout(value: unknown, fallback: GameDialogLayout): GameDialog
     if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback[key];
     return Math.min(max, Math.max(min, raw));
   };
-  return {
+  const layout = {
     x: read('x', 0, 1),
     y: read('y', 0, 1),
     width: read('width', 0.2, 1),
     fontScale: read('fontScale', 0.02, 0.12),
   };
+  // Migrate layouts saved with the old wide default (0.72+).
+  if (layout.width >= 0.65) {
+    layout.width = fallback.width;
+  }
+  return layout;
 }
 
 export function loadGameDialogLayouts(gameId: string | undefined): GameDialogLayouts {

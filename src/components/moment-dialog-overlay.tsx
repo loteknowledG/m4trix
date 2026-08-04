@@ -35,6 +35,8 @@ type MomentDialogOverlayProps = {
   editLineId?: string | null;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
+  /** Keep bubble height equal to width (game dialog defaults). */
+  squareAspect?: boolean;
 };
 
 type LineLayout = {
@@ -60,6 +62,7 @@ function MomentDialogBubble({
   loopEpoch = 0,
   stageRef,
   onLayoutChange,
+  squareAspect = false,
 }: {
   line: MomentDialogOverlayLine;
   speakerName: string;
@@ -68,6 +71,7 @@ function MomentDialogBubble({
   editable?: boolean;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (patch: MomentDialogLayoutPatch) => void;
+  squareAspect?: boolean;
 }) {
   const style = resolveMomentDialogLineStyle(line);
   const layoutRef = useRef<LineLayout>(resolveMomentLineLayout(line));
@@ -185,6 +189,7 @@ function MomentDialogBubble({
         left: `${layout.x * 100}%`,
         top: `${layout.y * 100}%`,
         width: `${layout.width * 100}%`,
+        aspectRatio: squareAspect ? '1 / 1' : undefined,
         fontSize: lineFontSize(layout.fontScale),
         fontFamily: resolveVideoCueFontFamily(style.font),
       }}
@@ -192,16 +197,17 @@ function MomentDialogBubble({
       <div
         className={cn(
           'relative touch-none',
+          squareAspect && 'flex h-full min-h-0 flex-col overflow-hidden',
           editable && 'cursor-grab ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent active:cursor-grabbing',
         )}
         onPointerDown={editable ? onStartDrag : undefined}
       >
         {editable ? (
-          <div className="mb-1 flex items-center justify-center rounded-t-md bg-primary/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground pointer-events-none">
+          <div className="mb-1 flex shrink-0 items-center justify-center rounded-t-md bg-primary/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground pointer-events-none">
             Drag
           </div>
         ) : null}
-        <div className={editable ? 'px-0.5 pb-0.5' : undefined}>
+        <div className={cn(editable ? 'min-h-0 flex-1 px-0.5 pb-0.5' : undefined, squareAspect && 'overflow-y-auto')}>
           {showSpeakerLabel ? (
             <div
               className="mb-1 text-[0.85em] font-bold uppercase tracking-wide"
@@ -255,6 +261,7 @@ export function MomentDialogOverlay({
   editLineId = null,
   stageRef: externalStageRef,
   onLayoutChange,
+  squareAspect = false,
 }: MomentDialogOverlayProps) {
   const internalStageRef = useRef<HTMLDivElement>(null);
   const layoutStageRef = externalStageRef ?? internalStageRef;
@@ -300,6 +307,7 @@ export function MomentDialogOverlay({
           speakerName={line.speakerName}
           momentId={momentId}
           loopEpoch={loopEpoch}
+          squareAspect={squareAspect}
         />
       ))}
 
@@ -313,6 +321,7 @@ export function MomentDialogOverlay({
           editable
           stageRef={layoutStageRef}
           onLayoutChange={(patch) => handleLayoutChange(editingLine.id, patch)}
+          squareAspect={squareAspect}
         />
       ) : null}
 
