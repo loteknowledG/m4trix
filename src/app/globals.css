@@ -229,17 +229,12 @@ body,
   .pushable-effect.bg-destructive {
     --pushable-wall: color-mix(in srgb, hsl(var(--destructive)) 62%, black);
   }
-  .pushable-effect.bg-background {
+  .pushable-effect.bg-background,
+  .pushable-wall-neutral {
     --pushable-wall: color-mix(in srgb, hsl(var(--background)) 55%, hsl(var(--foreground)) 45%);
   }
   .pushable-effect.bg-white {
     --pushable-wall: color-mix(in srgb, white 52%, #71717a);
-  }
-  .pushable-wall-accent {
-    --pushable-wall: color-mix(in srgb, #c90084 58%, black);
-  }
-  .pushable-wall-accent:hover {
-    --pushable-wall: color-mix(in srgb, #c90084 52%, black);
   }
   .dark .mc-shadow-hover:hover {
     box-shadow: 14px 14px 44px rgba(0, 0, 0, 0.98);
