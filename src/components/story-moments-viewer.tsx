@@ -85,6 +85,7 @@ type StoryMomentsViewerProps = {
   currentIndex: number;
   onIndexChange: (index: number) => void;
   storyId?: string | null;
+  showStageNavigation?: boolean;
   className?: string;
 };
 
@@ -93,6 +94,7 @@ export function StoryMomentsViewer({
   currentIndex,
   onIndexChange,
   storyId,
+  showStageNavigation = true,
   className,
 }: StoryMomentsViewerProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -182,7 +184,7 @@ export function StoryMomentsViewer({
         ref={stageRef}
         className="relative flex h-full min-h-0 w-full items-center justify-center bg-black"
       >
-          {hasMultiple ? (
+          {showStageNavigation && hasMultiple ? (
             <>
               <button
                 type="button"

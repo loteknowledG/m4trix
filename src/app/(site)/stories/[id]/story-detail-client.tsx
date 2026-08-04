@@ -2,11 +2,11 @@
 
 import { get, set } from "idb-keyval";
 import { HeaderBackButton } from "@/components/ui/header-back-button";
-import { SquarePen, Trash2, Upload } from "@/components/icons";
+import { ChevronLeft, ChevronRight, SquarePen, Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GrUserFemale } from "react-icons/gr";
-import { IoBanOutline } from "react-icons/io5";
+import { IoBanOutline, IoPlaySharp, IoStopSharp } from "react-icons/io5";
 import { IoMdChatbubbles } from "react-icons/io";
 import { LuNotebookText } from "react-icons/lu";
 import { SiLevelsdotfyi, SiThestorygraph } from "react-icons/si";
@@ -25,9 +25,7 @@ import ErrorBoundary from "@/components/error-boundary";
 import MomentsGrid from "@/components/moments-grid";
 import { Marquee } from "@/components/ui/marquee";
 import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
-import StoryExperienceModeToggle, {
-  type StoryExperienceMode,
-} from "@/components/story-experience-mode-toggle";
+import type { StoryExperienceMode } from "@/components/story-experience-mode-toggle";
 import { StoryMomentsViewer } from "@/components/story-moments-viewer";
 import {
   Sheet,
@@ -217,7 +215,7 @@ export default function StoryPage() {
   const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
   const [narratorEnabled, setNarratorEnabled] = useState(true);
   const [directorNotes, setDirectorNotes] = useState("");
-  const [storyMode, setStoryMode] = useState<StoryExperienceMode>("view");
+  const [storyMode, setStoryMode] = useState<StoryExperienceMode>("edit");
   const [viewMomentIndex, setViewMomentIndex] = useState(0);
   const assignedNpcCharacter = assignedNpcId
     ? characters.find((character) => character.id === assignedNpcId) || null
@@ -1070,22 +1068,22 @@ export default function StoryPage() {
   const enterViewMode = useCallback(() => {
     setStoryMode("view");
     clearSelection(scope);
-  }, [clearSelection]);
+    setViewMomentIndex(0);
+  }, [clearSelection, scope]);
 
   const enterEditMode = useCallback(() => {
     setStoryMode("edit");
   }, []);
 
-  const handleStoryModeChange = useCallback(
-    (mode: StoryExperienceMode) => {
-      if (mode === "view") {
-        enterViewMode();
-        return;
-      }
-      enterEditMode();
-    },
-    [enterEditMode, enterViewMode],
-  );
+  const goViewPrevious = useCallback(() => {
+    if (viewMoments.length === 0) return;
+    setViewMomentIndex((prev) => (prev > 0 ? prev - 1 : viewMoments.length - 1));
+  }, [viewMoments.length]);
+
+  const goViewNext = useCallback(() => {
+    if (viewMoments.length === 0) return;
+    setViewMomentIndex((prev) => (prev < viewMoments.length - 1 ? prev + 1 : 0));
+  }, [viewMoments.length]);
 
   useEffect(() => {
     if (viewMoments.length === 0) {
@@ -1294,7 +1292,92 @@ export default function StoryPage() {
         }
         navRight={
           <div className="flex items-center gap-2">
-            <StoryExperienceModeToggle mode={storyMode} onModeChange={handleStoryModeChange} />
+            {isEditMode ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10 disabled:opacity-40"
+                      aria-label="Play story"
+                      disabled={viewMoments.length === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        enterViewMode();
+                      }}
+                    >
+                      <IoPlaySharp size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Play story</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10 disabled:opacity-40"
+                      aria-label="Previous moment"
+                      disabled={viewMoments.length === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        goViewPrevious();
+                      }}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Previous moment</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10 disabled:opacity-40"
+                      aria-label="Next moment"
+                      disabled={viewMoments.length === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        goViewNext();
+                      }}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Next moment</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10"
+                      aria-label="Stop and return to edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        enterEditMode();
+                      }}
+                    >
+                      <IoStopSharp size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Stop</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             {isEditMode && !(selectedIds || []).length ? (
               <TooltipProvider>
                 <Tooltip>
@@ -1602,7 +1685,7 @@ export default function StoryPage() {
                   <Upload size={16} />
                   <div className="font-medium">No moments yet</div>
                 </div>
-                <div className="text-sm">Switch to Edit to add moments to this story.</div>
+                <div className="text-sm">Add moments in edit mode, then press Play.</div>
               </div>
             ) : (
               <StoryMomentsViewer
@@ -1610,6 +1693,7 @@ export default function StoryPage() {
                 currentIndex={viewMomentIndex}
                 onIndexChange={setViewMomentIndex}
                 storyId={id ?? null}
+                showStageNavigation={false}
                 className="h-full w-full"
               />
             )}
