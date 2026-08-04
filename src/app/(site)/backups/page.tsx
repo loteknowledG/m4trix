@@ -101,7 +101,6 @@ export default function BackupsPage() {
   const handleExport = useCallback(async () => {
     let previewSummary: any = null;
     try {
-      const heap = (await get('heap-moments')) || (await get('heap-gifs')) || [];
       const trash = (await get('trash-moments')) || (await get('trash-gifs')) || [];
       const trashCharacters = (await get('trash-characters')) || [];
       // include stories and per-story items
@@ -130,8 +129,7 @@ export default function BackupsPage() {
 
       // Inline remote / proxied images so imported games keep their pictures.
       setMessage('Embedding pictures into backup…');
-      const [heapEmbedded, trashEmbedded, storiesEmbedded] = await Promise.all([
-        embedMomentSources(Array.isArray(heap) ? heap : []),
+      const [trashEmbedded, storiesEmbedded] = await Promise.all([
         embedMomentSources(Array.isArray(trash) ? trash : []),
         embedStorySources(storiesWithItems),
       ]);
@@ -143,7 +141,6 @@ export default function BackupsPage() {
       const selectedAgentId = await get('PLAYGROUND_SELECTED_AGENT_ID');
 
       const payload = {
-        heap: heapEmbedded,
         trash: trashEmbedded,
         stories: storiesEmbedded,
         agents,
@@ -154,7 +151,6 @@ export default function BackupsPage() {
         selectedAgentId,
       };
       previewSummary = {
-        heapCount: Array.isArray(heapEmbedded) ? heapEmbedded.length : 0,
         trashCount: Array.isArray(trashEmbedded) ? trashEmbedded.length : 0,
         storiesCount: Array.isArray(storiesEmbedded) ? storiesEmbedded.length : 0,
         charactersCount: Array.isArray(agents) ? agents.length : 0,
@@ -293,8 +289,8 @@ export default function BackupsPage() {
           }
         }
 
-        // Handle old flat-array backups (array of heap items)
-        let validated: any[] = [];
+        // Handle old flat-array backups (legacy moment lists)
+        let legacyMoments: any[] = [];
         let storiesPayload: any[] | null = null;
         let trashPayload: any[] | null = null;
         let trashCharactersPayload: any[] | null = null;
@@ -306,20 +302,20 @@ export default function BackupsPage() {
         let selectedAgentIdPayload: string | null | undefined = undefined;
 
         if (Array.isArray(parsed)) {
-          validated = parsed.map((p: any) => ({
+          legacyMoments = parsed.map((p: any) => ({
             id: p.id ?? `${Date.now()}-${Math.random()}`,
             src: p.src ?? p.url,
             name: p.name ?? p.title,
           }));
         } else if (parsed && typeof parsed === 'object') {
-          // structured backup: { heap: [...], stories: [{id,title,count,items: [...]}, ...] }
-          const heapArr = parsed.moments ?? parsed.heap ?? parsed['heap-gifs'] ?? [];
-          if (!Array.isArray(heapArr)) {
+          // structured backup: { heap?: [...], trash?: [...], stories: [...] }
+          const legacyArr = parsed.moments ?? parsed.heap ?? parsed['heap-gifs'] ?? [];
+          if (!Array.isArray(legacyArr)) {
             setMessage('Invalid backup file');
             setTimeout(() => setMessage(null), 4000);
             return;
           }
-          validated = heapArr.map((p: any) => ({
+          legacyMoments = legacyArr.map((p: any) => ({
             id: p.id ?? `${Date.now()}-${Math.random()}`,
             src: p.src ?? p.url,
             name: p.name ?? p.title,
@@ -364,8 +360,11 @@ export default function BackupsPage() {
 
         // Older backups may still reference /api/img or Google URLs — embed when possible.
         setMessage('Restoring pictures…');
-        validated = await embedMomentSources(validated);
+        legacyMoments = await embedMomentSources(legacyMoments);
         if (trashPayload) trashPayload = await embedMomentSources(trashPayload);
+        if (legacyMoments.length > 0) {
+          trashPayload = [...(trashPayload ?? []), ...legacyMoments];
+        }
         if (storiesPayload) storiesPayload = await embedStorySources(storiesPayload);
         // wipe existing IndexedDB data before restoring
         try {
@@ -386,8 +385,14 @@ export default function BackupsPage() {
           logger.warn('Failed to reset stories keys after import', e);
         }
 
-        // restore heap items
-        await set('heap-moments', validated);
+        // restore trash items if present
+        if (trashPayload && trashPayload.length > 0) {
+          try {
+            await set('trash-moments', trashPayload);
+          } catch (e) {
+            logger.warn('Failed to restore trash items', e);
+          }
+        }
         // restore any overlays from the imported payload
         try {
           if (overlaysPayload && typeof overlaysPayload === 'object') {
@@ -410,14 +415,6 @@ export default function BackupsPage() {
           }
         } catch (e) {
           logger.warn('Failed to apply overlays from import', e);
-        }
-        // restore trash items if present
-        if (trashPayload) {
-          try {
-            await set('trash-moments', trashPayload);
-          } catch (e) {
-            logger.warn('Failed to restore trash items', e);
-          }
         }
         if (trashCharactersPayload) {
           try {
@@ -498,16 +495,21 @@ export default function BackupsPage() {
             logger.warn('Failed to restore prompter mode', e);
           }
         }
+        const importedMomentCount = Array.isArray(trashPayload) ? trashPayload.length : 0;
+        const importedStoryCount = Array.isArray(storiesPayload) ? storiesPayload.length : 0;
         // notify app to refresh any in-memory state
         try {
           window.dispatchEvent(
-            new CustomEvent('moments-updated', { detail: { count: validated.length } })
+            new CustomEvent('moments-updated', { detail: { count: importedMomentCount } })
           );
         } catch (e) {
           /* ignore in non-browser */
         }
         // don't reload the page; dispatch events above already notify the app
-        setMessage(`Imported ${validated.length} moments`);
+        setMessage(
+          `Imported ${importedStoryCount} stories` +
+            (importedMomentCount > 0 ? ` and ${importedMomentCount} trashed moments` : ''),
+        );
         setTimeout(() => setMessage(null), 4000);
       } catch (err) {
         logger.error(err);

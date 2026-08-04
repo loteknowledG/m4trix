@@ -85,7 +85,7 @@ export function Sidebar() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_34%,rgba(244,114,182,0.18),transparent_24%),radial-gradient(circle_at_28%_18%,rgba(217,70,239,0.14),transparent_28%),radial-gradient(circle_at_82%_72%,rgba(34,211,238,0.08),transparent_22%),linear-gradient(135deg,rgba(255,255,255,0.03),transparent_28%,transparent_72%,rgba(255,255,255,0.015))]" />
             <div className="pointer-events-none absolute left-3 top-3 h-12 w-12 rounded-xl border border-fuchsia-300/12 bg-[linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]" />
             <Link
-              href="/heap"
+              href="/stories"
               className={cn(
                 'relative origin-left whitespace-nowrap no-underline transition-[transform,opacity,width] duration-300 ease-in-out',
                 !isOpen ? 'w-0 -translate-x-4 opacity-0' : 'w-auto translate-x-0 opacity-100'

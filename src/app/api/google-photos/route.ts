@@ -109,7 +109,7 @@ export async function POST(req: Request) {
 
     const urls = await fn(albumUrl);
 
-    // Do not coerce items to strings; callers (like the heap demo)
+    // Do not coerce items to strings; callers may need full moment objects.
     // can normalize objects or strings into URLs as needed.
     const out = Array.isArray(urls) ? urls : [];
     return NextResponse.json({ urls: out });

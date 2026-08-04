@@ -1,12 +1,5 @@
-'use client';
-
-import HeapPage from './(site)/heap/page';
-import AdminPanelLayout from '@/components/admin-panel/admin-panel-layout';
+import { redirect } from 'next/navigation';
 
 export default function HomePage() {
-  return (
-    <AdminPanelLayout>
-      <HeapPage />
-    </AdminPanelLayout>
-  );
+  redirect('/stories');
 }

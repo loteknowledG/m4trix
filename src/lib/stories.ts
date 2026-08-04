@@ -52,7 +52,7 @@ export function storyPreviewMap(stories: StoryMeta[]): Record<string, string | n
   return map;
 }
 
-/** Create an empty story (same outcome as heap → Add to Story → New story with no moments). */
+/** Create an empty story with no moments. */
 export async function createEmptyStory(): Promise<StoryMeta> {
   const id = newStoryId();
   const meta: StoryMeta = { id, count: 0, title: '' };

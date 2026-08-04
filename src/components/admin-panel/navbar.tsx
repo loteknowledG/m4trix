@@ -3,7 +3,7 @@
 import useSelection from '@/hooks/use-selection';
 import { SheetMenu } from '@/components/admin-panel/sheet-menu';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutGrid, Trash2, SquarePen, X, RotateCcw } from '@/components/icons';
+import { Trash2, SquarePen, X } from '@/components/icons';
 import { GrUserAdd } from 'react-icons/gr';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Marquee } from '@/components/ui/marquee';
@@ -137,21 +137,6 @@ export function Navbar({ title, titleMarquee, leftSlot, navRight }: NavbarProps)
             {isStoryDetail && selectedCount > 0 ? (
               <TooltipProvider>
                 <div className="flex items-center gap-3">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={() => onAction('move-to-heap')}
-                        className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                        aria-label="Move to Heap"
-                      >
-                        <LayoutGrid size={18} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={10}>
-                      <p>Move to Heap</p>
-                    </TooltipContent>
-                  </Tooltip>
-
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button

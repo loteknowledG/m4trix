@@ -53,18 +53,8 @@ export default function TrashPage() {
   const clearSelection = () => setSelected({});
 
   const restoreSelected = async () => {
-    if (selectedIds.length === 0) return;
+    if (selectedStoryIds.length === 0) return;
     try {
-      const trash = (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
-      const toRestore = trash.filter((t: any) => selectedMomentIds.includes(t.id || t));
-      const remaining = trash.filter((t: any) => !selectedMomentIds.includes(t.id || t));
-      // write remaining back to trash
-      await set('trash-moments', remaining);
-      // append to heap
-      const heap = (await get<any[]>('heap-moments')) || (await get<any[]>('heap-gifs')) || [];
-      const newHeap = [...heap, ...toRestore];
-      await set('heap-moments', newHeap);
-
       if (selectedStoryIds.length > 0) {
         const trashStories = (await get<TrashedStory[]>('trash-stories')) || [];
         const restoreStories = trashStories.filter(s => selectedStoryIds.includes(s.id));
@@ -169,20 +159,22 @@ export default function TrashPage() {
         anySelected ? (
           <TooltipProvider>
             <div className="flex items-center gap-3">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={restoreSelected}
-                    className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    aria-label="Restore to Heap"
-                  >
-                    <RotateCcw size={18} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={10}>
-                  <p>Restore to Heap</p>
-                </TooltipContent>
-              </Tooltip>
+              {selectedStoryIds.length > 0 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={restoreSelected}
+                      className="m4-circle-action bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                      aria-label="Restore stories"
+                    >
+                      <RotateCcw size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={10}>
+                    <p>Restore stories</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
 
               <Tooltip>
                 <TooltipTrigger asChild>

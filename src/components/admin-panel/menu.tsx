@@ -41,7 +41,6 @@ export function Menu({ isOpen }: MenuProps) {
   );
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [agentsList, setAgentsList] = useState<{ id: string; name: string }[]>([]);
-  const [heapCount, setHeapCount] = useState<number>(0);
   const [trashCount, setTrashCount] = useState<number>(0);
 
   useEffect(() => {
@@ -94,15 +93,7 @@ export function Menu({ isOpen }: MenuProps) {
     };
     load();
 
-    // also load heap count
-    const loadHeap = async () => {
-      try {
-        const items = (await get<any[]>('heap-moments')) || (await get<any[]>('heap-gifs')) || [];
-        if (mounted) setHeapCount(items.length || 0);
-      } catch (e) {
-        if (mounted) setHeapCount(0);
-      }
-    };
+    // also load trash count
     const loadTrash = async () => {
       try {
         const items = (await get<any[]>('trash-moments')) || (await get<any[]>('trash-gifs')) || [];
@@ -113,28 +104,22 @@ export function Menu({ isOpen }: MenuProps) {
         if (mounted) setTrashCount(0);
       }
     };
-    loadHeap();
     loadTrash();
 
     const handler = () => {
       load();
-      loadHeap();
       loadTrash();
     };
     window.addEventListener('stories-updated', handler);
     window.addEventListener('moments-updated', handler);
     window.addEventListener('characters-updated', handler);
     window.addEventListener('playlists-updated', handler);
-    // backward compat
-    window.addEventListener('heap-updated', handler);
     return () => {
       mounted = false;
       window.removeEventListener('stories-updated', handler);
       window.removeEventListener('moments-updated', handler);
       window.removeEventListener('characters-updated', handler);
       window.removeEventListener('playlists-updated', handler);
-      // backward compat
-      window.removeEventListener('heap-updated', handler);
     };
   }, [pathname, searchParams]);
 
@@ -237,14 +222,6 @@ export function Menu({ isOpen }: MenuProps) {
                             >
                               {label}
                             </p>
-                            {label === 'Heap' && (
-                              <span className={cn(isOpen === false ? 'hidden' : 'ml-2')}>
-                                <CountBadge
-                                  value={heapCount}
-                                  className="text-sm text-muted-foreground"
-                                />
-                              </span>
-                            )}
                             {label === 'Trash' && (
                               <span className={cn(isOpen === false ? 'hidden' : 'ml-2')}>
                                 <CountBadge

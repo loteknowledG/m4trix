@@ -1,7 +1,6 @@
 import {
   Users,
   SquarePen,
-  LayoutGrid,
   DatabaseBackup,
   Trash2,
   Gamepad,
@@ -30,17 +29,6 @@ type Group = {
 
 export function getMenuList(): Group[] {
   return [
-    {
-      groupLabel: '',
-      menus: [
-        {
-          href: '/heap',
-          label: 'Heap',
-          icon: LayoutGrid,
-          submenus: [],
-        },
-      ],
-    },
     {
       groupLabel: 'Contents',
       menus: [

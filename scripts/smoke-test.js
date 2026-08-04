@@ -2,7 +2,7 @@
 
 const urls = [
   'http://localhost:3001/',
-  'http://localhost:3001/heap',
+  'http://localhost:3001/stories',
   'http://localhost:3001/stories',
   'http://localhost:3001/backups',
   'http://localhost:3001/moment/does-not-exist'

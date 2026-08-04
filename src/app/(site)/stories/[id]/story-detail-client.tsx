@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, SquarePen, Trash2, Upload } from "@/componen
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GrUserFemale } from "react-icons/gr";
-import { IoBanOutline, IoPlaySharp, IoStopSharp } from "react-icons/io5";
+import { IoPlaySharp, IoStopSharp } from "react-icons/io5";
 import { IoMdChatbubbles } from "react-icons/io";
 import { LuNotebookText } from "react-icons/lu";
 import { SiLevelsdotfyi, SiThestorygraph } from "react-icons/si";
@@ -395,44 +395,6 @@ export default function StoryPage() {
       if (!ids.length) return;
 
       try {
-        if (action === "move-to-heap") {
-          const heap = (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
-          const moving = moments.filter((g) => ids.includes(g.id));
-          const newHeap = [...heap, ...moving];
-          await set("heap-moments", newHeap);
-          // remove from story
-          const storyKey = `story:${id}`;
-          const stored = (await get<any>(storyKey)) || [];
-          const rawItems = readStoryMomentItems(stored);
-          const remainingRaw = filterStoryMomentItems(rawItems, ids);
-          const remaining = normalizeStoryMomentList(remainingRaw);
-          await saveStoryItems(remaining);
-          setMoments((prev) => prev.filter((g) => !ids.includes(g.id)));
-          // update stories metadata count
-          try {
-            const saved = (await get<any>("stories")) || [];
-            const idx = saved.findIndex((s: any) => s.id === id);
-            if (idx > -1) {
-              saved[idx].count = remaining.length;
-              await set("stories", saved);
-              try {
-                window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-              } catch (e) {
-                /* ignore */
-              }
-            }
-          } catch (e) {
-            /* ignore */
-          }
-          try {
-            window.dispatchEvent(
-              new CustomEvent("moments-updated", { detail: { count: newHeap.length } }),
-            );
-          } catch (e) {
-            /* ignore */
-          }
-        }
-
         if (action === "move-to-trash") {
           const trash =
             (await get<any[]>("trash-moments")) || (await get<any[]>("trash-gifs")) || [];
@@ -1214,49 +1176,6 @@ export default function StoryPage() {
     }
   }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems, setStoryCount]);
 
-  const moveToHeap = useCallback(async () => {
-    try {
-      const ids = selectedIds || [];
-      if (!ids.length) return;
-      const toMove = moments.filter((m) => ids.includes(m.id));
-      const existingHeap =
-        (await get<any[]>("heap-moments")) || (await get<any[]>("heap-gifs")) || [];
-      const newHeap = [...existingHeap, ...toMove];
-      await set("heap-moments", newHeap);
-
-      // remove moved items from this story
-      setMoments((prev) => prev.filter((m) => !ids.includes(m.id)));
-
-      const storyKey = `story:${id}`;
-      const stored = (await get<any>(storyKey)) || [];
-      const rawItems = readStoryMomentItems(stored);
-      const remainingRaw = filterStoryMomentItems(rawItems, ids);
-      const remaining = normalizeStoryMomentList(remainingRaw);
-      await saveStoryItems(remaining);
-
-      const prunedStaged: StagedMomentsByStage = {};
-      for (const [rawStage, stageIds] of Object.entries(stagedMomentsByStage)) {
-        const filtered = stageIds.filter((momentId) => !ids.includes(momentId));
-        if (filtered.length > 0) prunedStaged[Number(rawStage)] = filtered;
-      }
-      await saveStagedMoments(prunedStaged);
-
-      setStoryCount(remaining.length).catch(() => {});
-      try {
-        window.dispatchEvent(
-          new CustomEvent("moments-updated", {
-            detail: { count: newHeap.length, source: "heap" },
-          }),
-        );
-      } catch (e) {
-        /* ignore */
-      }
-      clearSelection(scope);
-    } catch (err) {
-      logger.error("Failed to move selected to heap", err);
-    }
-  }, [clearSelection, id, moments, scope, saveStagedMoments, selectedIds, stagedMomentsByStage, saveStoryItems, setStoryCount]);
-
   return (
     <>
       <ContentLayout
@@ -1476,27 +1395,6 @@ export default function StoryPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
-                          moveToHeap();
-                        }}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent text-destructive hover:text-destructive/80 transition-colors"
-                        aria-label="Remove from story"
-                      >
-                        <IoBanOutline size={18} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={10}>
-                      <p>Remove from story</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
                           moveToTrash();
                         }}
                         className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
@@ -1575,16 +1473,9 @@ export default function StoryPage() {
                     <div className="font-medium">No moments yet</div>
                   </div>
                   <div className="text-sm">
-                    Add moments from the heap or drag images and MP4 videos into this story.
+                    Drag images and MP4 videos into this story to add moments.
                   </div>
                   <div className="mt-4 flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => router.push("/heap/")}
-                      className="inline-flex items-center px-3 py-1.5 rounded border text-sm hover:bg-accent/10"
-                    >
-                      Open heap
-                    </button>
                     <button
                       type="button"
                       onClick={handleDeleteStory}
@@ -1982,7 +1873,7 @@ export default function StoryPage() {
               <div className="pt-2 border-t border-border/40 space-y-2">
                 <div className="text-xs text-muted-foreground">
                   Story metadata is stored locally in your browser (IndexedDB). Deleting the story
-                  will remove its moments from this view, but not from Heap or Trash.
+                  will remove its moments from this view, but not from Trash.
                 </div>
                 <button
                   type="button"

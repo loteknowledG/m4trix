@@ -312,9 +312,7 @@ type MomentRecord = {
   dialogScript?: unknown;
 };
 
-type MomentLocation =
-  | { kind: "heap" }
-  | { kind: "story"; storyId: string; useItemsWrapper: boolean };
+type MomentLocation = { kind: "story"; storyId: string; useItemsWrapper: boolean };
 
 export function newMomentDialogLineId() {
   return `dialog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -661,18 +659,6 @@ async function findMomentLocation(
     }
   }
 
-  const heap =
-    (await safeGet<MomentRecord[]>("heap-moments")) ||
-    (await safeGet<MomentRecord[]>("heap-gifs")) ||
-    [];
-  const heapItem = heap.find((entry) => momentEntryMatchesId(entry, momentId));
-  if (heapItem) {
-    return {
-      script: readScript(heapItem) ?? { characterOrder: [], lines: [] },
-      location: { kind: "heap" },
-    };
-  }
-
   const storiesMeta = (await safeGet<Array<{ id: string }>>("stories")) || [];
   for (const meta of storiesMeta) {
     const storyKey = `story:${meta.id}`;
@@ -712,22 +698,6 @@ export async function saveMomentDialogScript(
   if (!location) return false;
 
   const payload = normalizeMomentDialogScript(script);
-
-  if (location.kind === "heap") {
-    const heap =
-      (await safeGet<MomentRecord[]>("heap-moments")) ||
-      (await safeGet<MomentRecord[]>("heap-gifs")) ||
-      [];
-    const next = heap.map((entry) =>
-      momentEntryMatchesId(entry, momentId)
-        ? { ...entry, dialogScript: payload, dialogLines: payload.lines }
-        : entry,
-    );
-    await safeSet("heap-moments", next);
-    dispatchMomentDialogUpdated({ momentId, storyId: preferredStoryId, script: payload });
-    window.dispatchEvent(new CustomEvent("moments-updated"));
-    return true;
-  }
 
   const storyKey = `story:${location.storyId}`;
   const stored = await safeGet<unknown>(storyKey);

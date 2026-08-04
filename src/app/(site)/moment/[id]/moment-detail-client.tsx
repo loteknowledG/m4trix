@@ -35,39 +35,33 @@ export default function MomentPage() {
 
     void (async () => {
       try {
-        const saved =
-          (await get<MomentRecord[]>("heap-moments")) ||
-          (await get<MomentRecord[]>("heap-gifs")) ||
-          [];
-        let found = saved.find((entry) => entry.id === id) || null;
+        let found: MomentRecord | null = null;
 
-        if (!found) {
-          const storiesMeta = (await get<Array<{ id: string }>>("stories")) || [];
-          for (const meta of storiesMeta) {
-            const storyKey = `story:${meta.id}`;
-            const stored = await get<unknown>(storyKey);
-            const items: unknown[] = Array.isArray(stored)
-              ? stored
-              : stored &&
-                  typeof stored === "object" &&
-                  Array.isArray((stored as { items?: unknown[] }).items)
-                ? ((stored as { items: unknown[] }).items ?? [])
-                : [];
-            const match = items.find(
-              (entry) => (typeof entry === "string" ? entry : (entry as { id?: string })?.id) === id,
-            );
-            if (match) {
-              found =
-                typeof match === "string"
-                  ? { id: match, src: match }
-                  : {
-                      id: (match as MomentRecord).id || id,
-                      src: (match as MomentRecord).src || id,
-                      name: (match as MomentRecord).name,
-                      dialogLines: (match as MomentRecord).dialogLines,
-                    };
-              break;
-            }
+        const storiesMeta = (await get<Array<{ id: string }>>("stories")) || [];
+        for (const meta of storiesMeta) {
+          const storyKey = `story:${meta.id}`;
+          const stored = await get<unknown>(storyKey);
+          const items: unknown[] = Array.isArray(stored)
+            ? stored
+            : stored &&
+                typeof stored === "object" &&
+                Array.isArray((stored as { items?: unknown[] }).items)
+              ? ((stored as { items: unknown[] }).items ?? [])
+              : [];
+          const match = items.find(
+            (entry) => (typeof entry === "string" ? entry : (entry as { id?: string })?.id) === id,
+          );
+          if (match) {
+            found =
+              typeof match === "string"
+                ? { id: match, src: match }
+                : {
+                    id: (match as MomentRecord).id || id,
+                    src: (match as MomentRecord).src || id,
+                    name: (match as MomentRecord).name,
+                    dialogLines: (match as MomentRecord).dialogLines,
+                  };
+            break;
           }
         }
 
