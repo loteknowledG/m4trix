@@ -9,7 +9,7 @@ interface SidebarToggleProps {
 }
 
 export function SidebarToggle({ isOpen, setIsOpen }: SidebarToggleProps) {
-  const left = isOpen === false ? 'calc(90px - 20px)' : 'calc(288px - 20px)';
+  const left = isOpen === false ? 'calc(90px - 16px)' : 'calc(288px - 16px)';
 
   return (
     <div className="invisible fixed bottom-20 z-50 lg:visible" style={{ left }}>
@@ -18,7 +18,7 @@ export function SidebarToggle({ isOpen, setIsOpen }: SidebarToggleProps) {
         onClick={() => setIsOpen?.()}
         variant="raised"
         size="icon"
-        className="m4-pushable-icon"
+        className="m4-pushable-icon-square !rounded-md"
         aria-label={isOpen === false ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         <ChevronLeft

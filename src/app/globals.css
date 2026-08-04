@@ -256,6 +256,11 @@ body,
     @apply pushable-effect pushable-wall-neutral pointer-events-auto inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full border-2 border-border bg-[#c90084] text-white shadow-lg shadow-black/30 hover:bg-[#c90084] transition-transform transition-shadow duration-150 ease-out;
   }
 
+  /** Square pushable icon (menu sidebar slider) — same treatment, rounded-md not circle. */
+  .m4-pushable-icon-square {
+    @apply pushable-effect pushable-wall-neutral pointer-events-auto inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md border-2 border-border bg-[#c90084] text-white shadow-lg shadow-black/30 hover:bg-[#c90084] transition-transform transition-shadow duration-150 ease-out;
+  }
+
   /** Flat circular hit target (toolbars, ghost icon rows) — same footprint as .m4-circle-action. */
   .m4-circle-ghost {
     @apply inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
