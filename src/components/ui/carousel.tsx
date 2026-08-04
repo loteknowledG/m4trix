@@ -180,8 +180,7 @@ type CarouselControlProps = React.ComponentProps<typeof Button> & {
   buttonClassName?: string;
 };
 
-const carouselNavButtonClassName =
-  'pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900';
+const carouselNavButtonClassName = 'm4-pushable-icon pointer-events-auto';
 
 const CarouselNavButton = React.forwardRef<HTMLButtonElement, CarouselControlProps>(
   ({ className, buttonClassName, variant = 'raised', size = 'icon', ...props }, ref) => {
