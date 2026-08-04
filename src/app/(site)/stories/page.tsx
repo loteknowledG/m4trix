@@ -239,9 +239,9 @@ export default function StoriesPage() {
               <Button
                 onClick={() => void createNewStory()}
                 size="icon"
-                variant="default"
+                variant="raised"
                 disabled={creating}
-                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
+                className="pushable-wall-neutral fixed bottom-6 right-6 z-50 h-12 w-12 bg-[#c90084]/80 text-white hover:bg-[#c90084] disabled:opacity-70"
                 aria-label="New story"
               >
                 <SquarePen className="h-5 w-5" />
