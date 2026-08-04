@@ -35,8 +35,8 @@ type MomentDialogOverlayProps = {
   editLineId?: string | null;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
-  /** Game dialog bubbles: width is 2× height (half the height of a square at the same width). */
-  squareAspect?: boolean;
+  /** Game dialog bubbles: half the min height of a square at the same width; height grows with content. */
+  gameDialog?: boolean;
 };
 
 type LineLayout = {
@@ -66,7 +66,7 @@ function MomentDialogBubble({
   loopEpoch = 0,
   stageRef,
   onLayoutChange,
-  squareAspect = false,
+  gameDialog = false,
 }: {
   line: MomentDialogOverlayLine;
   speakerName: string;
@@ -75,7 +75,7 @@ function MomentDialogBubble({
   editable?: boolean;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (patch: MomentDialogLayoutPatch) => void;
-  squareAspect?: boolean;
+  gameDialog?: boolean;
 }) {
   const style = resolveMomentDialogLineStyle(line);
   const layoutRef = useRef<LineLayout>(resolveMomentLineLayout(line));
@@ -148,7 +148,7 @@ function MomentDialogBubble({
         if (!rect.width || !rect.height) return;
         const dx = (ev.clientX - startX) / rect.width;
         const dy = (ev.clientY - startY) / rect.height;
-        if (squareAspect) {
+        if (gameDialog) {
           applyLayout({
             ...layoutRef.current,
             width: clamp(startLayout.width + (dx + dy) * 0.7, 0.2, 1),
@@ -166,7 +166,7 @@ function MomentDialogBubble({
         handle.releasePointerCapture(ev.pointerId);
         interactingRef.current = false;
         onLayoutChange?.(
-          squareAspect
+          gameDialog
             ? { width: layoutRef.current.width }
             : {
                 width: layoutRef.current.width,
@@ -182,7 +182,7 @@ function MomentDialogBubble({
       handle.addEventListener('pointerup', onEnd);
       handle.addEventListener('pointercancel', onEnd);
     },
-    [applyLayout, editable, onLayoutChange, squareAspect, stageRef],
+    [applyLayout, editable, onLayoutChange, gameDialog, stageRef],
   );
 
   const speakerColor =
@@ -204,15 +204,14 @@ function MomentDialogBubble({
         left: `${layout.x * 100}%`,
         top: `${layout.y * 100}%`,
         width: `${layout.width * 100}%`,
-        aspectRatio: squareAspect ? '2 / 1' : undefined,
-        fontSize: squareAspect ? gameDialogFontSize(style.fontScale) : lineFontSize(layout.fontScale),
+        minHeight: gameDialog ? `${layout.width * 50}cqw` : undefined,
+        fontSize: gameDialog ? gameDialogFontSize(style.fontScale) : lineFontSize(layout.fontScale),
         fontFamily: resolveVideoCueFontFamily(style.font),
       }}
     >
       <div
         className={cn(
           'relative touch-none',
-          squareAspect && 'flex h-full min-h-0 flex-col overflow-hidden',
           editable && 'cursor-grab ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent active:cursor-grabbing',
         )}
         onPointerDown={editable ? onStartDrag : undefined}
@@ -222,7 +221,7 @@ function MomentDialogBubble({
             Drag
           </div>
         ) : null}
-        <div className={cn(editable ? 'min-h-0 flex-1 px-0.5 pb-0.5' : undefined, squareAspect && 'overflow-y-auto')}>
+        <div className={cn(editable && 'px-0.5 pb-0.5')}>
           {showSpeakerLabel ? (
             <div
               className="mb-1 text-[0.85em] font-bold uppercase tracking-wide"
@@ -276,7 +275,7 @@ export function MomentDialogOverlay({
   editLineId = null,
   stageRef: externalStageRef,
   onLayoutChange,
-  squareAspect = false,
+  gameDialog = false,
 }: MomentDialogOverlayProps) {
   const internalStageRef = useRef<HTMLDivElement>(null);
   const layoutStageRef = externalStageRef ?? internalStageRef;
@@ -322,7 +321,7 @@ export function MomentDialogOverlay({
           speakerName={line.speakerName}
           momentId={momentId}
           loopEpoch={loopEpoch}
-          squareAspect={squareAspect}
+          gameDialog={gameDialog}
         />
       ))}
 
@@ -336,7 +335,7 @@ export function MomentDialogOverlay({
           editable
           stageRef={layoutStageRef}
           onLayoutChange={(patch) => handleLayoutChange(editingLine.id, patch)}
-          squareAspect={squareAspect}
+          gameDialog={gameDialog}
         />
       ) : null}
 

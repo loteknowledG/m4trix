@@ -2399,7 +2399,7 @@ export default function GamePage() {
                 editLineId={activeCharacter}
                 stageRef={stageRef}
                 onLayoutChange={handleGameDialogLayoutChange}
-                squareAspect
+                gameDialog
               />
 
               <GameDialogComposer
