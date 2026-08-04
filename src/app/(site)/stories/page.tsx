@@ -20,6 +20,7 @@ import {
   type StoryMeta,
 } from '@/lib/stories';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 export default function StoriesPage() {
   const router = useRouter();
@@ -178,9 +179,10 @@ export default function StoriesPage() {
                 {stories.map(s => (
                   <Card
                     key={s.id}
-                    className={`group relative overflow-hidden transition-shadow duration-150 transition-transform duration-150 ease-out hover:shadow-2xl hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 ${
-                      selectedStories[s.id] ? 'ring-2 ring-primary' : ''
-                    }`}
+                    className={cn(
+                      'm4-paper-card group relative overflow-hidden',
+                      selectedStories[s.id] && 'ring-2 ring-primary',
+                    )}
                   >
                     <div className="relative aspect-square">
                       <label

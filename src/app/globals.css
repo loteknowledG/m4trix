@@ -246,6 +246,33 @@ body,
     box-shadow: 8px 8px 22px rgba(0, 0, 0, 0.9);
   }
 
+  /** Flat paper cards — rest flat, hover lifts with soft shadow, click presses down. */
+  .m4-paper-card {
+    @apply transition-[transform,box-shadow] duration-150 ease-out;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  }
+  .m4-paper-card:hover {
+    transform: translateY(-4px);
+    box-shadow:
+      0 14px 28px -10px rgb(0 0 0 / 0.22),
+      0 6px 12px -6px rgb(0 0 0 / 0.12);
+  }
+  .m4-paper-card:active {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px -4px rgb(0 0 0 / 0.16);
+  }
+  .dark .m4-paper-card {
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  }
+  .dark .m4-paper-card:hover {
+    box-shadow:
+      0 16px 32px -12px rgb(0 0 0 / 0.55),
+      0 8px 16px -8px rgb(0 0 0 / 0.35);
+  }
+  .dark .m4-paper-card:active {
+    box-shadow: 0 6px 14px -6px rgb(0 0 0 / 0.4);
+  }
+
   /** 40×40 circular actions with slab / pushable treatment (align with Button size="icon"). */
   .m4-circle-action {
     @apply pushable-effect inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium;
