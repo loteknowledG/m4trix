@@ -35,7 +35,7 @@ type MomentDialogOverlayProps = {
   editLineId?: string | null;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
-  /** Keep bubble height equal to width (game dialog defaults). */
+  /** Game dialog bubbles: width is 2× height (half the height of a square at the same width). */
   squareAspect?: boolean;
 };
 
@@ -189,7 +189,7 @@ function MomentDialogBubble({
         left: `${layout.x * 100}%`,
         top: `${layout.y * 100}%`,
         width: `${layout.width * 100}%`,
-        aspectRatio: squareAspect ? '1 / 1' : undefined,
+        aspectRatio: squareAspect ? '2 / 1' : undefined,
         fontSize: lineFontSize(layout.fontScale),
         fontFamily: resolveVideoCueFontFamily(style.font),
       }}

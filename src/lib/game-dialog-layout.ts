@@ -26,7 +26,7 @@ const DEFAULT_ZONES: Record<GameCharacterSlot, DialogSpeakerPosition> = {
   narrator: 'top',
 };
 
-/** Fraction of stage width; paired with 1:1 aspect ratio in game overlay for a square bubble. */
+/** Fraction of stage width; paired with 2:1 aspect ratio in game overlay (height is half of width). */
 const DEFAULT_GAME_DIALOG_WIDTH = 0.28;
 
 export function defaultGameDialogLayout(slot: GameCharacterSlot): GameDialogLayout {
