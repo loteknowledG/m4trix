@@ -48,18 +48,6 @@ export function Menu({ isOpen }: MenuProps) {
         const savedStories =
           (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
         if (mounted) setStoriesList(savedStories);
-        const storyFromRoute = resolveActiveStoryId(pathname, searchParams?.get('story'));
-        if (storyFromRoute) {
-          if (mounted) setActiveStoryId(storyFromRoute);
-        } else {
-          try {
-            const storedActive = await get<string>('stories-active');
-            if (mounted) setActiveStoryId(storedActive || null);
-          } catch (e) {
-            if (mounted) setActiveStoryId(null);
-          }
-        }
-
         const gameRouteId = pathname?.startsWith('/games/') ? pathname.split('/')[2] : null;
         const gameParam =
           gameRouteId && gameRouteId !== 'new'
@@ -170,6 +158,10 @@ export function Menu({ isOpen }: MenuProps) {
     }
   }, [pathname, searchParams]);
 
+  const storiesHref = '/stories';
+  const effectiveActiveStoryId =
+    pathname === storiesHref ? null : activeStoryId;
+
   const menuList = getMenuList();
 
   return (
@@ -273,7 +265,7 @@ export function Menu({ isOpen }: MenuProps) {
                         // keep exact-match behavior for top-level.
                         label === 'Stories'
                           ? isOpen === false
-                            ? pathname === href && !activeStoryId
+                            ? pathname === href && !effectiveActiveStoryId
                             : pathname === href
                           : label === 'Games'
                           ? isOpen === false
@@ -294,7 +286,7 @@ export function Menu({ isOpen }: MenuProps) {
                           ? storiesList.map(s => ({
                               href: storyEditorHref(s.id),
                               label: s.title && s.title.trim() ? s.title : 'Untitled',
-                              active: activeStoryId != null && s.id === activeStoryId,
+                              active: effectiveActiveStoryId != null && s.id === effectiveActiveStoryId,
                               count: s.count ?? 0,
                             }))
                           : label === 'Games'
