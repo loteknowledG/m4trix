@@ -34,6 +34,15 @@ description: Small-batch repo workflow for the m4trix codebase. Use when cleanin
 - If lint or type errors remain, report them clearly and let the user decide when to gate commits.
 - Prefer fixing the exact files the user is working on instead of sweeping the whole repo.
 
+## Ship (default end of task)
+
+When coding work is done, follow `.codex/skills/commit-and-push/SKILL.md`:
+
+1. `pnpm exec tsc --noEmit`
+2. Commit and push to `master`
+3. Confirm the **Vercel Deploy** GitHub Action succeeded
+4. Tell the user https://m4trix.vercel.app is updated (or report deploy failure)
+
 ## When in Doubt
 
 - Choose the smallest safe change.
