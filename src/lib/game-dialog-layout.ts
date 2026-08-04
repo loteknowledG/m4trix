@@ -1,0 +1,80 @@
+import { defaultXYForSpeakerZone, type DialogSpeakerPosition } from '@/lib/moment-dialog';
+
+export type GameCharacterSlot = 'protagonist' | 'antagonist' | 'narrator';
+
+export type GameDialogLayout = {
+  x: number;
+  y: number;
+  width: number;
+  fontScale: number;
+};
+
+export type GameDialogLayouts = Record<GameCharacterSlot, GameDialogLayout>;
+
+const STORAGE_PREFIX = 'm4trix:game-dialog-layout:';
+
+const DEFAULT_ZONES: Record<GameCharacterSlot, DialogSpeakerPosition> = {
+  protagonist: 'left',
+  antagonist: 'right',
+  narrator: 'top',
+};
+
+export function defaultGameDialogLayout(slot: GameCharacterSlot): GameDialogLayout {
+  const xy = defaultXYForSpeakerZone(DEFAULT_ZONES[slot]);
+  return {
+    x: xy.x,
+    y: xy.y,
+    width: slot === 'narrator' ? 0.82 : 0.72,
+    fontScale: 0.04,
+  };
+}
+
+export function defaultGameDialogLayouts(): GameDialogLayouts {
+  return {
+    protagonist: defaultGameDialogLayout('protagonist'),
+    antagonist: defaultGameDialogLayout('antagonist'),
+    narrator: defaultGameDialogLayout('narrator'),
+  };
+}
+
+function normalizeLayout(value: unknown, fallback: GameDialogLayout): GameDialogLayout {
+  if (!value || typeof value !== 'object') return fallback;
+  const record = value as Record<string, unknown>;
+  const read = (key: keyof GameDialogLayout, min: number, max: number) => {
+    const raw = record[key];
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback[key];
+    return Math.min(max, Math.max(min, raw));
+  };
+  return {
+    x: read('x', 0, 1),
+    y: read('y', 0, 1),
+    width: read('width', 0.2, 1),
+    fontScale: read('fontScale', 0.02, 0.12),
+  };
+}
+
+export function loadGameDialogLayouts(gameId: string | undefined): GameDialogLayouts {
+  const defaults = defaultGameDialogLayouts();
+  if (!gameId || typeof window === 'undefined') return defaults;
+  try {
+    const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${gameId}`);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<Record<GameCharacterSlot, unknown>>;
+    return {
+      protagonist: normalizeLayout(parsed.protagonist, defaults.protagonist),
+      antagonist: normalizeLayout(parsed.antagonist, defaults.antagonist),
+      narrator: normalizeLayout(parsed.narrator, defaults.narrator),
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+export function saveGameDialogLayouts(gameId: string | undefined, layouts: GameDialogLayouts) {
+  if (!gameId || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(`${STORAGE_PREFIX}${gameId}`, JSON.stringify(layouts));
+  } catch {
+    /* ignore */
+  }
+}

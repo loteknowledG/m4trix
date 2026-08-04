@@ -1,15 +1,15 @@
 "use client";
 
 import { del, get, keys, set } from "idb-keyval";
-import dynamic from "next/dynamic";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes } from "react-icons/fa";
-import { FaArrowUp } from "react-icons/fa6";
 import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
+import { GameDialogComposer } from "@/components/game-dialog-composer";
+import { MomentDialogOverlay, type MomentDialogLayoutPatch } from "@/components/moment-dialog-overlay";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
@@ -45,12 +45,11 @@ import {
 } from "@/lib/lmstudio";
 import { stripAssistantPromptLeak, stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
-import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
+import { formatDialogModeLabel, formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
-import { normalizeCharacterDialogStyle } from "@/lib/character-dialog-style";
+import { NARRATOR_CHARACTER_DIALOG_STYLE, normalizeCharacterDialogStyle, resolveCharacterDialogStyle } from "@/lib/character-dialog-style";
 import {
   normalizeCharacterTtsVoice,
-  resolveCharacterTtsVoice,
 } from "@/lib/character-tts-profile";
 import {
   buildCharacterReplyPrompt,
@@ -97,22 +96,102 @@ import {
   getCompletedTodoIds,
   type StoryArcTodoProgress,
 } from "@/lib/game/story-arc-progress";
+import {
+  defaultGameDialogLayouts,
+  loadGameDialogLayouts,
+  saveGameDialogLayouts,
+  type GameCharacterSlot,
+  type GameDialogLayouts,
+} from "@/lib/game-dialog-layout";
+import type { MomentDialogLine } from "@/lib/moment-dialog";
 import { normalizeMomentSrc } from "@/lib/moments";
-import { cn } from "@/lib/utils";
-
-const VN_CHAT_HEIGHT_KEY = "game-vn-chat-height-pct";
-const VN_CHAT_HEIGHT_DEFAULT = 42;
-const VN_CHAT_HEIGHT_MIN = 22;
-const VN_CHAT_HEIGHT_MAX = 88;
-
-function clampChatHeightPct(value: number) {
-  return Math.min(VN_CHAT_HEIGHT_MAX, Math.max(VN_CHAT_HEIGHT_MIN, value));
-}
 import {
   pickBestMomentIndex,
   pickBestMoment,
   storyTextForPrompt,
 } from "@/lib/game/story-moments";
+import { cn } from "@/lib/utils";
+
+const CHARACTER_MEMORY_INJECTION_LIMIT = 2;
+
+function latestSpeakableMessage(messages: CustomChatMessage[]): CustomChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    const text = msg.text.trim();
+    if (!text || text === "…") continue;
+    if (msg.id.startsWith("pending-")) continue;
+    return msg;
+  }
+  return null;
+}
+
+function dialogStyleForGameSlot(
+  slot: GameCharacterSlot,
+  assignedPlayer: GameCharacterContext,
+  assignedNpc: GameCharacterContext,
+) {
+  if (slot === "protagonist") {
+    return resolveCharacterDialogStyle(assignedPlayer?.dialogStyle);
+  }
+  if (slot === "antagonist") {
+    return resolveCharacterDialogStyle(assignedNpc?.dialogStyle);
+  }
+  return resolveCharacterDialogStyle(NARRATOR_CHARACTER_DIALOG_STYLE);
+}
+
+function buildGameOverlayLines(params: {
+  conversations: Record<GameCharacterSlot, CustomChatMessage[]>;
+  layouts: GameDialogLayouts;
+  labels: Record<GameCharacterSlot, string>;
+  activeCharacter: GameCharacterSlot;
+  assignedPlayer: GameCharacterContext;
+  assignedNpc: GameCharacterContext;
+  npcKnowsPlayer: boolean;
+  playerMode: PlayerMode;
+}): Array<MomentDialogLine & { speakerName: string }> {
+  const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
+  const lines: Array<MomentDialogLine & { speakerName: string }> = [];
+
+  for (const slot of slots) {
+    const latest = latestSpeakableMessage(params.conversations[slot] || []);
+    const isActive = slot === params.activeCharacter;
+    if (!latest && !isActive) continue;
+
+    const layout = params.layouts[slot];
+    const style = dialogStyleForGameSlot(slot, params.assignedPlayer, params.assignedNpc);
+    const label = params.labels[slot];
+    const mode = isActive ? params.playerMode : "say";
+
+    let speakerLabel: string;
+    if (slot === "protagonist") {
+      speakerLabel = formatPlayerMemoryLabel({ name: label }, params.npcKnowsPlayer, mode);
+    } else if (slot === "antagonist") {
+      speakerLabel = formatDialogModeLabel(label, mode);
+    } else {
+      speakerLabel = label;
+    }
+
+    lines.push({
+      id: slot,
+      characterId: slot,
+      speaker: label,
+      text: latest?.text ?? "",
+      playerMode: mode,
+      x: layout.x,
+      y: layout.y,
+      width: layout.width,
+      fontScale: layout.fontScale,
+      font: style.font,
+      color: style.color,
+      shadowColor: style.shadowColor,
+      speakerColor: style.speakerColor,
+      textEffects: style.textEffects,
+      speakerName: `${speakerLabel} says`,
+    });
+  }
+
+  return lines;
+}
 
 type CharacterTurnMemory = {
   id: string;
@@ -129,23 +208,6 @@ type CharacterTurnMemory = {
   sceneContext: string;
   createdAt: number;
 };
-
-const CHARACTER_MEMORY_INJECTION_LIMIT = 2;
-
-const CustomChatWindow = dynamic(
-  () =>
-    import("@/components/ai/custom-chat-window").then((mod) => ({
-      default: mod.CustomChatWindow,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Loading chat…
-      </div>
-    ),
-  },
-);
 
 export default function GamePage() {
   const params = useParams();
@@ -207,10 +269,6 @@ export default function GamePage() {
     narrator: '',
   });
   const [activeCharacter, setActiveCharacter] = useState<CharacterId>('protagonist');
-  const narratorTtsVoice = useMemo(
-    () => resolveCharacterTtsVoice({ engine: "profile", profileId: "narrator" }),
-    [],
-  );
 
   // Derive combined chatMessages for legacy code that expects a single array
   const chatMessages: CustomChatMessage[] = [
@@ -252,8 +310,6 @@ export default function GamePage() {
     setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: trimmedValue }));
   };
 
-  const activeConversationMessages = conversations[activeCharacter] || [];
-
   const [connected, setConnected] = useState(false);
   console.debug('[game] connected state:', connected);
   const [connectionModel, setConnectionModel] = useState<string | null>(() => {
@@ -277,9 +333,9 @@ export default function GamePage() {
   const [tagInput, setTagInput] = useState("");
   const [allTags, setAllTags] = useState<string[]>([]);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const chatHeightPctRef = useRef(VN_CHAT_HEIGHT_DEFAULT);
-  const chatResizeRef = useRef<{ startY: number; startPct: number } | null>(null);
-  const [chatHeightPct, setChatHeightPct] = useState(VN_CHAT_HEIGHT_DEFAULT);
+  const [gameDialogLayouts, setGameDialogLayouts] = useState<GameDialogLayouts>(() =>
+    defaultGameDialogLayouts(),
+  );
   const [playerMode, setPlayerMode] = useState<PlayerMode>("say");
   const [debugData, setDebugData] = useState<{
     request: any;
@@ -304,14 +360,6 @@ export default function GamePage() {
     () => resolveNpcKnowsPlayerForSession(npcKnowsPlayer, playerRevealedInGame),
     [npcKnowsPlayer, playerRevealedInGame],
   );
-  const playerIdentityHint = useMemo(() => {
-    if (!assignedPlayer) return undefined;
-    if (npcKnowsPlayerEffective) {
-      return assignedPlayer.name?.trim() || "Player";
-    }
-    return "Stranger";
-  }, [assignedPlayer, npcKnowsPlayerEffective]);
-
   const characterTabLabels = useMemo(
     (): Record<CharacterId, string> => ({
       protagonist: assignedPlayer?.name?.trim() || 'Protagonist',
@@ -321,11 +369,65 @@ export default function GamePage() {
     [assignedNpc?.name, assignedPlayer?.name],
   );
 
-  const activeTtsVoice = useMemo(() => {
-    if (activeCharacter === 'protagonist') return assignedPlayer?.ttsVoice;
-    if (activeCharacter === 'antagonist') return assignedNpc?.ttsVoice;
-    return narratorTtsVoice;
-  }, [activeCharacter, assignedNpc?.ttsVoice, assignedPlayer?.ttsVoice, narratorTtsVoice]);
+  useEffect(() => {
+    setGameDialogLayouts(loadGameDialogLayouts(id));
+  }, [id]);
+
+  const handleGameDialogLayoutChange = useCallback(
+    (lineId: string, patch: MomentDialogLayoutPatch) => {
+      const slot = lineId as GameCharacterSlot;
+      if (slot !== "protagonist" && slot !== "antagonist" && slot !== "narrator") return;
+      setGameDialogLayouts((prev) => {
+        const next: GameDialogLayouts = {
+          ...prev,
+          [slot]: { ...prev[slot], ...patch },
+        };
+        saveGameDialogLayouts(id, next);
+        return next;
+      });
+    },
+    [id],
+  );
+
+  const gameOverlayLines = useMemo(
+    () =>
+      buildGameOverlayLines({
+        conversations,
+        layouts: gameDialogLayouts,
+        labels: characterTabLabels,
+        activeCharacter,
+        assignedPlayer,
+        assignedNpc,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
+        playerMode,
+      }),
+    [
+      activeCharacter,
+      assignedNpc,
+      assignedPlayer,
+      characterTabLabels,
+      conversations,
+      gameDialogLayouts,
+      npcKnowsPlayerEffective,
+      playerMode,
+    ],
+  );
+
+  const gameDialogTabs = useMemo(
+    () =>
+      ([
+        { id: "protagonist" as const, label: characterTabLabels.protagonist, role: "player" as const },
+        { id: "antagonist" as const, label: characterTabLabels.antagonist, role: "npc" as const },
+        { id: "narrator" as const, label: characterTabLabels.narrator, role: "narrator" as const },
+      ]),
+    [characterTabLabels],
+  );
+
+  const activeDialogStyle = useMemo(() => {
+    if (activeCharacter === "protagonist") return assignedPlayer?.dialogStyle;
+    if (activeCharacter === "antagonist") return assignedNpc?.dialogStyle;
+    return NARRATOR_CHARACTER_DIALOG_STYLE;
+  }, [activeCharacter, assignedNpc?.dialogStyle, assignedPlayer?.dialogStyle]);
   const storyArcStages = Array.isArray(storyArc?.stages) ? storyArc.stages : [];
   const resolvedArcStageNumber =
     typeof storyArcCurrentStage === "number" && Number.isFinite(storyArcCurrentStage)
@@ -570,70 +672,6 @@ export default function GamePage() {
       return (current + 1) % len;
     });
   }, [hasMoments, storyMoments.length]);
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(VN_CHAT_HEIGHT_KEY);
-      const parsed = raw ? Number(raw) : NaN;
-      if (Number.isFinite(parsed)) {
-        const next = clampChatHeightPct(parsed);
-        chatHeightPctRef.current = next;
-        setChatHeightPct(next);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    chatHeightPctRef.current = chatHeightPct;
-  }, [chatHeightPct]);
-
-  useEffect(() => {
-    const onPointerMove = (event: PointerEvent) => {
-      const drag = chatResizeRef.current;
-      const stage = stageRef.current;
-      if (!drag || !stage) return;
-      const stageHeight = stage.getBoundingClientRect().height;
-      if (stageHeight <= 0) return;
-      const deltaPct = ((drag.startY - event.clientY) / stageHeight) * 100;
-      const next = clampChatHeightPct(drag.startPct + deltaPct);
-      chatHeightPctRef.current = next;
-      setChatHeightPct(next);
-    };
-
-    const onPointerUp = () => {
-      if (!chatResizeRef.current) return;
-      chatResizeRef.current = null;
-      try {
-        window.localStorage.setItem(VN_CHAT_HEIGHT_KEY, String(chatHeightPctRef.current));
-      } catch {
-        /* ignore */
-      }
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-    };
-  }, []);
-
-  const beginChatResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    chatResizeRef.current = {
-      startY: event.clientY,
-      startPct: chatHeightPctRef.current,
-    };
-    document.body.style.cursor = "ns-resize";
-    document.body.style.userSelect = "none";
-  }, []);
 
   // Moment selection and saved story state
   useEffect(() => {
@@ -2258,61 +2296,28 @@ export default function GamePage() {
                 </div>
               </div>
 
-              <div
-                className="absolute inset-x-0 bottom-0 z-20 flex flex-col bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pb-3 pt-10 sm:px-6 sm:pb-5"
-                data-testid="game-chat-panel"
-                style={{ height: `${chatHeightPct}%` }}
-              >
-                <button
-                  type="button"
-                  aria-label="Resize chat panel"
-                  title="Drag to resize chat"
-                  className="mx-auto mb-2 flex h-4 w-28 shrink-0 cursor-ns-resize items-center justify-center rounded-full border border-white/25 bg-black/50 touch-none"
-                  onPointerDown={beginChatResize}
-                >
-                  <span className="h-0.5 w-10 rounded-full bg-white/70" />
-                </button>
-                <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden rounded-sm border border-white/70 bg-black/55 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-[2px] sm:px-5 sm:py-4">
-                  <div className="mb-2 flex flex-wrap gap-1">
-                    {(['protagonist', 'antagonist', 'narrator'] as const).map((characterId) => (
-                      <button
-                        key={characterId}
-                        type="button"
-                        onClick={() => setActiveCharacter(characterId)}
-                        className={cn(
-                          'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                          activeCharacter === characterId
-                            ? 'bg-white/20 text-white'
-                            : 'text-white/60 hover:bg-white/10 hover:text-white',
-                        )}
-                      >
-                        {characterTabLabels[characterId]}
-                      </button>
-                    ))}
-                  </div>
-                  <CustomChatWindow
-                    variant="visualNovel"
-                    messages={activeConversationMessages}
-                    input={chatInput}
-                    onInputChange={setChatInput}
-                    onSend={sendChatMessage}
-                    onEditMessage={handleEditChatMessage}
-                    onMessageEdited={handleMessageEdited}
-                    onSteerMessage={handleSteerChatMessage}
-                    onContinueMessage={handleContinueChatMessage}
-                    steerInstruction={steerInstruction}
-                    disabled={chatInFlight}
-                    connected={connected}
-                    connectionModel={connectionModel}
-                    playerMode={playerMode}
-                    onPlayerModeChange={setPlayerMode}
-                    playerIdentityHint={playerIdentityHint}
-                    ttsVoice={activeTtsVoice}
-                    sendIcon={<FaArrowUp className="h-4 w-4" />}
-                    sendIconAriaLabel="Send message"
-                  />
-                </div>
-              </div>
+              <MomentDialogOverlay
+                lines={gameOverlayLines}
+                editLineId={activeCharacter}
+                stageRef={stageRef}
+                onLayoutChange={handleGameDialogLayoutChange}
+              />
+
+              <GameDialogComposer
+                tabs={gameDialogTabs}
+                activeCharacter={activeCharacter}
+                onActiveCharacterChange={setActiveCharacter}
+                input={chatInput}
+                onInputChange={setChatInput}
+                onSend={sendChatMessage}
+                playerMode={playerMode}
+                onPlayerModeChange={setPlayerMode}
+                dialogStyle={activeDialogStyle}
+                disabled={chatInFlight}
+                inputMaxLength={
+                  activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
+                }
+              />
             </div>
             )}
           </div>
