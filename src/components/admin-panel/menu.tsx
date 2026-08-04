@@ -18,6 +18,7 @@ import { playlistEditorHref } from '@/lib/video-routes';
 
 // removed unused imports
 import CountBadge from '@/components/ui/count-badge';
+import { menuItemClassName } from '@/lib/menu-item-styles';
 
 interface MenuProps {
   isOpen: boolean | undefined;
@@ -220,20 +221,15 @@ export function Menu({ isOpen }: MenuProps) {
                     <Tooltip delayDuration={100}>
                       <TooltipTrigger asChild>
                         <Button
-                          variant={
-                            (active === undefined && pathname.startsWith(href)) || active
-                              ? 'secondary'
-                              : 'ghost'
-                          }
-                          className={cn(
-                            'relative z-40 pointer-events-auto w-full justify-start h-10 mb-1 shadow-sm transition-transform transform hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active',
-                            ((active === undefined && pathname.startsWith(href)) || active)
-                              ? 'menu-color-slab'
-                              : '',
-                            isOpen === false &&
-                              ((active === undefined && pathname.startsWith(href)) || active)
-                              ? 'hover:-translate-y-0.5 shadow-2xl bg-secondary/95 ring-1 ring-primary/60'
-                              : ''
+                          variant="ghost"
+                          className={menuItemClassName(
+                            (active === undefined && pathname.startsWith(href)) || !!active,
+                            cn(
+                              'z-40',
+                              isOpen === false &&
+                                ((active === undefined && pathname.startsWith(href)) || active) &&
+                                'm4-menu-item-active-collapsed',
+                            ),
                           )}
                           asChild
                         >

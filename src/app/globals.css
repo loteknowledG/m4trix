@@ -261,6 +261,27 @@ body,
     @apply pushable-effect pushable-wall-neutral pointer-events-auto inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md border-2 border-border bg-[#c90084] text-white shadow-lg shadow-black/30 hover:bg-[#c90084] transition-transform transition-shadow duration-150 ease-out;
   }
 
+  /** Sidebar nav rows: square rounded pushable slabs. */
+  .m4-menu-item {
+    @apply pushable-effect pushable-wall-neutral relative pointer-events-auto w-full justify-start h-10 mb-1 !rounded-md border-2 border-border bg-background text-foreground shadow-sm transition-transform transition-shadow duration-150 ease-out hover:!bg-background;
+  }
+
+  .m4-menu-item-active {
+    @apply bg-secondary text-secondary-foreground menu-color-slab hover:bg-secondary/90;
+  }
+
+  .m4-menu-item-active-collapsed {
+    @apply bg-secondary/95 ring-1 ring-primary/60;
+  }
+
+  .m4-menu-dropdown-item {
+    @apply pushable-effect pushable-wall-neutral mb-1 block w-full cursor-pointer !rounded-md border-2 border-border bg-background px-2 py-2 text-foreground shadow-sm transition-transform transition-shadow duration-150 ease-out hover:bg-background;
+  }
+
+  .m4-menu-dropdown-item-active {
+    @apply bg-secondary text-secondary-foreground menu-color-slab hover:bg-secondary/90;
+  }
+
   /** Flat circular hit target (toolbars, ghost icon rows) — same footprint as .m4-circle-action. */
   .m4-circle-ghost {
     @apply inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
