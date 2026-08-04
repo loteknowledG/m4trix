@@ -18,6 +18,10 @@ export const CHARACTER_TTS_PROFILE_OPTIONS = [
   { id: 'stripper-female', label: 'Stripper', description: 'Slow husky club voice, playful and flirtatious.' },
 ] as const;
 
+export const CHARACTER_TTS_PROFILE_OPTIONS_ALPHABETICAL = [...CHARACTER_TTS_PROFILE_OPTIONS].sort(
+  (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
+);
+
 export type CharacterTtsProfileId = (typeof CHARACTER_TTS_PROFILE_OPTIONS)[number]['id'];
 
 export type CharacterTtsVoice = {

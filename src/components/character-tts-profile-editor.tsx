@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   CHARACTER_TTS_PROFILE_OPTIONS,
+  CHARACTER_TTS_PROFILE_OPTIONS_ALPHABETICAL,
   characterTtsVoiceLabel,
   normalizeCharacterTtsVoice,
   resolveCharacterTtsVoice,
@@ -65,7 +66,7 @@ export function CharacterTtsProfileEditor({
           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           aria-label="Voice profile"
         >
-          {CHARACTER_TTS_PROFILE_OPTIONS.map(option => (
+          {CHARACTER_TTS_PROFILE_OPTIONS_ALPHABETICAL.map(option => (
             <option key={option.id} value={option.id}>
               {option.label}
             </option>
