@@ -2,9 +2,17 @@
 
 import { ChevronLeft } from '@/components/icons';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
 import type { CharacterDialogStyle } from '@/lib/character-dialog-style';
 import { resolveCharacterDialogStyle } from '@/lib/character-dialog-style';
 import type { GameCharacterSlot } from '@/lib/game-dialog-layout';
+import {
+  buildCueTextShadow,
+  resolveVideoCueFontFamily,
+} from '@/lib/video-timed-cues';
+import { videoCueTextEffectsKey } from '@/lib/video-cue-text-effects';
 import { cn } from '@/lib/utils';
 
 type CharacterTab = {
@@ -19,7 +27,12 @@ type GameDialogComposerProps = {
   tabs: CharacterTab[];
   activeCharacter: GameCharacterSlot;
   onActiveCharacterChange: (id: GameCharacterSlot) => void;
+  input: string;
+  onInputChange: (value: string) => void;
+  onSend: () => void;
   dialogStyle?: CharacterDialogStyle | null;
+  disabled?: boolean;
+  inputMaxLength?: number;
 };
 
 export function GameDialogComposer({
@@ -28,10 +41,16 @@ export function GameDialogComposer({
   tabs,
   activeCharacter,
   onActiveCharacterChange,
+  input,
+  onInputChange,
+  onSend,
   dialogStyle,
+  disabled = false,
+  inputMaxLength,
 }: GameDialogComposerProps) {
   const activeTab = tabs.find(tab => tab.id === activeCharacter) ?? tabs[0];
   const style = resolveCharacterDialogStyle(dialogStyle);
+  const previewText = input.trim();
 
   if (!open) {
     return (
@@ -108,6 +127,37 @@ export function GameDialogComposer({
                   </div>
                 </div>
 
+                <label className="grid gap-1">
+                  <span className="text-[11px] text-muted-foreground">Dialog text</span>
+                  <Textarea
+                    value={input}
+                    onChange={event => {
+                      const next = event.target.value;
+                      if (inputMaxLength != null && next.length > inputMaxLength) {
+                        onInputChange(next.slice(0, inputMaxLength));
+                        return;
+                      }
+                      onInputChange(next);
+                    }}
+                    placeholder={`Write as ${activeTab.label}…`}
+                    rows={4}
+                    className="resize-y text-xs"
+                    disabled={disabled}
+                    maxLength={inputMaxLength}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        if (!disabled && input.trim()) onSend();
+                      }
+                    }}
+                  />
+                  {inputMaxLength != null ? (
+                    <span className="text-right text-[10px] tabular-nums text-muted-foreground">
+                      {input.length}/{inputMaxLength}
+                    </span>
+                  ) : null}
+                </label>
+
                 <fieldset disabled className="min-w-0 border-0 p-0 opacity-90">
                   <DialogLineStyleEditor
                     values={{
@@ -124,10 +174,41 @@ export function GameDialogComposer({
                   />
                 </fieldset>
 
+                {previewText ? (
+                  <div
+                    className="rounded-lg border border-border/40 bg-black/40 px-3 py-2 text-sm whitespace-pre-wrap"
+                    style={{
+                      color: style.color,
+                      textShadow: buildCueTextShadow(style.shadowColor),
+                      fontFamily: resolveVideoCueFontFamily(style.font),
+                      fontSize: `${Math.max(0.75, style.fontScale * 18)}rem`,
+                    }}
+                  >
+                    <VideoCueTextEffectView
+                      text={previewText}
+                      effects={style.textEffects}
+                      color={style.color}
+                      shadowColor={style.shadowColor}
+                      lineKey={`${activeTab.id}-preview`}
+                      replayKey={`${activeTab.id}-${videoCueTextEffectsKey(style.textEffects)}-${previewText}`}
+                      className="text-inherit"
+                    />
+                  </div>
+                ) : null}
+
                 <p className="text-[11px] text-muted-foreground">
                   Drag the highlighted dialog bubble on the scene to move it · use the corner
                   handle to resize.
                 </p>
+
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={disabled || !input.trim()}
+                  onClick={onSend}
+                >
+                  Send
+                </Button>
               </div>
             ) : null}
           </div>
