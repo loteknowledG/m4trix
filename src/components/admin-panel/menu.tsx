@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CollapseMenuButton } from '@/components/admin-panel/collapse-menu-button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { get } from 'idb-keyval';
+import { resolveActiveStoryId, storyEditorHref, type StoryMeta } from '@/lib/stories';
 import { characterDetailHref, isActiveCharacterDetail } from '@/lib/character-routes';
 import { playlistEditorHref } from '@/lib/video-routes';
 
@@ -47,12 +48,9 @@ export function Menu({ isOpen }: MenuProps) {
         const savedStories =
           (await get<{ id: string; title?: string; count?: number }[]>('stories')) || [];
         if (mounted) setStoriesList(savedStories);
-        // determine active story id: prefer dynamic route id in pathname, then query param, otherwise stored 'stories-active'
-        const param = pathname?.startsWith('/stories/')
-          ? pathname.split('/')[2]
-          : searchParams?.get('story');
-        if (param) {
-          if (mounted) setActiveStoryId(param);
+        const storyFromRoute = resolveActiveStoryId(pathname, searchParams?.get('story'));
+        if (storyFromRoute) {
+          if (mounted) setActiveStoryId(storyFromRoute);
         } else {
           try {
             const storedActive = await get<string>('stories-active');
@@ -150,15 +148,8 @@ export function Menu({ isOpen }: MenuProps) {
   }, [pathname, searchParams]);
 
   useEffect(() => {
-    // update activeStoryId when pathname or query param changes
-    if (pathname?.startsWith('/stories/')) {
-      const id = pathname.split('/')[2];
-      setActiveStoryId(id || null);
-    } else {
-      const param = searchParams?.get('story');
-      if (param) setActiveStoryId(param);
-      else setActiveStoryId(null);
-    }
+    const storyFromRoute = resolveActiveStoryId(pathname, searchParams?.get('story'));
+    setActiveStoryId(storyFromRoute);
 
     if (pathname?.startsWith('/games/')) {
       const routeId = pathname.split('/')[2];
@@ -301,13 +292,9 @@ export function Menu({ isOpen }: MenuProps) {
                       submenus={
                         label === 'Stories'
                           ? storiesList.map(s => ({
-                              href: `/stories/edit?story=${encodeURIComponent(s.id)}`,
+                              href: storyEditorHref(s.id),
                               label: s.title && s.title.trim() ? s.title : 'Untitled',
-                              // only mark a story submenu active when the current route/query indicates a story is open
-                              active:
-                                pathname?.startsWith('/stories/') || !!searchParams?.get('story')
-                                  ? s.id === activeStoryId
-                                  : false,
+                              active: activeStoryId != null && s.id === activeStoryId,
                               count: s.count ?? 0,
                             }))
                           : label === 'Games'

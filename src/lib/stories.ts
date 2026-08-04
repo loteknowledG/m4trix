@@ -29,6 +29,21 @@ export function storyEditorHref(storyId: string) {
   return `/stories/edit/?story=${encodeURIComponent(storyId)}`;
 }
 
+/** Match story detail routing: /stories/edit?story=id or /stories/{id}. */
+export function resolveActiveStoryId(
+  pathname: string | null | undefined,
+  storyQueryParam: string | null | undefined,
+): string | null {
+  if (!pathname?.startsWith('/stories/')) {
+    return storyQueryParam || null;
+  }
+  const routeSegment = pathname.split('/')[2];
+  if (!routeSegment || routeSegment === 'edit') {
+    return storyQueryParam || null;
+  }
+  return routeSegment;
+}
+
 export function storyPreviewMap(stories: StoryMeta[]): Record<string, string | null> {
   const map: Record<string, string | null> = {};
   for (const story of stories) {
