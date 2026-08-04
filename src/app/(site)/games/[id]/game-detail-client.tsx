@@ -10,7 +10,6 @@ import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
-import { CharacterChatDialog } from "@/components/ui/character-chat-dialog";
 import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
@@ -48,7 +47,6 @@ import { stripAssistantPromptLeak, stripHistoryMessageText, stripHtmlImages } fr
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import { formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
-import { NARRATOR_CHARACTER_DIALOG_STYLE } from "@/lib/character-dialog-style";
 import { normalizeCharacterDialogStyle } from "@/lib/character-dialog-style";
 import {
   normalizeCharacterTtsVoice,
@@ -100,6 +98,7 @@ import {
   type StoryArcTodoProgress,
 } from "@/lib/game/story-arc-progress";
 import { normalizeMomentSrc } from "@/lib/moments";
+import { cn } from "@/lib/utils";
 
 const VN_CHAT_HEIGHT_KEY = "game-vn-chat-height-pct";
 const VN_CHAT_HEIGHT_DEFAULT = 42;
@@ -246,8 +245,14 @@ export default function GamePage() {
 
   const chatInput = characterInputs[activeCharacter] || '';
   const setChatInput = (value: string) => {
-    setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: value }));
+    const trimmedValue =
+      activeCharacter === 'protagonist'
+        ? value.slice(0, PROTAGONIST_DIALOGUE_MAX_CHARS)
+        : value;
+    setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: trimmedValue }));
   };
+
+  const activeConversationMessages = conversations[activeCharacter] || [];
 
   const [connected, setConnected] = useState(false);
   console.debug('[game] connected state:', connected);
@@ -306,6 +311,21 @@ export default function GamePage() {
     }
     return "Stranger";
   }, [assignedPlayer, npcKnowsPlayerEffective]);
+
+  const characterTabLabels = useMemo(
+    (): Record<CharacterId, string> => ({
+      protagonist: assignedPlayer?.name?.trim() || 'Protagonist',
+      antagonist: assignedNpc?.name?.trim() || 'Antagonist',
+      narrator: 'Narrator',
+    }),
+    [assignedNpc?.name, assignedPlayer?.name],
+  );
+
+  const activeTtsVoice = useMemo(() => {
+    if (activeCharacter === 'protagonist') return assignedPlayer?.ttsVoice;
+    if (activeCharacter === 'antagonist') return assignedNpc?.ttsVoice;
+    return narratorTtsVoice;
+  }, [activeCharacter, assignedNpc?.ttsVoice, assignedPlayer?.ttsVoice, narratorTtsVoice]);
   const storyArcStages = Array.isArray(storyArc?.stages) ? storyArc.stages : [];
   const resolvedArcStageNumber =
     typeof storyArcCurrentStage === "number" && Number.isFinite(storyArcCurrentStage)
@@ -1478,11 +1498,17 @@ export default function GamePage() {
 
 
   const handleEditChatMessage = (messageId: string, nextText: string) => {
-    setChatMessages((messages) =>
-      messages.map((message) =>
-        message.id === messageId ? { ...message, text: nextText } : message,
-      ),
-    );
+    setConversations((prev) => {
+      const next = { ...prev };
+      for (const key of ['protagonist', 'antagonist', 'narrator'] as CharacterId[]) {
+        if (!prev[key].some((message) => message.id === messageId)) continue;
+        next[key] = prev[key].map((message) =>
+          message.id === messageId ? { ...message, text: nextText } : message,
+        );
+        break;
+      }
+      return next;
+    });
 
     setStoryHistory((history) => {
       const nextHistory = history.map((message) =>
@@ -1513,7 +1539,11 @@ export default function GamePage() {
   };
 
   const handleMessageEdited = (messageId: string, nextText: string) => {
-    const editedMessage = chatMessages.find((message) => message.id === messageId);
+    const editedMessage = [
+      ...conversations.protagonist,
+      ...conversations.antagonist,
+      ...conversations.narrator,
+    ].find((message) => message.id === messageId);
     if (!editedMessage || editedMessage.from !== "agent") return;
     if (typeof window === "undefined") return;
 
@@ -1532,7 +1562,7 @@ export default function GamePage() {
   };
 
   const handleContinueChatMessage = async () => {
-    const lastAssistantMessage = [...chatMessages]
+    const lastAssistantMessage = [...conversations.protagonist]
       .reverse()
       .find((message) => message.from === "agent" && message.id !== "story-opening");
     if (!lastAssistantMessage) return;
@@ -2228,56 +2258,61 @@ export default function GamePage() {
                 </div>
               </div>
 
-              {/* Multi-character chat dialogs */}
-              <CharacterChatDialog
-                open
-                characterName={assignedPlayer?.name || 'Protagonist'}
-                avatarUrl={assignedPlayer?.avatarUrl}
-                messages={conversations.protagonist}
-                input={characterInputs.protagonist}
-                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, protagonist: v }))}
-                onSend={() => sendAsCharacter('protagonist', characterInputs.protagonist)}
-                isActive={activeCharacter === 'protagonist'}
-                onActivate={() => setActiveCharacter('protagonist')}
-                playerMode={playerMode}
-                onPlayerModeChange={setPlayerMode}
-                dialogStyle={assignedPlayer?.dialogStyle}
-                agentDialogStyle={assignedNpc?.dialogStyle}
-                ttsVoice={assignedPlayer?.ttsVoice}
-                agentTtsVoice={assignedNpc?.ttsVoice}
-                inputMaxLength={PROTAGONIST_DIALOGUE_MAX_CHARS}
-              />
-              <CharacterChatDialog
-                open
-                characterName={assignedNpc?.name || 'Antagonist'}
-                avatarUrl={assignedNpc?.avatarUrl}
-                messages={conversations.antagonist}
-                input={characterInputs.antagonist}
-                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, antagonist: v }))}
-                onSend={() => sendAsCharacter('antagonist', characterInputs.antagonist)}
-                isActive={activeCharacter === 'antagonist'}
-                onActivate={() => setActiveCharacter('antagonist')}
-                playerMode={playerMode}
-                onPlayerModeChange={setPlayerMode}
-                dialogStyle={assignedNpc?.dialogStyle}
-                agentDialogStyle={assignedPlayer?.dialogStyle}
-                ttsVoice={assignedNpc?.ttsVoice}
-                agentTtsVoice={assignedPlayer?.ttsVoice}
-              />
-              <CharacterChatDialog
-                open
-                characterName="Narrator"
-                messages={conversations.narrator}
-                input={characterInputs.narrator}
-                onInputChange={(v) => setCharacterInputs((prev) => ({ ...prev, narrator: v }))}
-                onSend={() => sendAsCharacter('narrator', characterInputs.narrator)}
-                isActive={activeCharacter === 'narrator'}
-                onActivate={() => setActiveCharacter('narrator')}
-                playerMode={playerMode}
-                onPlayerModeChange={setPlayerMode}
-                dialogStyle={NARRATOR_CHARACTER_DIALOG_STYLE}
-                ttsVoice={narratorTtsVoice}
-              />
+              <div
+                className="absolute inset-x-0 bottom-0 z-20 flex flex-col bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pb-3 pt-10 sm:px-6 sm:pb-5"
+                data-testid="game-chat-panel"
+                style={{ height: `${chatHeightPct}%` }}
+              >
+                <button
+                  type="button"
+                  aria-label="Resize chat panel"
+                  title="Drag to resize chat"
+                  className="mx-auto mb-2 flex h-4 w-28 shrink-0 cursor-ns-resize items-center justify-center rounded-full border border-white/25 bg-black/50 touch-none"
+                  onPointerDown={beginChatResize}
+                >
+                  <span className="h-0.5 w-10 rounded-full bg-white/70" />
+                </button>
+                <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden rounded-sm border border-white/70 bg-black/55 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-[2px] sm:px-5 sm:py-4">
+                  <div className="mb-2 flex flex-wrap gap-1">
+                    {(['protagonist', 'antagonist', 'narrator'] as const).map((characterId) => (
+                      <button
+                        key={characterId}
+                        type="button"
+                        onClick={() => setActiveCharacter(characterId)}
+                        className={cn(
+                          'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                          activeCharacter === characterId
+                            ? 'bg-white/20 text-white'
+                            : 'text-white/60 hover:bg-white/10 hover:text-white',
+                        )}
+                      >
+                        {characterTabLabels[characterId]}
+                      </button>
+                    ))}
+                  </div>
+                  <CustomChatWindow
+                    variant="visualNovel"
+                    messages={activeConversationMessages}
+                    input={chatInput}
+                    onInputChange={setChatInput}
+                    onSend={sendChatMessage}
+                    onEditMessage={handleEditChatMessage}
+                    onMessageEdited={handleMessageEdited}
+                    onSteerMessage={handleSteerChatMessage}
+                    onContinueMessage={handleContinueChatMessage}
+                    steerInstruction={steerInstruction}
+                    disabled={chatInFlight}
+                    connected={connected}
+                    connectionModel={connectionModel}
+                    playerMode={playerMode}
+                    onPlayerModeChange={setPlayerMode}
+                    playerIdentityHint={playerIdentityHint}
+                    ttsVoice={activeTtsVoice}
+                    sendIcon={<FaArrowUp className="h-4 w-4" />}
+                    sendIconAriaLabel="Send message"
+                  />
+                </div>
+              </div>
             </div>
             )}
           </div>
