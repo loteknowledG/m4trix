@@ -2322,16 +2322,7 @@ export default function GamePage() {
                 tabs={gameDialogTabs}
                 activeCharacter={activeCharacter}
                 onActiveCharacterChange={setActiveCharacter}
-                input={chatInput}
-                onInputChange={setChatInput}
-                onSend={sendChatMessage}
-                playerMode={playerMode}
-                onPlayerModeChange={setPlayerMode}
                 dialogStyle={activeDialogStyle}
-                disabled={chatInFlight}
-                inputMaxLength={
-                  activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
-                }
               />
             </div>
             )}
