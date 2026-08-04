@@ -12,6 +12,7 @@ export type GameDialogLayout = {
 export type GameDialogLayouts = Record<GameCharacterSlot, GameDialogLayout>;
 
 const STORAGE_PREFIX = 'm4trix:game-dialog-layout:';
+const COMPOSER_OPEN_PREFIX = 'm4trix:game-dialog-composer-open:';
 
 const DEFAULT_ZONES: Record<GameCharacterSlot, DialogSpeakerPosition> = {
   protagonist: 'left',
@@ -82,6 +83,25 @@ export function saveGameDialogLayouts(gameId: string | undefined, layouts: GameD
   if (!gameId || typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(`${STORAGE_PREFIX}${gameId}`, JSON.stringify(layouts));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadGameDialogComposerOpen(gameId: string | undefined): boolean {
+  if (!gameId || typeof window === 'undefined') return true;
+  try {
+    const raw = window.localStorage.getItem(`${COMPOSER_OPEN_PREFIX}${gameId}`);
+    return raw !== '0' && raw !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function saveGameDialogComposerOpen(gameId: string | undefined, open: boolean) {
+  if (!gameId || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(`${COMPOSER_OPEN_PREFIX}${gameId}`, open ? '1' : '0');
   } catch {
     /* ignore */
   }

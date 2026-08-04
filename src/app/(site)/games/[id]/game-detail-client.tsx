@@ -98,7 +98,9 @@ import {
 } from "@/lib/game/story-arc-progress";
 import {
   defaultGameDialogLayouts,
+  loadGameDialogComposerOpen,
   loadGameDialogLayouts,
+  saveGameDialogComposerOpen,
   saveGameDialogLayouts,
   type GameCharacterSlot,
   type GameDialogLayouts,
@@ -336,6 +338,7 @@ export default function GamePage() {
   const [gameDialogLayouts, setGameDialogLayouts] = useState<GameDialogLayouts>(() =>
     defaultGameDialogLayouts(),
   );
+  const [dialogComposerOpen, setDialogComposerOpen] = useState(true);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("say");
   const [debugData, setDebugData] = useState<{
     request: any;
@@ -371,7 +374,16 @@ export default function GamePage() {
 
   useEffect(() => {
     setGameDialogLayouts(loadGameDialogLayouts(id));
+    setDialogComposerOpen(loadGameDialogComposerOpen(id));
   }, [id]);
+
+  const handleDialogComposerOpenChange = useCallback(
+    (open: boolean) => {
+      setDialogComposerOpen(open);
+      saveGameDialogComposerOpen(id, open);
+    },
+    [id],
+  );
 
   const handleGameDialogLayoutChange = useCallback(
     (lineId: string, patch: MomentDialogLayoutPatch) => {
@@ -2305,6 +2317,8 @@ export default function GamePage() {
               />
 
               <GameDialogComposer
+                open={dialogComposerOpen}
+                onOpenChange={handleDialogComposerOpenChange}
                 tabs={gameDialogTabs}
                 activeCharacter={activeCharacter}
                 onActiveCharacterChange={setActiveCharacter}
