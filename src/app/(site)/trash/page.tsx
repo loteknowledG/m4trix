@@ -11,6 +11,7 @@ import MomentsGrid from '@/components/moments-grid';
 import { Trash2, RotateCcw } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 type Moment = { id: string; src: string; name?: string };
 type TrashedStory = { id: string; title?: string; count?: number };
@@ -217,9 +218,10 @@ export default function TrashPage() {
                   {stories.map(story => (
                     <Card
                       key={story.id}
-                      className={`group overflow-hidden transition-shadow duration-150 transition-transform duration-150 ease-out hover:shadow-2xl hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 ${
-                        selected[storyKey(story.id)] ? 'ring-2 ring-primary' : ''
-                      }`}
+                      className={cn(
+                        'm4-paper-card group overflow-hidden',
+                        selected[storyKey(story.id)] && 'ring-2 ring-primary',
+                      )}
                     >
                       <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-800">
                         <label

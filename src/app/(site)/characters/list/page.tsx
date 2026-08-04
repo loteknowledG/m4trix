@@ -87,7 +87,7 @@ export default function AgentsListPage() {
                     className="block"
                   >
                     <Card
-                      className="overflow-hidden transition-shadow duration-150 cursor-pointer shadow-sm"
+                      className="m4-paper-card overflow-hidden cursor-pointer"
                     >
                       <div className="relative aspect-square">
                         {agent.avatarUrl ? (

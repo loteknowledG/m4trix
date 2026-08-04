@@ -103,7 +103,7 @@ export default function MomentCard({
         }
       }}
       className={[
-        'pushable-effect group overflow-visible cursor-pointer',
+        'm4-paper-card group overflow-hidden cursor-pointer rounded-xl',
         item.selected ? 'ring-2 ring-primary/60' : '',
         fullHeight ? 'h-full' : '',
       ].join(' ')}
@@ -160,7 +160,7 @@ export default function MomentCard({
               e.preventDefault();
               setOpen(false);
             }}
-            className="pushable-effect absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent text-white z-10"
+            className="m4-circle-ghost absolute left-4 top-4 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/35 text-white z-10 hover:bg-black/50"
             aria-label="Close"
           >
             <svg
