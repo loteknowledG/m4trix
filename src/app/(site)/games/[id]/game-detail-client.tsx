@@ -2090,8 +2090,11 @@ export default function GamePage() {
             : null,
         );
 
+        const hasSavedProgress = storedHistory.length > 0;
+
         const initialMomentIndex = (() => {
           if (!momentsArr.length) return 0;
+          if (!hasSavedProgress) return 0;
           if (storedMomentState?.momentId) {
             const savedMomentIndex = momentsArr.findIndex(
               (m: any) => m.id === storedMomentState.momentId,
@@ -2105,16 +2108,12 @@ export default function GamePage() {
           ) {
             return storedMomentState.index;
           }
-          if (storyObj && storyObj.titleMomentId) {
-            const titleMomentIndex = momentsArr.findIndex(
-              (m: any) => m.id === storyObj.titleMomentId,
-            );
-            return titleMomentIndex >= 0 ? titleMomentIndex : 0;
-          }
           return 0;
         })();
         setCurrentMomentIndex(initialMomentIndex);
-        setMomentSelectionMode(storedMomentState?.mode === "manual" ? "manual" : "auto");
+        setMomentSelectionMode(
+          hasSavedProgress && storedMomentState?.mode === "auto" ? "auto" : "manual",
+        );
         setStoryMetaLoaded(true);
         momentStateReadyRef.current = true;
         setTitle(resolvedTitle || `Game ${id}`);
