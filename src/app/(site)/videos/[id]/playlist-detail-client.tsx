@@ -8,7 +8,8 @@ import ErrorBoundary from '@/components/error-boundary';
 import PlaylistRollerDeck from '@/components/playlist-roller-deck';
 import UniversalVideoPlayer from '@/components/universal-video-player';
 import VideoCueTimeline from '@/components/video-cue-timeline';
-import { ChevronLeft, Trash2, Upload } from '@/components/icons';
+import { HeaderBackButton } from '@/components/ui/header-back-button';
+import { Trash2, Upload } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -553,14 +554,7 @@ export default function PlaylistDetailClient() {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => router.push('/videos')}
-                className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                aria-label="Back to videos"
-              >
-                <ChevronLeft size={16} />
-              </button>
+              <HeaderBackButton label="Back to videos" onClick={() => router.push('/videos')} />
             </TooltipTrigger>
             <TooltipContent>
               <p>Back to videos</p>

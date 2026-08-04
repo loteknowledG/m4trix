@@ -1,7 +1,8 @@
 ﻿"use client";
 
 import { get, set } from "idb-keyval";
-import { ChevronLeft, SquarePen, Trash2, Upload } from "@/components/icons";
+import { HeaderBackButton } from "@/components/ui/header-back-button";
+import { SquarePen, Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GrUserFemale } from "react-icons/gr";
@@ -1264,14 +1265,7 @@ export default function StoryPage() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/stories")}
-                    className="m4-circle-ghost hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                    aria-label="Back to stories"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
+                  <HeaderBackButton label="Back to stories" onClick={() => router.push("/stories")} />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Back to stories</p>

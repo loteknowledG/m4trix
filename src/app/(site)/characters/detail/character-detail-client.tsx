@@ -25,7 +25,8 @@ import {
   avatarCropPortraitWorkspacePx,
 } from '@/app/(site)/characters/avatar-crop-math';
 import { useAvatarCropper } from '@/app/(site)/characters/use-avatar-cropper';
-import { Trash2, ChevronLeft, ImagePlus, User } from '@/components/icons';
+import { HeaderBackButton } from '@/components/ui/header-back-button';
+import { Trash2, ImagePlus, User } from '@/components/icons';
 import { getImageFileFromPasteEvent } from '@/lib/clipboard-image';
 import { readStorageKey, writeStorageKey } from '@/lib/storage-ready';
 import { toast } from 'sonner';
@@ -65,6 +66,7 @@ export default function CharacterDetailClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const agentId = searchParams.get('id')?.trim() ?? '';
+  const backNav = <HeaderBackButton href="/characters/list" label="Back to characters" />;
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -275,13 +277,7 @@ export default function CharacterDetailClient() {
     return (
       <ContentLayout
         title="Character"
-        navLeft={
-          <Link href="/characters/list">
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-        }
+        navLeft={backNav}
       >
         <p>Missing character id.</p>
         <Link href="/characters/list">
@@ -295,13 +291,7 @@ export default function CharacterDetailClient() {
     return (
       <ContentLayout
         title="Agent"
-        navLeft={
-          <Link href="/characters/list">
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-        }
+        navLeft={backNav}
       >
         <p className="text-sm text-muted-foreground">Loading character…</p>
       </ContentLayout>
@@ -312,13 +302,7 @@ export default function CharacterDetailClient() {
     return (
       <ContentLayout
         title="Character"
-        navLeft={
-          <Link href="/characters/list">
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-        }
+        navLeft={backNav}
       >
         <div className="space-y-4">
           <p className="text-sm text-red-300">{loadError}</p>
@@ -339,13 +323,7 @@ export default function CharacterDetailClient() {
     return (
       <ContentLayout
         title="Character not found"
-        navLeft={
-          <Link href="/characters/list">
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-        }
+        navLeft={backNav}
       >
         <p>Character &apos;{agentId}&apos; not found.</p>
         <Link href="/characters/list">
@@ -418,13 +396,7 @@ export default function CharacterDetailClient() {
     }
   };
 
-  const navLeft = (
-    <Link href="/characters/list">
-      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" aria-label="Back to characters">
-        <ChevronLeft className="h-4 w-4" />
-      </Button>
-    </Link>
-  );
+  const navLeft = backNav;
 
   const navRight = (
     <Button
