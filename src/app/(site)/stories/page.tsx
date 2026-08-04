@@ -232,27 +232,27 @@ export default function StoriesPage() {
             )}
           </div>
         </div>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => void createNewStory()}
-                size="icon"
-                variant="raised"
-                disabled={creating}
-                className="pushable-wall-neutral fixed bottom-6 right-6 z-50 h-12 w-12 bg-[#c90084]/80 text-white hover:bg-[#c90084] disabled:opacity-70"
-                aria-label="New story"
-              >
-                <SquarePen className="h-5 w-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>New story</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
       </ContentLayout>
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={() => void createNewStory()}
+              size="icon"
+              variant="raised"
+              disabled={creating}
+              className="pushable-effect pushable-wall-neutral pointer-events-auto fixed bottom-6 right-6 z-50 h-12 w-12 min-h-12 min-w-12 rounded-full border-2 border-border bg-[#c90084] text-white shadow-lg shadow-black/30 hover:bg-[#c90084] transition-transform transition-shadow duration-150 ease-out disabled:opacity-70"
+              aria-label="New story"
+            >
+              <SquarePen className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>New story</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </>
   );
 }
