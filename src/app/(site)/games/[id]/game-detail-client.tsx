@@ -47,7 +47,7 @@ import { stripAssistantPromptLeak, stripHistoryMessageText, stripHtmlImages } fr
 import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
 import { formatDialogModeLabel, formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
-import { NARRATOR_CHARACTER_DIALOG_STYLE, normalizeCharacterDialogStyle, resolveCharacterDialogStyle } from "@/lib/character-dialog-style";
+import { NARRATOR_CHARACTER_DIALOG_STYLE, normalizeCharacterDialogStyle, resolveCharacterDialogStyle, type CharacterDialogStyle } from "@/lib/character-dialog-style";
 import {
   normalizeCharacterTtsVoice,
 } from "@/lib/character-tts-profile";
@@ -100,8 +100,10 @@ import {
   defaultGameDialogLayouts,
   loadGameDialogComposerOpen,
   loadGameDialogLayouts,
+  loadGameNarratorDialogStyle,
   saveGameDialogComposerOpen,
   saveGameDialogLayouts,
+  saveGameNarratorDialogStyle,
   type GameCharacterSlot,
   type GameDialogLayouts,
 } from "@/lib/game-dialog-layout";
@@ -115,6 +117,21 @@ import {
 import { cn } from "@/lib/utils";
 
 const CHARACTER_MEMORY_INJECTION_LIMIT = 2;
+const PLAYGROUND_AGENTS_KEY = "PLAYGROUND_AGENTS";
+
+async function persistCharacterDialogStyle(
+  characterId: string,
+  dialogStyle: CharacterDialogStyle,
+) {
+  const stored =
+    (await get<Array<{ id: string; dialogStyle?: CharacterDialogStyle }>>(PLAYGROUND_AGENTS_KEY)) ||
+    [];
+  const normalized = normalizeCharacterDialogStyle(dialogStyle) ?? {};
+  const next = stored.map((agent) =>
+    agent.id === characterId ? { ...agent, dialogStyle: normalized } : agent,
+  );
+  await set(PLAYGROUND_AGENTS_KEY, next);
+}
 
 function latestSpeakableMessage(messages: CustomChatMessage[]): CustomChatMessage | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -131,6 +148,7 @@ function dialogStyleForGameSlot(
   slot: GameCharacterSlot,
   assignedPlayer: GameCharacterContext,
   assignedNpc: GameCharacterContext,
+  narratorDialogStyle: CharacterDialogStyle,
 ) {
   if (slot === "protagonist") {
     return resolveCharacterDialogStyle(assignedPlayer?.dialogStyle);
@@ -138,7 +156,7 @@ function dialogStyleForGameSlot(
   if (slot === "antagonist") {
     return resolveCharacterDialogStyle(assignedNpc?.dialogStyle);
   }
-  return resolveCharacterDialogStyle(NARRATOR_CHARACTER_DIALOG_STYLE);
+  return resolveCharacterDialogStyle(narratorDialogStyle);
 }
 
 function buildGameOverlayLines(params: {
@@ -148,6 +166,7 @@ function buildGameOverlayLines(params: {
   activeCharacter: GameCharacterSlot;
   assignedPlayer: GameCharacterContext;
   assignedNpc: GameCharacterContext;
+  narratorDialogStyle: CharacterDialogStyle;
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
 }): Array<MomentDialogLine & { speakerName: string }> {
@@ -160,7 +179,12 @@ function buildGameOverlayLines(params: {
     if (!latest && !isActive) continue;
 
     const layout = params.layouts[slot];
-    const style = dialogStyleForGameSlot(slot, params.assignedPlayer, params.assignedNpc);
+    const style = dialogStyleForGameSlot(
+      slot,
+      params.assignedPlayer,
+      params.assignedNpc,
+      params.narratorDialogStyle,
+    );
     const label = params.labels[slot];
     const mode = isActive ? params.playerMode : "say";
 
@@ -182,7 +206,7 @@ function buildGameOverlayLines(params: {
       x: layout.x,
       y: layout.y,
       width: layout.width,
-      fontScale: layout.fontScale,
+      fontScale: style.fontScale,
       font: style.font,
       color: style.color,
       shadowColor: style.shadowColor,
@@ -339,6 +363,14 @@ export default function GamePage() {
     defaultGameDialogLayouts(),
   );
   const [dialogComposerOpen, setDialogComposerOpen] = useState(true);
+  const [narratorDialogStyle, setNarratorDialogStyle] = useState<CharacterDialogStyle>(() => ({
+    ...NARRATOR_CHARACTER_DIALOG_STYLE,
+  }));
+  const characterStylePersistTimerRef = useRef<number | null>(null);
+  const pendingCharacterStylePersistRef = useRef<{
+    id: string;
+    dialogStyle: CharacterDialogStyle;
+  } | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("say");
   const [debugData, setDebugData] = useState<{
     request: any;
@@ -375,7 +407,68 @@ export default function GamePage() {
   useEffect(() => {
     setGameDialogLayouts(loadGameDialogLayouts(id));
     setDialogComposerOpen(loadGameDialogComposerOpen(id));
+    setNarratorDialogStyle(loadGameNarratorDialogStyle(id));
   }, [id]);
+
+  const scheduleCharacterStylePersist = useCallback(() => {
+    if (characterStylePersistTimerRef.current != null) {
+      window.clearTimeout(characterStylePersistTimerRef.current);
+    }
+    characterStylePersistTimerRef.current = window.setTimeout(() => {
+      characterStylePersistTimerRef.current = null;
+      const pending = pendingCharacterStylePersistRef.current;
+      if (!pending) return;
+      pendingCharacterStylePersistRef.current = null;
+      void persistCharacterDialogStyle(pending.id, pending.dialogStyle);
+    }, 350);
+  }, []);
+
+  const applyDialogStylePatch = useCallback(
+    (slot: GameCharacterSlot, patch: Partial<CharacterDialogStyle>) => {
+      if (slot === "protagonist") {
+        setAssignedPlayer((prev) => {
+          if (!prev) return prev;
+          const normalized = normalizeCharacterDialogStyle({ ...prev.dialogStyle, ...patch }) ?? {};
+          pendingCharacterStylePersistRef.current = { id: prev.id, dialogStyle: normalized };
+          scheduleCharacterStylePersist();
+          return { ...prev, dialogStyle: normalized };
+        });
+      } else if (slot === "antagonist") {
+        setAssignedNpc((prev) => {
+          if (!prev) return prev;
+          const normalized = normalizeCharacterDialogStyle({ ...prev.dialogStyle, ...patch }) ?? {};
+          pendingCharacterStylePersistRef.current = { id: prev.id, dialogStyle: normalized };
+          scheduleCharacterStylePersist();
+          return { ...prev, dialogStyle: normalized };
+        });
+      } else {
+        setNarratorDialogStyle((prev) => {
+          const normalized = normalizeCharacterDialogStyle({ ...prev, ...patch }) ?? {};
+          saveGameNarratorDialogStyle(id, normalized);
+          return normalized;
+        });
+      }
+
+      if (patch.fontScale != null) {
+        setGameDialogLayouts((prev) => {
+          const next: GameDialogLayouts = {
+            ...prev,
+            [slot]: { ...prev[slot], fontScale: patch.fontScale as number },
+          };
+          saveGameDialogLayouts(id, next);
+          return next;
+        });
+      }
+    },
+    [id, scheduleCharacterStylePersist],
+  );
+
+  const handleGameDialogStyleChange = useCallback(
+    (patch: Partial<CharacterDialogStyle>) => {
+      applyDialogStylePatch(activeCharacter, patch);
+    },
+    [activeCharacter, applyDialogStylePatch],
+  );
 
   const handleDialogComposerOpenChange = useCallback(
     (open: boolean) => {
@@ -397,8 +490,11 @@ export default function GamePage() {
         saveGameDialogLayouts(id, next);
         return next;
       });
+      if (patch.fontScale != null) {
+        applyDialogStylePatch(slot, { fontScale: patch.fontScale });
+      }
     },
-    [id],
+    [applyDialogStylePatch, id],
   );
 
   const gameOverlayLines = useMemo(
@@ -410,6 +506,7 @@ export default function GamePage() {
         activeCharacter,
         assignedPlayer,
         assignedNpc,
+        narratorDialogStyle,
         npcKnowsPlayer: npcKnowsPlayerEffective,
         playerMode,
       }),
@@ -420,6 +517,7 @@ export default function GamePage() {
       characterTabLabels,
       conversations,
       gameDialogLayouts,
+      narratorDialogStyle,
       npcKnowsPlayerEffective,
       playerMode,
     ],
@@ -438,8 +536,8 @@ export default function GamePage() {
   const activeDialogStyle = useMemo(() => {
     if (activeCharacter === "protagonist") return assignedPlayer?.dialogStyle;
     if (activeCharacter === "antagonist") return assignedNpc?.dialogStyle;
-    return NARRATOR_CHARACTER_DIALOG_STYLE;
-  }, [activeCharacter, assignedNpc?.dialogStyle, assignedPlayer?.dialogStyle]);
+    return narratorDialogStyle;
+  }, [activeCharacter, assignedNpc?.dialogStyle, assignedPlayer?.dialogStyle, narratorDialogStyle]);
   const storyArcStages = Array.isArray(storyArc?.stages) ? storyArc.stages : [];
   const resolvedArcStageNumber =
     typeof storyArcCurrentStage === "number" && Number.isFinite(storyArcCurrentStage)
@@ -2326,6 +2424,7 @@ export default function GamePage() {
                 onInputChange={setChatInput}
                 onSend={sendChatMessage}
                 dialogStyle={activeDialogStyle}
+                onDialogStyleChange={handleGameDialogStyleChange}
                 disabled={chatInFlight}
                 inputMaxLength={
                   activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined

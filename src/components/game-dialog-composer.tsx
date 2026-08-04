@@ -31,6 +31,7 @@ type GameDialogComposerProps = {
   onInputChange: (value: string) => void;
   onSend: () => void;
   dialogStyle?: CharacterDialogStyle | null;
+  onDialogStyleChange: (patch: Partial<CharacterDialogStyle>) => void;
   disabled?: boolean;
   inputMaxLength?: number;
 };
@@ -45,6 +46,7 @@ export function GameDialogComposer({
   onInputChange,
   onSend,
   dialogStyle,
+  onDialogStyleChange,
   disabled = false,
   inputMaxLength,
 }: GameDialogComposerProps) {
@@ -158,21 +160,17 @@ export function GameDialogComposer({
                   ) : null}
                 </label>
 
-                <fieldset disabled className="min-w-0 border-0 p-0 opacity-90">
-                  <DialogLineStyleEditor
-                    values={{
-                      textEffects: style.textEffects,
-                      font: style.font,
-                      fontScale: style.fontScale,
-                      color: style.color,
-                      shadowColor: style.shadowColor,
-                      speakerColor: style.speakerColor,
-                    }}
-                    onChange={() => {
-                      /* game dialog styles come from character settings for now */
-                    }}
-                  />
-                </fieldset>
+                <DialogLineStyleEditor
+                  values={{
+                    textEffects: style.textEffects,
+                    font: style.font,
+                    fontScale: style.fontScale,
+                    color: style.color,
+                    shadowColor: style.shadowColor,
+                    speakerColor: style.speakerColor,
+                  }}
+                  onChange={onDialogStyleChange}
+                />
 
                 {previewText ? (
                   <div

@@ -1,4 +1,9 @@
 import { defaultXYForSpeakerZone, type DialogSpeakerPosition } from '@/lib/moment-dialog';
+import {
+  normalizeCharacterDialogStyle,
+  NARRATOR_CHARACTER_DIALOG_STYLE,
+  type CharacterDialogStyle,
+} from '@/lib/character-dialog-style';
 
 export type GameCharacterSlot = 'protagonist' | 'antagonist' | 'narrator';
 
@@ -13,6 +18,7 @@ export type GameDialogLayouts = Record<GameCharacterSlot, GameDialogLayout>;
 
 const STORAGE_PREFIX = 'm4trix:game-dialog-layout:';
 const COMPOSER_OPEN_PREFIX = 'm4trix:game-dialog-composer-open:';
+const NARRATOR_STYLE_PREFIX = 'm4trix:game-narrator-dialog-style:';
 
 const DEFAULT_ZONES: Record<GameCharacterSlot, DialogSpeakerPosition> = {
   protagonist: 'left',
@@ -102,6 +108,34 @@ export function saveGameDialogComposerOpen(gameId: string | undefined, open: boo
   if (!gameId || typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(`${COMPOSER_OPEN_PREFIX}${gameId}`, open ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadGameNarratorDialogStyle(gameId: string | undefined): CharacterDialogStyle {
+  if (!gameId || typeof window === 'undefined') {
+    return { ...NARRATOR_CHARACTER_DIALOG_STYLE };
+  }
+  try {
+    const raw = window.localStorage.getItem(`${NARRATOR_STYLE_PREFIX}${gameId}`);
+    if (!raw) return { ...NARRATOR_CHARACTER_DIALOG_STYLE };
+    return normalizeCharacterDialogStyle(JSON.parse(raw)) ?? { ...NARRATOR_CHARACTER_DIALOG_STYLE };
+  } catch {
+    return { ...NARRATOR_CHARACTER_DIALOG_STYLE };
+  }
+}
+
+export function saveGameNarratorDialogStyle(
+  gameId: string | undefined,
+  style: CharacterDialogStyle,
+) {
+  if (!gameId || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      `${NARRATOR_STYLE_PREFIX}${gameId}`,
+      JSON.stringify(normalizeCharacterDialogStyle(style) ?? {}),
+    );
   } catch {
     /* ignore */
   }
