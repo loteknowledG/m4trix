@@ -54,12 +54,6 @@ body,
     --radius: 0.5rem;
     /* default header height to reduce initial layout shift before JS measurement */
     --app-header-height: 56px;
-
-    /* Pushable slab depth + tone (overridable per button via --slab-base) */
-    --slab-depth: 8px;
-    --slab-depth-hover: 12px;
-    --slab-depth-pressed: 2px;
-    --slab-base: hsl(var(--secondary));
   }
 
   .dark {
@@ -192,396 +186,39 @@ body,
   .mc-shadow-hover:hover {
     box-shadow: 14px 14px 42px rgba(0, 0, 0, 0.92);
   }
-
-  /* ── Pushable slab (shared physics) ── */
   .pushable-effect,
-  .slab-surface,
-  .app-min-width-wrapper
-    button:not(:disabled):not([data-no-pushable]):not([data-resize-handle]):not(
-      .pushable-effect
-    ):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn) {
-    @apply border-2 border-border transition-transform duration-150 ease-out;
+  .slab-surface {
+    @apply border-2 border-border transition-transform transition-shadow duration-150 ease-out;
     position: relative;
     isolation: isolate;
     transform: translate(0, 0);
-    cursor: pointer;
-  }
-
-  .pushable-effect > *,
-  .slab-surface > *,
-  .pushable-effect-ghost > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  /* Round pills / circles — radial specular, soft ambient falloff */
-  .pushable-effect:is(.rounded-full, .m4-circle-action),
-  .slab-surface:is(.rounded-full, .m4-circle-action),
-  .app-min-width-wrapper
-    button:is(.rounded-full, .m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn) {
     box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.24),
-      inset 0 -1px 2px rgba(0, 0, 0, 0.14),
-      0 calc(var(--slab-depth) + 2px) calc(var(--slab-depth) + 10px) -3px rgba(0, 0, 0, 0.22),
-      0 calc(var(--slab-depth) + 1px) calc(var(--slab-depth) + 5px) rgba(0, 0, 0, 0.14);
+      0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+      0 8px 0 #000,
+      0 12px 16px rgba(0, 0, 0, 0.4);
   }
-
-  .pushable-effect:is(.rounded-full, .m4-circle-action)::before,
-  .slab-surface:is(.rounded-full, .m4-circle-action)::before,
-  .app-min-width-wrapper
-    button:is(.rounded-full, .m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn)::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(
-      120% 95% at 34% 16%,
-      rgba(255, 255, 255, 0.34) 0%,
-      rgba(255, 255, 255, 0.1) 30%,
-      rgba(255, 255, 255, 0) 56%,
-      rgba(0, 0, 0, 0.07) 100%
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .pushable-effect:is(.rounded-full, .m4-circle-action)::after,
-  .slab-surface:is(.rounded-full, .m4-circle-action)::after,
-  .app-min-width-wrapper
-    button:is(.rounded-full, .m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn)::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% - 2px);
-    height: var(--slab-depth);
-    border-radius: inherit;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--slab-base) 90%, white) 0%,
-      color-mix(in srgb, var(--slab-base) 74%, black) 48%,
-      color-mix(in srgb, var(--slab-base) 50%, black) 100%
-    );
-    border: 2px solid color-mix(in srgb, var(--slab-base) 62%, hsl(var(--border)));
-    border-top: 1px solid color-mix(in srgb, var(--slab-base) 68%, black);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--slab-base) 28%, white);
-    z-index: -1;
-    pointer-events: none;
-    transition: height 150ms ease-out;
-  }
-
-  /* Flat panels — top-left key light, shadow falls down-right */
-  .pushable-effect:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost),
-  .slab-surface:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost),
-  .app-min-width-wrapper
-    button:not(.rounded-full):not(.m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn) {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.24),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.14),
-      inset 1px 0 0 rgba(255, 255, 255, 0.11),
-      inset -1px 0 0 rgba(0, 0, 0, 0.12),
-      2px calc(var(--slab-depth) + 4px) calc(var(--slab-depth) + 10px) rgba(0, 0, 0, 0.28),
-      1px calc(var(--slab-depth) + 1px) calc(var(--slab-depth) + 4px) rgba(0, 0, 0, 0.14);
-  }
-
-  .pushable-effect:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost)::before,
-  .slab-surface:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost)::before,
-  .app-min-width-wrapper
-    button:not(.rounded-full):not(.m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn)::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(
-      145deg,
-      rgba(255, 255, 255, 0.3) 0%,
-      rgba(255, 255, 255, 0.09) 26%,
-      rgba(255, 255, 255, 0) 48%,
-      rgba(0, 0, 0, 0.04) 72%,
-      rgba(0, 0, 0, 0.12) 100%
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .pushable-effect:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost)::after,
-  .slab-surface:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost)::after,
-  .app-min-width-wrapper
-    button:not(.rounded-full):not(.m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn)::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% - 2px);
-    height: var(--slab-depth);
-    border-radius: inherit;
-    background:
-      linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--slab-base) 88%, white) 0%,
-        color-mix(in srgb, var(--slab-base) 66%, black) 52%,
-        color-mix(in srgb, var(--slab-base) 40%, black) 100%
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--slab-base) 94%, white) 0%,
-        color-mix(in srgb, var(--slab-base) 50%, black) 100%
-      );
-    background-blend-mode: multiply;
-    border: 2px solid color-mix(in srgb, var(--slab-base) 58%, hsl(var(--border)));
-    border-top: 1px solid color-mix(in srgb, var(--slab-base) 72%, black);
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--slab-base) 26%, white),
-      inset -1px 0 0 rgba(0, 0, 0, 0.14);
-    z-index: -1;
-    pointer-events: none;
-    transition: height 150ms ease-out;
-  }
-
-  /* Hover / press — round */
-  .pushable-effect:is(.rounded-full, .m4-circle-action):hover,
-  .app-min-width-wrapper
-    button:is(.rounded-full, .m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn):hover {
-    --slab-depth: var(--slab-depth-hover);
+  .pushable-effect:hover {
     transform: translateY(-4px);
     box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.28),
-      inset 0 -1px 2px rgba(0, 0, 0, 0.12),
-      0 calc(var(--slab-depth) + 4px) calc(var(--slab-depth) + 16px) -2px rgba(0, 0, 0, 0.26),
-      0 calc(var(--slab-depth) + 2px) calc(var(--slab-depth) + 8px) rgba(0, 0, 0, 0.16);
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+      0 12px 0 #000,
+      0 16px 24px rgba(0, 0, 0, 0.5);
   }
-
-  .pushable-effect:is(.rounded-full, .m4-circle-action):active,
-  .app-min-width-wrapper
-    button:is(.rounded-full, .m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn):active {
-    --slab-depth: var(--slab-depth-pressed);
+  .pushable-effect:active {
     transform: translateY(4px);
     box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.16),
-      inset 0 -1px 2px rgba(0, 0, 0, 0.16),
-      0 calc(var(--slab-depth) + 1px) calc(var(--slab-depth) + 4px) rgba(0, 0, 0, 0.2);
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 2px 0 #000,
+      0 4px 8px rgba(0, 0, 0, 0.3);
   }
-
-  /* Hover / press — flat */
-  .pushable-effect:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost):hover,
-  .app-min-width-wrapper
-    button:not(.rounded-full):not(.m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn):hover {
-    --slab-depth: var(--slab-depth-hover);
-    transform: translateY(-4px);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.28),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-      inset 1px 0 0 rgba(255, 255, 255, 0.12),
-      inset -1px 0 0 rgba(0, 0, 0, 0.1),
-      4px calc(var(--slab-depth) + 6px) calc(var(--slab-depth) + 14px) rgba(0, 0, 0, 0.32),
-      2px calc(var(--slab-depth) + 2px) calc(var(--slab-depth) + 6px) rgba(0, 0, 0, 0.16);
-  }
-
-  .pushable-effect:not(.rounded-full):not(.m4-circle-action):not(.m4-circle-ghost):active,
-  .app-min-width-wrapper
-    button:not(.rounded-full):not(.m4-circle-action):not(:disabled):not([data-no-pushable]):not(
-      [data-resize-handle]
-    ):not(.pushable-effect):not(.pushable-effect-ghost):not(.m4-experience-toggle-btn):active {
-    --slab-depth: var(--slab-depth-pressed);
-    transform: translateY(4px);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.16),
-      inset 1px 0 0 rgba(255, 255, 255, 0.06),
-      inset -1px 0 0 rgba(0, 0, 0, 0.12),
-      1px calc(var(--slab-depth) + 2px) calc(var(--slab-depth) + 4px) rgba(0, 0, 0, 0.22);
-  }
-
-  .pushable-effect:disabled,
-  .pushable-effect-ghost:disabled {
-    transform: translate(0, 0);
-    --slab-depth: var(--slab-depth-pressed);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-  }
-
-  .pushable-effect:disabled::after,
-  .pushable-effect-ghost:disabled::after {
-    opacity: 0.45;
-  }
-
-  /** Ghost slabs — lighter extrusion, same round vs flat lighting split. */
-  .pushable-effect-ghost {
-    @apply border-2 border-transparent transition-transform duration-150 ease-out;
-    position: relative;
-    isolation: isolate;
-    transform: translate(0, 0);
-    --slab-base: hsl(var(--foreground) / 0.42);
-    --slab-depth: 4px;
-    --slab-depth-hover: 6px;
-    --slab-depth-pressed: 1px;
-  }
-
-  .pushable-effect-ghost:is(.rounded-full, .m4-circle-ghost) {
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.14),
-      inset 0 -1px 2px rgba(0, 0, 0, 0.08),
-      0 calc(var(--slab-depth) + 2px) calc(var(--slab-depth) + 8px) -2px rgba(0, 0, 0, 0.16);
-  }
-
-  .pushable-effect-ghost:not(.rounded-full):not(.m4-circle-ghost) {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.08),
-      inset 1px 0 0 rgba(255, 255, 255, 0.08),
-      inset -1px 0 0 rgba(0, 0, 0, 0.08),
-      2px calc(var(--slab-depth) + 3px) calc(var(--slab-depth) + 7px) rgba(0, 0, 0, 0.18);
-  }
-
-  .pushable-effect-ghost:is(.rounded-full, .m4-circle-ghost)::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(
-      115% 90% at 36% 18%,
-      rgba(255, 255, 255, 0.18) 0%,
-      rgba(255, 255, 255, 0) 55%,
-      rgba(0, 0, 0, 0.05) 100%
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .pushable-effect-ghost:not(.rounded-full):not(.m4-circle-ghost)::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(
-      145deg,
-      rgba(255, 255, 255, 0.16) 0%,
-      rgba(255, 255, 255, 0) 46%,
-      rgba(0, 0, 0, 0.07) 100%
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .pushable-effect-ghost:is(.rounded-full, .m4-circle-ghost)::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% - 2px);
-    height: var(--slab-depth);
-    border-radius: inherit;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--slab-base) 82%, white) 0%,
-      color-mix(in srgb, var(--slab-base) 58%, black) 100%
-    );
-    border: 1px solid color-mix(in srgb, var(--slab-base) 65%, transparent);
-    border-top: none;
-    z-index: -1;
-    pointer-events: none;
-    transition: height 150ms ease-out;
-  }
-
-  .pushable-effect-ghost:not(.rounded-full):not(.m4-circle-ghost)::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% - 2px);
-    height: var(--slab-depth);
-    border-radius: inherit;
-    background:
-      linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--slab-base) 80%, white) 0%,
-        color-mix(in srgb, var(--slab-base) 55%, black) 100%
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--slab-base) 86%, white) 0%,
-        color-mix(in srgb, var(--slab-base) 52%, black) 100%
-      );
-    background-blend-mode: multiply;
-    border: 1px solid color-mix(in srgb, var(--slab-base) 60%, transparent);
-    border-top: none;
-    box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.1);
-    z-index: -1;
-    pointer-events: none;
-    transition: height 150ms ease-out;
-  }
-
-  .pushable-effect-ghost:is(.rounded-full, .m4-circle-ghost):hover {
-    --slab-depth: var(--slab-depth-hover);
-    transform: translateY(-3px);
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.18),
-      inset 0 -1px 2px rgba(0, 0, 0, 0.08),
-      0 calc(var(--slab-depth) + 3px) calc(var(--slab-depth) + 10px) -1px rgba(0, 0, 0, 0.2);
-  }
-
-  .pushable-effect-ghost:not(.rounded-full):not(.m4-circle-ghost):hover {
-    --slab-depth: var(--slab-depth-hover);
-    transform: translateY(-3px);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.08),
-      inset 1px 0 0 rgba(255, 255, 255, 0.1),
-      inset -1px 0 0 rgba(0, 0, 0, 0.08),
-      3px calc(var(--slab-depth) + 4px) calc(var(--slab-depth) + 9px) rgba(0, 0, 0, 0.22);
-  }
-
-  .pushable-effect-ghost:is(.rounded-full, .m4-circle-ghost):active {
-    --slab-depth: var(--slab-depth-pressed);
-    transform: translateY(3px);
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.1),
-      inset 0 -1px 2px rgba(0, 0, 0, 0.12),
-      0 calc(var(--slab-depth) + 1px) calc(var(--slab-depth) + 3px) rgba(0, 0, 0, 0.14);
-  }
-
-  .pushable-effect-ghost:not(.rounded-full):not(.m4-circle-ghost):active {
-    --slab-depth: var(--slab-depth-pressed);
-    transform: translateY(3px);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-      inset 1px 0 0 rgba(255, 255, 255, 0.05),
-      inset -1px 0 0 rgba(0, 0, 0, 0.1),
-      1px calc(var(--slab-depth) + 1px) calc(var(--slab-depth) + 3px) rgba(0, 0, 0, 0.16);
-  }
-
-  .menu-color-slab {
-    --slab-base: hsl(var(--secondary));
-  }
-
   .menu-color-slab::after {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, hsl(var(--secondary)) 94%, white) 0%,
-      color-mix(in srgb, hsl(var(--secondary)) 72%, black) 42%,
-      color-mix(in srgb, hsl(var(--secondary)) 48%, black) 100%
-    );
-    border-color: color-mix(in srgb, hsl(var(--secondary)) 60%, hsl(var(--border)));
+    background: hsl(var(--secondary));
+  }
+  .menu-color-slab:hover::after {
+    transform: translate(6px, 6px);
+  }
+  .menu-color-slab:active::after {
+    transform: translate(2px, 2px);
   }
   .dark .mc-shadow-hover:hover {
     box-shadow: 14px 14px 44px rgba(0, 0, 0, 0.98);
@@ -598,35 +235,9 @@ body,
     @apply pushable-effect inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium;
   }
 
-  /** Circular ghost actions — same footprint as .m4-circle-action, lighter slab. */
+  /** Flat circular hit target (toolbars, ghost icon rows) — same footprint as .m4-circle-action. */
   .m4-circle-ghost {
-    @apply pushable-effect-ghost inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
-  }
-
-  /** Fixed primary FAB — larger round slab, do not add Tailwind shadow-* utilities (they override slab depth). */
-  .m4-fab {
-    @apply fixed bottom-6 right-6 z-50;
-    height: 3rem;
-    width: 3rem;
-    min-height: 3rem;
-    min-width: 3rem;
-    --slab-base: hsl(var(--primary));
-    --slab-depth: 10px;
-    --slab-depth-hover: 14px;
-    --slab-depth-pressed: 3px;
-  }
-
-  /** Sidebar expand/collapse — small flat slab; avoid shadow-* and extra translate utilities. */
-  .m4-sidebar-toggle {
-    height: 2rem;
-    width: 2rem;
-    min-height: 2rem;
-    min-width: 2rem;
-    padding: 0;
-    --slab-base: hsl(var(--muted));
-    --slab-depth: 6px;
-    --slab-depth-hover: 9px;
-    --slab-depth-pressed: 2px;
+    @apply inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
   }
 
   /** View / Edit story mode — long slab base + smaller pushable thumb on top. */

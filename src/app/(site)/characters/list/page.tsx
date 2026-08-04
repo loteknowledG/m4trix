@@ -117,7 +117,7 @@ export default function AgentsListPage() {
         onClick={addAgentViaFab}
         size="icon"
         variant="default"
-        className="m4-fab"
+        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150"
         aria-label="Add character"
       >
         <GrUserAdd className="h-5 w-5" />

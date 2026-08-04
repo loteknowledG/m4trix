@@ -10,18 +10,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'pushable-effect [--slab-base:hsl(var(--primary))] border-2 border-border bg-primary text-primary-foreground hover:bg-primary/90',
+          'pushable-effect border-2 border-border bg-primary text-primary-foreground hover:bg-primary/90',
         destructive:
-          'pushable-effect [--slab-base:hsl(var(--destructive))] border-2 border-border bg-destructive text-destructive-foreground hover:bg-destructive/90',
+          'pushable-effect border-2 border-border bg-destructive text-destructive-foreground hover:bg-destructive/90',
         outline:
-          'pushable-effect [--slab-base:hsl(var(--muted))] border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground',
+          'pushable-effect border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground',
         secondary:
-          'pushable-effect [--slab-base:hsl(var(--secondary))] border-2 border-border bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost:
-          'pushable-effect-ghost border-transparent hover:bg-accent hover:text-accent-foreground',
-        link: 'pushable-effect-ghost border-transparent bg-transparent text-primary underline-offset-4 hover:underline',
+          'pushable-effect border-2 border-border bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 hover:underline',
         raised:
-          'pushable-effect [--slab-base:hsl(var(--background))] border-2 border-border bg-background text-foreground relative rounded-full group focus-visible:outline-none',
+          'pushable-effect border-2 border-border bg-background text-foreground relative rounded-full group focus-visible:outline-none',
       },
       size: {
         default: 'h-9 px-4 py-2',
@@ -53,6 +52,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
   }
 );
+// 3D button effect styles
+// These should be in a CSS/SCSS file, but for clarity, here are the classnames:
+// .pushable { position: relative; border: none; background: transparent; padding: 0; cursor: pointer; outline-offset: 4px; transition: filter 250ms; }
+// .pushable:hover { filter: brightness(110%); }
+// .shadow { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 12px; background: rgba(0,0,0,0.25); filter: blur(4px); will-change: transform; transform: translateY(2px); transition: transform 600ms cubic-bezier(0.3,0.7,0.4,1); }
+// .pushable:hover .shadow { transform: translateY(4px); transition: transform 250ms cubic-bezier(0.3,0.7,0.4,1.5); }
+// .pushable:active .shadow { transform: translateY(1px); transition: transform 34ms; }
+// .edge { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 12px; }
+// .front { display: block; position: relative; border-radius: 12px; padding: 12px 42px; font-size: 1.25rem; color: white; background: hsl(345deg 100% 47%); will-change: transform; transform: translateY(-4px); transition: transform 600ms cubic-bezier(0.3,0.7,0.4,1); }
+// .pushable:hover .front { transform: translateY(-6px); transition: transform 250ms cubic-bezier(0.3,0.7,0.4,1.5); }
+// .pushable:active .front { transform: translateY(-2px); transition: transform 34ms; }
 Button.displayName = 'Button';
 
 export { Button, buttonVariants };

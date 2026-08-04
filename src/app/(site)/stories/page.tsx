@@ -241,7 +241,7 @@ export default function StoriesPage() {
                 size="icon"
                 variant="default"
                 disabled={creating}
-                className="m4-fab disabled:opacity-70"
+                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150 disabled:opacity-70"
                 aria-label="New story"
               >
                 <SquarePen className="h-5 w-5" />
