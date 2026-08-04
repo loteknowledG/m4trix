@@ -54,6 +54,10 @@ function lineFontSize(fontScale: number) {
   return `clamp(0.65rem, ${fontScale * 100}cqmin, 999px)`;
 }
 
+function gameDialogFontSize(fontScale: number) {
+  return `${Math.max(0.65, fontScale * 18)}rem`;
+}
+
 function MomentDialogBubble({
   line,
   speakerName,
@@ -144,6 +148,13 @@ function MomentDialogBubble({
         if (!rect.width || !rect.height) return;
         const dx = (ev.clientX - startX) / rect.width;
         const dy = (ev.clientY - startY) / rect.height;
+        if (squareAspect) {
+          applyLayout({
+            ...layoutRef.current,
+            width: clamp(startLayout.width + (dx + dy) * 0.7, 0.2, 1),
+          });
+          return;
+        }
         applyLayout({
           ...layoutRef.current,
           width: clamp(startLayout.width + dx * 1.4, 0.2, 1),
@@ -154,10 +165,14 @@ function MomentDialogBubble({
       const onEnd = (ev: PointerEvent) => {
         handle.releasePointerCapture(ev.pointerId);
         interactingRef.current = false;
-        onLayoutChange?.({
-          width: layoutRef.current.width,
-          fontScale: layoutRef.current.fontScale,
-        });
+        onLayoutChange?.(
+          squareAspect
+            ? { width: layoutRef.current.width }
+            : {
+                width: layoutRef.current.width,
+                fontScale: layoutRef.current.fontScale,
+              },
+        );
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onEnd);
         handle.removeEventListener('pointercancel', onEnd);
@@ -167,7 +182,7 @@ function MomentDialogBubble({
       handle.addEventListener('pointerup', onEnd);
       handle.addEventListener('pointercancel', onEnd);
     },
-    [applyLayout, editable, onLayoutChange, stageRef],
+    [applyLayout, editable, onLayoutChange, squareAspect, stageRef],
   );
 
   const speakerColor =
@@ -190,7 +205,7 @@ function MomentDialogBubble({
         top: `${layout.y * 100}%`,
         width: `${layout.width * 100}%`,
         aspectRatio: squareAspect ? '2 / 1' : undefined,
-        fontSize: lineFontSize(layout.fontScale),
+        fontSize: squareAspect ? gameDialogFontSize(style.fontScale) : lineFontSize(layout.fontScale),
         fontFamily: resolveVideoCueFontFamily(style.font),
       }}
     >

@@ -449,16 +449,6 @@ export default function GamePage() {
         });
       }
 
-      if (patch.fontScale != null) {
-        setGameDialogLayouts((prev) => {
-          const next: GameDialogLayouts = {
-            ...prev,
-            [slot]: { ...prev[slot], fontScale: patch.fontScale as number },
-          };
-          saveGameDialogLayouts(id, next);
-          return next;
-        });
-      }
     },
     [id, scheduleCharacterStylePersist],
   );
@@ -483,18 +473,16 @@ export default function GamePage() {
       const slot = lineId as GameCharacterSlot;
       if (slot !== "protagonist" && slot !== "antagonist" && slot !== "narrator") return;
       setGameDialogLayouts((prev) => {
+        const { fontScale: _ignored, ...layoutPatch } = patch;
         const next: GameDialogLayouts = {
           ...prev,
-          [slot]: { ...prev[slot], ...patch },
+          [slot]: { ...prev[slot], ...layoutPatch },
         };
         saveGameDialogLayouts(id, next);
         return next;
       });
-      if (patch.fontScale != null) {
-        applyDialogStylePatch(slot, { fontScale: patch.fontScale });
-      }
     },
-    [applyDialogStylePatch, id],
+    [id],
   );
 
   const gameOverlayLines = useMemo(
