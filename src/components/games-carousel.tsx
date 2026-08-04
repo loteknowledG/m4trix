@@ -161,8 +161,14 @@ export default function GamesCarousel({ onTitleChange }: GamesCarouselProps) {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious className="left-1 top-[54%] -mt-6 z-10" buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]" />
-      <CarouselNext className="right-1 top-[54%] -mt-6 z-10" buttonClassName="bg-[#c90084]/80 text-white hover:bg-[#c90084]" />
+      <CarouselPrevious
+        className="left-1 top-[54%] -mt-6 z-10"
+        buttonClassName="pushable-wall-accent bg-[#c90084]/80 text-white hover:bg-[#c90084]"
+      />
+      <CarouselNext
+        className="right-1 top-[54%] -mt-6 z-10"
+        buttonClassName="pushable-wall-accent bg-[#c90084]/80 text-white hover:bg-[#c90084]"
+      />
     </Carousel>
   );
 }
