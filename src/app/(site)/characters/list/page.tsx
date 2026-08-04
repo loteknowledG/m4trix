@@ -64,6 +64,7 @@ export default function AgentsListPage() {
   };
 
   return (
+    <>
     <ContentLayout title="Characters" navLeft={null} navRight={null}>
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between gap-4">
@@ -112,16 +113,17 @@ export default function AgentsListPage() {
           </div>
         )}
       </div>
+    </ContentLayout>
 
       <Button
         onClick={addAgentViaFab}
         size="icon"
-        variant="default"
-        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-150"
+        variant="raised"
+        className="pushable-effect pushable-wall-neutral pointer-events-auto fixed bottom-6 right-6 z-50 h-12 w-12 min-h-12 min-w-12 rounded-full border-2 border-border bg-[#c90084] text-white shadow-lg shadow-black/30 hover:bg-[#c90084] transition-transform transition-shadow duration-150 ease-out"
         aria-label="Add character"
       >
         <GrUserAdd className="h-5 w-5" />
       </Button>
-    </ContentLayout>
+    </>
   );
 }

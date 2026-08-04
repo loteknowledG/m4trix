@@ -287,6 +287,7 @@ export default function CharactersPage() {
   }
   /* chat mapping removed — using CustomChatWindow directly */
   return (
+    <>
     <ContentLayout
       title="Characters"
       navRight={
@@ -889,25 +890,6 @@ export default function CharactersPage() {
           setCrop={setCrop}
           setIsHoveringEdge={setIsHoveringEdge}
         />
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={addAgent}
-                size="icon"
-                variant="default"
-                className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow"
-                aria-label="Add New Character"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Add New Character</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
         {(fileDragOverlay || dragOverId) && (
           <div
             className="pointer-events-none fixed inset-0 z-[35] flex flex-col items-center justify-center gap-4 bg-black/70 px-6 text-center backdrop-blur-sm"
@@ -935,6 +917,26 @@ export default function CharactersPage() {
         )}
       </div>
     </ContentLayout>
+
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            onClick={addAgent}
+            size="icon"
+            variant="raised"
+            className="pushable-effect pushable-wall-neutral pointer-events-auto fixed bottom-6 right-6 z-50 h-12 w-12 min-h-12 min-w-12 rounded-full border-2 border-border bg-[#c90084] text-white shadow-lg shadow-black/30 hover:bg-[#c90084] transition-transform transition-shadow duration-150 ease-out"
+            aria-label="Add New Character"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Add New Character</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    </>
   );
 }
 
