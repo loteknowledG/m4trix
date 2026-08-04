@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft } from '@/components/icons';
+import { ChevronLeft, ChevronRight } from '@/components/icons';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -56,18 +56,17 @@ export function GameDialogComposer({
 
   if (!open) {
     return (
-      <button
+      <Button
         type="button"
+        variant="raised"
+        size="icon"
         onClick={() => onOpenChange(true)}
-        className="pointer-events-auto absolute inset-y-0 right-0 z-30 flex w-10 flex-col items-center justify-center gap-1 rounded-l-md border border-r-0 border-border/60 bg-background/95 text-foreground shadow-lg backdrop-blur-sm transition-colors hover:bg-accent/20"
+        className="m4-pushable-icon pointer-events-auto absolute top-1/2 right-0 z-30 translate-x-1/2 -translate-y-1/2"
         aria-label="Open dialog panel"
         title="Open dialog panel"
       >
         <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
-        <span className="text-[10px] font-medium uppercase tracking-wide [writing-mode:vertical-rl]">
-          Dialog
-        </span>
-      </button>
+      </Button>
     );
   }
 
@@ -82,15 +81,17 @@ export function GameDialogComposer({
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
           <h3 className="text-sm font-medium">Dialog</h3>
-          <button
+          <Button
             type="button"
+            variant="raised"
+            size="icon"
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
+            className="m4-pushable-icon shrink-0"
             aria-label="Close dialog panel"
             title="Close dialog panel"
           >
-            ×
-          </button>
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">

@@ -1,7 +1,7 @@
-import { ChevronLeft } from "@/components/icons";
+import { ChevronLeft } from '@/components/icons';
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 interface SidebarToggleProps {
   isOpen: boolean | undefined;
@@ -9,24 +9,22 @@ interface SidebarToggleProps {
 }
 
 export function SidebarToggle({ isOpen, setIsOpen }: SidebarToggleProps) {
-  // Calculate left offset so the toggle sits just outside the sidebar
-  const left = isOpen === false ? `calc(90px - 16px)` : `calc(288px - 16px)`;
+  const left = isOpen === false ? 'calc(90px - 20px)' : 'calc(288px - 20px)';
 
   return (
-    <div
-      className="invisible lg:visible fixed bottom-20 z-50"
-      style={{ left }}
-    >
+    <div className="invisible fixed bottom-20 z-50 lg:visible" style={{ left }}>
       <Button
+        type="button"
         onClick={() => setIsOpen?.()}
-        className="rounded-md w-8 h-8 transform transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-y-0.5 active:translate-x-0.5 mc-shadow-hover mc-shadow-active"
-        variant="outline"
+        variant="raised"
         size="icon"
+        className="m4-pushable-icon"
+        aria-label={isOpen === false ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         <ChevronLeft
           className={cn(
-            "h-4 w-4 transition-transform ease-in-out duration-700",
-            isOpen === false ? "rotate-180" : "rotate-0"
+            'h-4 w-4 transition-transform duration-700 ease-in-out',
+            isOpen === false ? 'rotate-180' : 'rotate-0',
           )}
         />
       </Button>

@@ -755,15 +755,17 @@ export default function CharactersPage() {
             )}
           >
             <Button
-              variant="outline"
+              type="button"
+              variant="raised"
               size="icon"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="h-8 w-8 rounded-full shadow-md bg-background hover:bg-accent"
+              className="m4-pushable-icon"
+              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
             >
               <ChevronLeft
                 className={cn(
                   'h-4 w-4 transition-transform duration-500',
-                  !sidebarOpen ? 'rotate-0' : 'rotate-180'
+                  !sidebarOpen ? 'rotate-0' : 'rotate-180',
                 )}
               />
             </Button>
