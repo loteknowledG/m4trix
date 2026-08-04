@@ -246,10 +246,10 @@ body,
     box-shadow: 8px 8px 22px rgba(0, 0, 0, 0.9);
   }
 
-  /** Flat paper cards — rest flat, hover lifts with soft shadow, click presses down. */
+  /** Flat paper cards — rest flat with no shadow, hover lifts with soft shadow, click presses down. */
   .m4-paper-card {
     @apply transition-[transform,box-shadow] duration-150 ease-out;
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+    box-shadow: none;
   }
   .m4-paper-card:hover {
     transform: translateY(-4px);
@@ -260,9 +260,6 @@ body,
   .m4-paper-card:active {
     transform: translateY(-1px);
     box-shadow: 0 4px 10px -4px rgb(0 0 0 / 0.16);
-  }
-  .dark .m4-paper-card {
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
   }
   .dark .m4-paper-card:hover {
     box-shadow:
