@@ -1,0 +1,19 @@
+---
+description: After coding tasks in m4trix, commit and push to master to deploy on Vercel.
+alwaysApply: true
+---
+
+# Deploy after task (m4trix)
+
+When a coding or docs task is **finished** and changed tracked files, **deploy before ending**:
+
+1. Run `pnpm exec tsc --noEmit` (fix failures first).
+2. Commit only task-related files — never secrets or local test assets (e.g. `_test_*.mp3`).
+3. Push to `master` (`git push origin master`). Push triggers the **Vercel Deploy** GitHub Action (`.github/workflows/vercel-deploy.yml`).
+4. Report the commit SHA and that Vercel deploy was triggered. Optionally run `gh run list --workflow=vercel-deploy.yml --limit 1`.
+
+Skip deploy when: no file changes, question-only work, user says skip/local-only, or push would require force.
+
+Never force-push `master`. Never `--no-verify` unless the user explicitly asks.
+
+Production URL: https://m4trix.vercel.app
