@@ -55,6 +55,7 @@ import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import {
   dedupeStoryMomentsBySrc,
   filterStoryMomentItems,
+  loadStoryMomentsFromStorage,
   mergeStoryMomentItemsForSave,
   momentSrcDedupeKey,
   normalizeStoryMomentList,
@@ -282,16 +283,22 @@ export default function StoryPage() {
         const stored = (await get<any>(`story:${id}`)) || null;
         if (!mounted) return;
 
-        const rawItems = readStoryMomentItems(stored);
-        const loadedMoments = normalizeStoryMomentList(rawItems);
+        const { moments: loadedMoments, rawItems, usedRecovery } =
+          loadStoryMomentsFromStorage(stored);
         setMoments(loadedMoments);
 
-        if (loadedMoments.length !== rawItems.length) {
+        const shouldPersistLoadedMoments =
+          loadedMoments.length > 0 &&
+          (usedRecovery || loadedMoments.length !== rawItems.length);
+
+        if (shouldPersistLoadedMoments) {
           const storyKey = `story:${id}`;
           if (Array.isArray(stored)) {
             await set(storyKey, loadedMoments);
           } else if (stored && typeof stored === "object") {
             await set(storyKey, { ...stored, items: loadedMoments });
+          } else {
+            await set(storyKey, loadedMoments);
           }
           try {
             const saved = (await get<StoryMeta[]>("stories")) || [];
@@ -963,13 +970,12 @@ export default function StoryPage() {
       try {
         await saveStoryMetadata({ stagedMomentsByStage: cleaned });
         const storyKey = `story:${id}`;
-        const stored = (await get<any>(storyKey)) || [];
-        if (Array.isArray(stored)) {
-          await set(storyKey, { items: stored, stagedMomentsByStage: cleaned });
-        } else if (stored && typeof stored === "object") {
-          await set(storyKey, { ...stored, stagedMomentsByStage: cleaned });
+        const stored = await get<any>(storyKey);
+        const existingItems = readStoryMomentItems(stored);
+        if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+          await set(storyKey, { ...stored, items: existingItems, stagedMomentsByStage: cleaned });
         } else {
-          await set(storyKey, { items: [], stagedMomentsByStage: cleaned });
+          await set(storyKey, { items: existingItems, stagedMomentsByStage: cleaned });
         }
       } catch (e) {
         logger.error("Failed to save staged moments", e);

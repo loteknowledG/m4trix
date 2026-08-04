@@ -15,6 +15,7 @@ const UUID_RE =
 export function isLikelyMomentSrc(value: string): boolean {
   const src = value.trim();
   if (!src) return false;
+  if (src.startsWith(MEDIA_REF_PREFIX)) return true;
   if (src.startsWith("data:image/") || src.startsWith("data:video/")) return true;
   if (src.startsWith("blob:")) return true;
   if (src.startsWith("http://") || src.startsWith("https://")) return true;
@@ -22,6 +23,25 @@ export function isLikelyMomentSrc(value: string): boolean {
   if (src.startsWith("/")) return true;
   if (UUID_RE.test(src)) return false;
   return src.length >= 12;
+}
+
+function mediaRefForId(id: string): string {
+  return `${MEDIA_REF_PREFIX}${id}`;
+}
+
+function resolveStoryMomentSrc(
+  srcCandidate: string,
+  idCandidate: string,
+): string | null {
+  const src = srcCandidate.trim();
+  if (src && isLikelyMomentSrc(src)) return src;
+
+  if (src && UUID_RE.test(src)) return mediaRefForId(src);
+
+  const id = idCandidate.trim();
+  if (id && UUID_RE.test(id)) return mediaRefForId(id);
+
+  return null;
 }
 
 export function storyMomentId(raw: unknown): string | null {
@@ -53,14 +73,17 @@ export function normalizeStoryMomentEntry(raw: unknown): StoryMomentRecord | nul
         ? record.url.trim()
         : "";
 
-  if (!isLikelyMomentSrc(srcCandidate)) return null;
+  const idCandidate =
+    typeof record.id === "string" && record.id.trim() ? record.id.trim() : "";
 
-  const id =
-    typeof record.id === "string" && record.id.trim() ? record.id.trim() : srcCandidate;
+  const resolvedSrc = resolveStoryMomentSrc(srcCandidate, idCandidate);
+  if (!resolvedSrc) return null;
+
+  const id = idCandidate || resolvedSrc;
 
   return {
     id,
-    src: srcCandidate,
+    src: resolvedSrc,
     name: typeof record.name === "string" ? record.name : undefined,
     fingerprint: typeof record.fingerprint === "string" ? record.fingerprint : undefined,
     dialogScript: record.dialogScript,
@@ -92,6 +115,65 @@ export function normalizeStoryMomentList(rawItems: unknown[]): StoryMomentRecord
   }
 
   return normalized;
+}
+
+/** Lenient fallback when strict normalization drops every stored item. */
+export function recoverStoryMomentList(rawItems: unknown[]): StoryMomentRecord[] {
+  const recovered: StoryMomentRecord[] = [];
+  const seenIds = new Set<string>();
+
+  for (const raw of rawItems) {
+    let moment: StoryMomentRecord | null = null;
+
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const resolvedSrc = resolveStoryMomentSrc(trimmed, trimmed);
+      if (!resolvedSrc) continue;
+      moment = { id: trimmed, src: resolvedSrc };
+    } else if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const record = raw as Record<string, unknown>;
+      const idCandidate =
+        typeof record.id === "string" && record.id.trim() ? record.id.trim() : "";
+      const srcCandidate =
+        typeof record.src === "string"
+          ? record.src.trim()
+          : typeof record.url === "string"
+            ? record.url.trim()
+            : "";
+      const resolvedSrc = resolveStoryMomentSrc(srcCandidate, idCandidate);
+      if (!resolvedSrc) continue;
+      moment = {
+        id: idCandidate || resolvedSrc,
+        src: resolvedSrc,
+        name: typeof record.name === "string" ? record.name : undefined,
+        fingerprint: typeof record.fingerprint === "string" ? record.fingerprint : undefined,
+        dialogScript: record.dialogScript,
+        dialogLines: record.dialogLines,
+      };
+    }
+
+    if (!moment || seenIds.has(moment.id)) continue;
+    seenIds.add(moment.id);
+    recovered.push(moment);
+  }
+
+  return recovered;
+}
+
+export function loadStoryMomentsFromStorage(stored: unknown): {
+  moments: StoryMomentRecord[];
+  rawItems: unknown[];
+  usedRecovery: boolean;
+} {
+  const rawItems = readStoryMomentItems(stored);
+  const normalized = normalizeStoryMomentList(rawItems);
+  if (normalized.length > 0 || rawItems.length === 0) {
+    return { moments: normalized, rawItems, usedRecovery: false };
+  }
+
+  const recovered = recoverStoryMomentList(rawItems);
+  return { moments: recovered, rawItems, usedRecovery: recovered.length > 0 };
 }
 
 /** Stable key for deduping moments that reference the same underlying media. */
