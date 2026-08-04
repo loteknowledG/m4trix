@@ -315,6 +315,14 @@ body,
     transform: translate(calc(100% + 0.46rem), -2px);
   }
 
+  .m4-experience-toggle-thumb[data-mode='no'] {
+    transform: translate(calc(100% + 0.46rem), -2px);
+  }
+
+  .m4-yes-no-toggle {
+    min-width: 8.5rem;
+  }
+
   .m4-experience-toggle-btn {
     @apply relative z-[1] inline-flex h-[1.85rem] items-center justify-center rounded-full px-3 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }

@@ -34,6 +34,7 @@ export type StoryMeta = {
   storyArcCurrentStage?: number;
   stagedMomentsByStage?: Record<number, string[]>;
   npcKnowsPlayer?: boolean;
+  playerKnowsNpc?: boolean;
   narratorEnabled?: boolean;
   directorNotes?: string;
   dialogLines?: unknown[];

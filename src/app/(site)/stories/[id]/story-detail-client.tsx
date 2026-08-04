@@ -35,6 +35,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { YesNoToggle } from "@/components/ui/yes-no-toggle";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MomentsProvider } from "@/context/moments-collection";
 import useSelection from "@/hooks/use-selection";
@@ -134,6 +135,7 @@ type StoryMeta = {
   storyArcCurrentStage?: number;
   stagedMomentsByStage?: StagedMomentsByStage;
   npcKnowsPlayer?: boolean;
+  playerKnowsNpc?: boolean;
   narratorEnabled?: boolean;
   directorNotes?: string;
   dialogLines?: StoryDialogLine[];
@@ -213,6 +215,7 @@ export default function StoryPage() {
   const [storyArc, setStoryArc] = useState<StoryArc | null>(null);
   const [stagedMomentsByStage, setStagedMomentsByStage] = useState<StagedMomentsByStage>({});
   const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
+  const [playerKnowsNpc, setPlayerKnowsNpc] = useState(true);
   const [narratorEnabled, setNarratorEnabled] = useState(true);
   const [directorNotes, setDirectorNotes] = useState("");
   const [storyMode, setStoryMode] = useState<StoryExperienceMode>("edit");
@@ -330,6 +333,7 @@ export default function StoryPage() {
             normalizeStagedMomentsByStage(meta?.stagedMomentsByStage ?? storedStaged),
           );
           setNpcKnowsPlayer(meta?.npcKnowsPlayer === true);
+          setPlayerKnowsNpc(meta?.playerKnowsNpc !== false);
           setNarratorEnabled(meta?.narratorEnabled !== false);
           setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
           setDialogLines(normalizeDialogLines(meta?.dialogLines));
@@ -369,6 +373,7 @@ export default function StoryPage() {
         );
         setStagedMomentsByStage(normalizeStagedMomentsByStage(meta?.stagedMomentsByStage));
         setNpcKnowsPlayer(meta?.npcKnowsPlayer === true);
+        setPlayerKnowsNpc(meta?.playerKnowsNpc !== false);
         setNarratorEnabled(meta?.narratorEnabled !== false);
         setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
         setDialogLines(normalizeDialogLines(meta?.dialogLines));
@@ -1933,6 +1938,24 @@ export default function StoryPage() {
                   rows={5}
                   placeholder="e.g. Late evening in her apartment. Rain on the windows. She has never met the player before."
                   className="min-h-[120px] w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 rounded border border-border/60 px-3 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
+                <span className="min-w-0">
+                  <span className="font-medium">Protagonist knows antagonist</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    When set to No, the protagonist treats the antagonist as unknown during play.
+                  </span>
+                </span>
+                <YesNoToggle
+                  value={playerKnowsNpc}
+                  onChange={(next) => {
+                    setPlayerKnowsNpc(next);
+                    void saveStoryMetadata({ playerKnowsNpc: next });
+                  }}
+                  ariaLabel="Does the protagonist know who the antagonist is?"
+                  className="shrink-0 self-start"
                 />
               </div>
 
