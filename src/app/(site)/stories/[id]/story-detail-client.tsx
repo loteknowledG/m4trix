@@ -14,6 +14,7 @@ import { StoryArcEditor } from "@/components/story-arc-editor";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import CollectionOverlay from "@/components/collection-overlay";
 import { DescriptionEditor } from "@/components/description-editor";
+import { STORY_DESCRIPTION_MAX_CHARS } from "@/lib/game/dialogue-limits";
 import {
   Dialog,
   DialogContent,
@@ -1828,6 +1829,7 @@ export default function StoryPage() {
                     void saveStoryDescription();
                   }}
                   placeholder="No description"
+                  maxPlainTextLength={STORY_DESCRIPTION_MAX_CHARS}
                 />
               </div>
 

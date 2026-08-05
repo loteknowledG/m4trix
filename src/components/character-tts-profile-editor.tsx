@@ -35,13 +35,12 @@ export function CharacterTtsProfileEditor({
   };
 
   const handlePreview = async () => {
-    const text = previewText.trim();
+    const text = (previewText ?? 'Hello. This is how I will sound when I speak.').trim();
     if (previewing) return;
     if (!text) {
-      toast.error('Add a character name or description to preview voice.');
+      toast.error('Add a character name to preview voice.');
       return;
     }
-    unlockAudioPlayback();
     setPreviewing(true);
     try {
       const result = await speakWithCharacterTtsVoice(text, settings, undefined, {
@@ -93,6 +92,7 @@ export function CharacterTtsProfileEditor({
             unlockAudioPlayback();
           }}
           onClick={() => {
+            unlockAudioPlayback();
             void handlePreview();
           }}
           className={cn(
