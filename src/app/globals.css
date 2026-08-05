@@ -270,6 +270,38 @@ body,
     box-shadow: 0 6px 14px -6px rgb(0 0 0 / 0.4);
   }
 
+  /** Flat at rest; 3D sidewall lift on hover; press on click (header icon actions). */
+  .m4-paper-pushable-icon {
+    @apply inline-flex h-9 w-9 min-h-9 min-w-9 shrink-0 items-center justify-center rounded-full border-2 border-border bg-background transition-transform transition-shadow duration-150 ease-out;
+    box-shadow: none;
+    transform: translate(0, 0);
+    --pushable-wall-depth: 0px;
+    --pushable-wall: color-mix(in srgb, hsl(var(--background)) 55%, hsl(var(--foreground)) 45%);
+  }
+  .m4-paper-pushable-icon:hover {
+    transform: translateY(-4px);
+    --pushable-wall-depth: 12px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+      0 var(--pushable-wall-depth) 0 var(--pushable-wall),
+      0 16px 24px rgba(0, 0, 0, 0.5);
+  }
+  .m4-paper-pushable-icon:active {
+    transform: translateY(4px);
+    --pushable-wall-depth: 2px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 var(--pushable-wall-depth) 0 var(--pushable-wall),
+      0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+  .m4-paper-pushable-icon-destructive {
+    --pushable-wall: color-mix(in srgb, hsl(var(--destructive)) 62%, black);
+    @apply border-destructive/40 text-destructive;
+  }
+  .m4-paper-pushable-icon-destructive:hover {
+    @apply bg-destructive text-destructive-foreground;
+  }
+
   /** 40×40 circular actions with slab / pushable treatment (align with Button size="icon"). */
   .m4-circle-action {
     @apply pushable-effect inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium;

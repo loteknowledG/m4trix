@@ -399,21 +399,19 @@ export default function CharacterDetailClient() {
   const navLeft = backNav;
 
   const navRight = (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
       onClick={() => {
         void handleDeleteAgent();
       }}
       aria-label="Delete character"
       title="Delete character"
-      className={cn(
-        'm4-paper-card inline-flex h-9 w-9 items-center justify-center rounded-full',
-        'border border-destructive/30 bg-background text-destructive',
-        'hover:bg-destructive/10',
-      )}
+      className={cn('m4-paper-pushable-icon m4-paper-pushable-icon-destructive')}
     >
       <Trash2 className="h-4 w-4" />
-    </button>
+    </Button>
   );
 
   const avatarDisplayKey = [
