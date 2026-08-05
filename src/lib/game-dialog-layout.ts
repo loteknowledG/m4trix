@@ -95,12 +95,13 @@ export function saveGameDialogLayouts(gameId: string | undefined, layouts: GameD
 }
 
 export function loadGameDialogComposerOpen(gameId: string | undefined): boolean {
-  if (!gameId || typeof window === 'undefined') return true;
+  if (!gameId || typeof window === 'undefined') return false;
   try {
     const raw = window.localStorage.getItem(`${COMPOSER_OPEN_PREFIX}${gameId}`);
+    if (raw == null) return false;
     return raw !== '0' && raw !== 'false';
   } catch {
-    return true;
+    return false;
   }
 }
 

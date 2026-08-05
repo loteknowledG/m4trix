@@ -361,7 +361,7 @@ export default function GamePage() {
   const [gameDialogLayouts, setGameDialogLayouts] = useState<GameDialogLayouts>(() =>
     defaultGameDialogLayouts(),
   );
-  const [dialogComposerOpen, setDialogComposerOpen] = useState(true);
+  const [dialogComposerOpen, setDialogComposerOpen] = useState(false);
   const [narratorDialogStyle, setNarratorDialogStyle] = useState<CharacterDialogStyle>(() => ({
     ...NARRATOR_CHARACTER_DIALOG_STYLE,
   }));
@@ -2348,7 +2348,7 @@ export default function GamePage() {
 
               <MomentDialogOverlay
                 lines={gameOverlayLines}
-                editLineId={activeCharacter}
+                editLineId={dialogComposerOpen ? activeCharacter : null}
                 stageRef={stageRef}
                 onLayoutChange={handleGameDialogLayoutChange}
                 gameDialog
