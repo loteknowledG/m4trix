@@ -8,9 +8,9 @@ export const LMSTUDIO_CHAT_TIMEOUT_MS = 180000;
 
 export function getLmstudioHttpsPageHint(pageOrigin?: string): string {
   const origin = pageOrigin || (typeof window !== 'undefined' ? window.location.origin : 'this HTTPS page');
-  return (
-    `Browsers block ${origin} from calling http:// LM Studio (mixed content). ` +
-    `Open http://localhost:3000 (pnpm dev) or set an https:// tunnel URL for LM Studio.`
+    return (
+    `Browsers block ${origin} from calling http:// LM Studio on your LAN (mixed content). ` +
+    `Use pnpm dev at http://localhost:3000 on the same network, or an https:// tunnel to LM Studio.`
   );
 }
 
