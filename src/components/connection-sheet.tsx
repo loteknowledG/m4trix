@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_LMSTUDIO_URL,
+  getLmstudioHealthApiUrl,
   normalizeLmstudioUrl,
   probeLmstudioHealth,
   type LmstudioModelOption,
@@ -154,34 +155,6 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   const checkLmstudioHealth = async (urlOverride?: string) => {
     const targetUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
     setLmstudioHealth({ state: 'checking' });
-
-    try {
-      const res = await fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`);
-      const payload = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: string; modelCount?: number; models?: string[] }
-        | null;
-
-      if (!res.ok || !payload?.ok) {
-        setLmstudioHealth({
-          state: 'error',
-          message: payload?.error || `Unable to reach ${targetUrl}`,
-        });
-        return;
-      }
-
-      const healthModels = Array.isArray(payload.models) ? payload.models : [];
-      if (healthModels.length) {
-        applyLmstudioModels(healthModels);
-      }
-
-      setLmstudioHealth({
-        state: 'healthy',
-        modelCount: payload.modelCount ?? healthModels.length,
-      });
-      return;
-    } catch {
-      // Packaged desktop builds can lack the local route; probe LM Studio directly.
-    }
 
     const result = await probeLmstudioHealth(targetUrl);
     if (!result.ok) {
@@ -411,9 +384,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
 
         // Desktop builds previously baked an empty /api/models response; fall back to health.
         if (!options.length) {
-          const healthRes = await fetch(
-            `/api/lmstudio/health?lmstudio_url=${encodeURIComponent(normalizedLmstudioUrl)}`
-          );
+          const healthRes = await fetch(getLmstudioHealthApiUrl(normalizedLmstudioUrl));
           const health = (await healthRes.json().catch(() => null)) as
             | { ok?: boolean; models?: string[] }
             | null;
@@ -836,10 +807,15 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                     placeholder={
                       activeProviderConnected
                         ? 'Connected'
-                        : 'LM Studio URL (use http://localhost:3000 for local HTTP servers)'
+                        : `LM Studio base URL (e.g. ${DEFAULT_LMSTUDIO_URL})`
                     }
                     value={lmstudioUrl}
                     onChange={e => setLmstudioUrl(e.target.value)}
+                    onBlur={() => {
+                      if (lmstudioUrl.trim()) {
+                        setLmstudioUrl(normalizeLmstudioUrl(lmstudioUrl));
+                      }
+                    }}
                   />
                   <div className="text-[11px] leading-4 text-muted-foreground">
                     {lmstudioHealth.state === 'checking' ? (

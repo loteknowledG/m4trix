@@ -22,8 +22,53 @@ export function normalizeLmstudioUrl(input: string | null | undefined): string {
   if (!value) return DEFAULT_LMSTUDIO_URL;
 
   const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(value) ? value : `http://${value}`;
-  const withoutTrailingSlash = withScheme.replace(/\/$/, '');
-  return withoutTrailingSlash.replace(/\/v1\/chat\/completions\/?$/, '');
+  let normalized = withScheme.replace(/\/+$/, '');
+  normalized = normalized.replace(/\/v1\/chat\/completions\/?$/i, '');
+  normalized = normalized.replace(/\/v1\/models\/?$/i, '');
+  normalized = normalized.replace(/\/v1\/?$/i, '');
+  return normalized;
+}
+
+function parseLmstudioHostname(baseUrl: string): string | null {
+  try {
+    return new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** True when LM Studio is on RFC1918 / link-local (browser PNA often blocks from localhost). */
+export function isPrivateLanLmstudioHost(baseUrl: string): boolean {
+  const hostname = parseLmstudioHostname(baseUrl);
+  if (!hostname) return false;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') return false;
+  if (/^192\.168\./.test(hostname)) return true;
+  if (/^10\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  return false;
+}
+
+/** Node proxy can reach LAN when the app is served over local http (dev / Electron). */
+export function canUseLmstudioServerProxy(): boolean {
+  if (typeof window === 'undefined') return true;
+  const { protocol, hostname } = window.location;
+  if (protocol !== 'http:') {
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  }
+  return true;
+}
+
+export function shouldPreferLmstudioProxy(baseUrl: string): boolean {
+  if (!canUseLmstudioServerProxy()) return false;
+  if (typeof window === 'undefined') return true;
+
+  const pageHostname = window.location.hostname.toLowerCase();
+  const pageIsLocal =
+    pageHostname === 'localhost' || pageHostname === '127.0.0.1' || pageHostname === '[::1]';
+
+  if (pageIsLocal && isPrivateLanLmstudioHost(baseUrl)) return true;
+  return pageIsLocal;
 }
 
 export function getLmstudioChatUrl(input: string | null | undefined): string {
@@ -98,29 +143,18 @@ export function parseLmstudioModelsResponse(payload: unknown): LmstudioModelOpti
     .filter((option): option is LmstudioModelOption => Boolean(option));
 }
 
-/**
- * Probe LM Studio from the browser first (works on local http → LAN),
- * then fall back to the Next.js proxy (local Electron/dev only — Vercel cannot reach LAN).
- */
-export async function probeLmstudioHealth(
-  input: string | null | undefined,
+type LmstudioHealthProxyPayload = {
+  ok?: boolean;
+  error?: string;
+  modelCount?: number;
+  models?: LmstudioModelOption[];
+  skipServerCheck?: boolean;
+};
+
+async function probeLmstudioViaBrowser(
+  baseUrl: string,
+  modelsUrl: string,
 ): Promise<LmstudioHealthResult> {
-  const baseUrl = normalizeLmstudioUrl(input);
-  const modelsUrl = getLmstudioModelsUrl(baseUrl);
-
-  const blocked = getLmstudioBrowserReachabilityError(baseUrl);
-  if (blocked) {
-    return {
-      ok: false,
-      baseUrl,
-      modelsUrl,
-      modelCount: 0,
-      models: [],
-      via: 'browser',
-      error: blocked,
-    };
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LMSTUDIO_HEALTH_TIMEOUT_MS);
 
@@ -143,84 +177,165 @@ export async function probeLmstudioHealth(
       models,
       via: 'browser',
     };
-  } catch (browserErr) {
-    try {
-      const proxyRes = await fetch(getLmstudioHealthApiUrl(baseUrl), {
-        method: 'GET',
-        cache: 'no-store',
-      });
-      const payload = (await proxyRes.json().catch(() => null)) as {
-        ok?: boolean;
-        error?: string;
-        modelCount?: number;
-        models?: LmstudioModelOption[];
-        skipServerCheck?: boolean;
-      } | null;
-
-      if (payload?.skipServerCheck) {
-        const browserMessage =
-          browserErr instanceof Error ? browserErr.message : String(browserErr);
-        return {
-          ok: false,
-          baseUrl,
-          modelsUrl,
-          modelCount: 0,
-          models: [],
-          via: 'browser',
-          error:
-            `Tunnel URL detected. Server-side check skipped. ` +
-            `Browser failed: ${browserMessage}. ` +
-            `Ensure your proxy is running and the tunnel is active.`,
-        };
-      }
-
-      if (proxyRes.ok && payload?.ok) {
-        const models = Array.isArray(payload.models) ? payload.models : [];
-        return {
-          ok: true,
-          baseUrl,
-          modelsUrl,
-          modelCount: payload.modelCount ?? models.length,
-          models,
-          via: 'proxy',
-        };
-      }
-
-      const browserMessage =
-        browserErr instanceof Error ? browserErr.message : String(browserErr);
-      const proxyMessage = payload?.error || `proxy HTTP ${proxyRes.status}`;
-      return {
-        ok: false,
-        baseUrl,
-        modelsUrl,
-        modelCount: 0,
-        models: [],
-        via: 'browser',
-        error:
-          `Cannot reach LM Studio at ${baseUrl}. ` +
-          `Browser: ${browserMessage}. Proxy: ${proxyMessage}. ` +
-          `Use http://localhost:3000 with a LAN URL, or an https:// tunnel.`,
-      };
-    } catch (proxyErr) {
-      const browserMessage =
-        browserErr instanceof Error ? browserErr.message : String(browserErr);
-      const proxyMessage = proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
-      return {
-        ok: false,
-        baseUrl,
-        modelsUrl,
-        modelCount: 0,
-        models: [],
-        via: 'browser',
-        error:
-          `Cannot reach LM Studio at ${baseUrl} (${browserMessage}). ` +
-          `If you're on m4trix.vercel.app, open http://localhost:3000 instead. ` +
-          `(Proxy also failed: ${proxyMessage})`,
-      };
-    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      baseUrl,
+      modelsUrl,
+      modelCount: 0,
+      models: [],
+      via: 'browser',
+      error: message,
+    };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function probeLmstudioViaProxy(
+  baseUrl: string,
+  modelsUrl: string,
+): Promise<LmstudioHealthResult> {
+  try {
+    const proxyRes = await fetch(getLmstudioHealthApiUrl(baseUrl), {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    const payload = (await proxyRes.json().catch(() => null)) as LmstudioHealthProxyPayload | null;
+
+    if (payload?.skipServerCheck) {
+      return {
+        ok: false,
+        baseUrl,
+        modelsUrl,
+        modelCount: 0,
+        models: [],
+        via: 'proxy',
+        error:
+          'Tunnel URL detected. Server-side check skipped — use browser reachability or confirm the tunnel is active.',
+      };
+    }
+
+    if (proxyRes.ok && payload?.ok) {
+      const models = Array.isArray(payload.models) ? payload.models : [];
+      return {
+        ok: true,
+        baseUrl,
+        modelsUrl,
+        modelCount: payload.modelCount ?? models.length,
+        models,
+        via: 'proxy',
+      };
+    }
+
+    return {
+      ok: false,
+      baseUrl,
+      modelsUrl,
+      modelCount: 0,
+      models: [],
+      via: 'proxy',
+      error: payload?.error || `proxy HTTP ${proxyRes.status}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      baseUrl,
+      modelsUrl,
+      modelCount: 0,
+      models: [],
+      via: 'proxy',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function formatLmstudioHealthFailure(
+  baseUrl: string,
+  browserError: string | undefined,
+  proxyError: string | undefined,
+  mixedContentHint: string | null,
+): string {
+  if (mixedContentHint && !proxyError) return mixedContentHint;
+
+  const parts: string[] = [];
+  if (proxyError) parts.push(`Proxy: ${proxyError}`);
+  if (browserError) parts.push(`Browser: ${browserError}`);
+  if (mixedContentHint) parts.push(mixedContentHint);
+
+  const detail = parts.length ? parts.join('. ') : `Cannot reach LM Studio at ${baseUrl}`;
+  return `${detail}. Use the base URL only (e.g. http://192.168.12.48:1234), not /v1/models.`;
+}
+
+/**
+ * Probe LM Studio health. Local dev / Electron prefers the Next.js proxy first
+ * (Node can reach LAN; browser fetch often fails Private Network Access).
+ * HTTPS deploys try browser first for tunnel URLs; Vercel cannot reach LAN.
+ */
+export async function probeLmstudioHealth(
+  input: string | null | undefined,
+): Promise<LmstudioHealthResult> {
+  const baseUrl = normalizeLmstudioUrl(input);
+  const modelsUrl = getLmstudioModelsUrl(baseUrl);
+  const mixedContentHint = getLmstudioBrowserReachabilityError(baseUrl);
+  const preferProxy = shouldPreferLmstudioProxy(baseUrl);
+
+  if (mixedContentHint && !canUseLmstudioServerProxy()) {
+    return {
+      ok: false,
+      baseUrl,
+      modelsUrl,
+      modelCount: 0,
+      models: [],
+      via: 'browser',
+      error: mixedContentHint,
+    };
+  }
+
+  let browserResult: LmstudioHealthResult | undefined;
+  let proxyResult: LmstudioHealthResult | undefined;
+
+  const tryBrowser = async () => {
+    if (mixedContentHint) return;
+    browserResult = await probeLmstudioViaBrowser(baseUrl, modelsUrl);
+    if (browserResult.ok) return browserResult;
+    return undefined;
+  };
+
+  const tryProxy = async () => {
+    if (!canUseLmstudioServerProxy()) return;
+    proxyResult = await probeLmstudioViaProxy(baseUrl, modelsUrl);
+    if (proxyResult.ok) return proxyResult;
+    return undefined;
+  };
+
+  if (preferProxy) {
+    const proxyOk = await tryProxy();
+    if (proxyOk) return proxyOk;
+    const browserOk = await tryBrowser();
+    if (browserOk) return browserOk;
+  } else {
+    const browserOk = await tryBrowser();
+    if (browserOk) return browserOk;
+    const proxyOk = await tryProxy();
+    if (proxyOk) return proxyOk;
+  }
+
+  return {
+    ok: false,
+    baseUrl,
+    modelsUrl,
+    modelCount: 0,
+    models: [],
+    via: preferProxy ? 'proxy' : 'browser',
+    error: formatLmstudioHealthFailure(
+      baseUrl,
+      browserResult?.error,
+      proxyResult?.error,
+      mixedContentHint,
+    ),
+  };
 }
 
 export type LmstudioClientProxyPayload = {
