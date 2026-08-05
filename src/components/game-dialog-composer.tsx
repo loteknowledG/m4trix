@@ -28,6 +28,7 @@ type GameDialogComposerProps = {
   tabs: CharacterTab[];
   activeCharacter: GameCharacterSlot;
   onActiveCharacterChange: (id: GameCharacterSlot) => void;
+  lockedCharacter?: GameCharacterSlot | null;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
@@ -43,6 +44,7 @@ export function GameDialogComposer({
   tabs,
   activeCharacter,
   onActiveCharacterChange,
+  lockedCharacter = null,
   input,
   onInputChange,
   onSend,
@@ -51,15 +53,17 @@ export function GameDialogComposer({
   disabled = false,
   inputMaxLength,
 }: GameDialogComposerProps) {
-  const activeTab = tabs.find(tab => tab.id === activeCharacter) ?? tabs[0];
+  const effectiveCharacter = lockedCharacter ?? activeCharacter;
+  const activeTab = tabs.find(tab => tab.id === effectiveCharacter) ?? tabs[0];
   const style = resolveCharacterDialogStyle(dialogStyle);
   const previewText = input.trim();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const characterLocked = lockedCharacter != null;
 
   useEffect(() => {
     if (!open || disabled) return;
     inputRef.current?.focus();
-  }, [activeCharacter, open, disabled]);
+  }, [effectiveCharacter, open, disabled]);
 
   if (!open) {
     return (
@@ -102,26 +106,28 @@ export function GameDialogComposer({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="border-b border-border/60 px-4 py-3">
-            <ul className="flex flex-wrap gap-1.5">
-              {tabs.map(tab => (
-                <li key={tab.id}>
-                  <button
-                    type="button"
-                    onClick={() => onActiveCharacterChange(tab.id)}
-                    className={cn(
-                      'rounded-md border px-2 py-1 text-left text-[11px] transition-colors',
-                      activeCharacter === tab.id
-                        ? 'border-primary bg-primary/15 text-foreground ring-1 ring-primary/30'
-                        : 'border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {!characterLocked ? (
+            <div className="border-b border-border/60 px-4 py-3">
+              <ul className="flex flex-wrap gap-1.5">
+                {tabs.map(tab => (
+                  <li key={tab.id}>
+                    <button
+                      type="button"
+                      onClick={() => onActiveCharacterChange(tab.id)}
+                      className={cn(
+                        'rounded-md border px-2 py-1 text-left text-[11px] transition-colors',
+                        effectiveCharacter === tab.id
+                          ? 'border-primary bg-primary/15 text-foreground ring-1 ring-primary/30'
+                          : 'border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {activeTab ? (

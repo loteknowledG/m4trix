@@ -39,7 +39,7 @@ type MomentDialogOverlayProps = {
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
   /** Game dialog bubbles: half the min height of a square at the same width; height grows with content. */
   gameDialog?: boolean;
-  onOpenEditor?: () => void;
+  onOpenEditor?: (lineId: string) => void;
 };
 
 type LineLayout = {
@@ -83,7 +83,7 @@ function MomentDialogBubble({
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (patch: MomentDialogLayoutPatch) => void;
   onSelect?: () => void;
-  onOpenEditor?: () => void;
+  onOpenEditor?: (lineId: string) => void;
   gameDialog?: boolean;
 }) {
   const style = resolveMomentDialogLineStyle(line);
@@ -209,9 +209,9 @@ function MomentDialogBubble({
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      onOpenEditor?.();
+      onOpenEditor?.(line.id);
     },
-    [onOpenEditor],
+    [line.id, onOpenEditor],
   );
 
   const onSelectBubble = useCallback(
@@ -347,8 +347,6 @@ export function MomentDialogOverlay({
   onLayoutChangeRef.current = onLayoutChange;
   const onEditLineIdChangeRef = useRef(onEditLineIdChange);
   onEditLineIdChangeRef.current = onEditLineIdChange;
-  const onOpenEditorRef = useRef(onOpenEditor);
-  onOpenEditorRef.current = onOpenEditor;
   const gameDialogSelectable = gameDialog && onEditLineIdChange != null;
 
   const handleLayoutChange = useCallback((lineId: string, patch: MomentDialogLayoutPatch) => {
@@ -419,7 +417,7 @@ export function MomentDialogOverlay({
           editable
           stageRef={layoutStageRef}
           onLayoutChange={(patch) => handleLayoutChange(editingLine.id, patch)}
-          onOpenEditor={() => onOpenEditorRef.current?.()}
+          onOpenEditor={onOpenEditor}
           gameDialog={gameDialog}
         />
       ) : null}

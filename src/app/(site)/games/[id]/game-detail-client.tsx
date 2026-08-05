@@ -363,6 +363,7 @@ export default function GamePage() {
   );
   const [dialogComposerOpen, setDialogComposerOpen] = useState(false);
   const [focusedGameDialogSlot, setFocusedGameDialogSlot] = useState<GameCharacterSlot | null>(null);
+  const [composerLockedSlot, setComposerLockedSlot] = useState<GameCharacterSlot | null>(null);
   const [narratorDialogStyle, setNarratorDialogStyle] = useState<CharacterDialogStyle>(() => ({
     ...NARRATOR_CHARACTER_DIALOG_STYLE,
   }));
@@ -465,12 +466,30 @@ export default function GamePage() {
       setDialogComposerOpen(open);
       saveGameDialogComposerOpen(id, open);
       if (open) {
-        setFocusedGameDialogSlot(activeCharacter);
+        setComposerLockedSlot(null);
+        setFocusedGameDialogSlot((prev) => prev ?? activeCharacter);
       } else {
         setFocusedGameDialogSlot(null);
+        setComposerLockedSlot(null);
       }
     },
     [activeCharacter, id],
+  );
+
+  const handleOpenGameDialogEditor = useCallback(
+    (lineId: string) => {
+      const slot =
+        lineId === "protagonist" || lineId === "antagonist" || lineId === "narrator"
+          ? lineId
+          : null;
+      if (!slot) return;
+      setComposerLockedSlot(slot);
+      setActiveCharacter(slot);
+      setFocusedGameDialogSlot(slot);
+      setDialogComposerOpen(true);
+      saveGameDialogComposerOpen(id, true);
+    },
+    [id],
   );
 
   const handleGameDialogFocusChange = useCallback((lineId: string | null) => {
@@ -2367,7 +2386,7 @@ export default function GamePage() {
                 onEditLineIdChange={handleGameDialogFocusChange}
                 stageRef={stageRef}
                 onLayoutChange={handleGameDialogLayoutChange}
-                onOpenEditor={() => handleDialogComposerOpenChange(true)}
+                onOpenEditor={handleOpenGameDialogEditor}
                 gameDialog
               />
 
@@ -2376,6 +2395,7 @@ export default function GamePage() {
                 onOpenChange={handleDialogComposerOpenChange}
                 tabs={gameDialogTabs}
                 activeCharacter={activeCharacter}
+                lockedCharacter={composerLockedSlot}
                 onActiveCharacterChange={(slot) => {
                   setActiveCharacter(slot);
                   if (dialogComposerOpen) setFocusedGameDialogSlot(slot);
