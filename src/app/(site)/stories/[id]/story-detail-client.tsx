@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight, Plus, SquarePen, Trash2, Upload, User } from
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IoPlaySharp, IoStopSharp } from "react-icons/io5";
-import { IoMdChatbubbles } from "react-icons/io";
 import { LuNotebookText } from "react-icons/lu";
 import { SiLevelsdotfyi, SiThestorygraph } from "react-icons/si";
 import { StoryArcEditor } from "@/components/story-arc-editor";
@@ -108,11 +107,6 @@ function createEmptyStageEditForm(): StageEditForm {
 type Moment = StoryMomentRecord;
 type StagedMomentsByStage = Record<number, string[]>;
 type Character = { id: string; name?: string; avatarUrl?: string };
-type StoryDialogLine = {
-  id: string;
-  speaker: string;
-  text: string;
-};
 type StoryMeta = {
   id: string;
   title?: string;
@@ -123,29 +117,7 @@ type StoryMeta = {
   stagedMomentsByStage?: StagedMomentsByStage;
   narratorEnabled?: boolean;
   directorNotes?: string;
-  dialogLines?: StoryDialogLine[];
 };
-
-function normalizeDialogLines(value: unknown): StoryDialogLine[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item, index) => {
-      if (!item || typeof item !== "object") return null;
-      const raw = item as Record<string, unknown>;
-      const text = typeof raw.text === "string" ? raw.text.trim() : "";
-      if (!text) return null;
-      return {
-        id: typeof raw.id === "string" ? raw.id : `dialog-${index}`,
-        speaker: typeof raw.speaker === "string" ? raw.speaker.trim() : "",
-        text,
-      };
-    })
-    .filter((line): line is StoryDialogLine => line !== null);
-}
-
-function newDialogLineId() {
-  return `${Date.now()}-${Math.random()}`;
-}
 
 function normalizeStagedMomentsByStage(value: unknown): StagedMomentsByStage {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -181,10 +153,6 @@ export default function StoryPage() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [storyInfoOpen, setStoryInfoOpen] = useState(false);
   const [storyArcOpen, setStoryArcOpen] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogLines, setDialogLines] = useState<StoryDialogLine[]>([]);
-  const [dialogSpeakerInput, setDialogSpeakerInput] = useState("");
-  const [dialogTextInput, setDialogTextInput] = useState("");
   const [stageOpen, setStageOpen] = useState(false);
   const [stageAssignSelection, setStageAssignSelection] = useState("__new__");
   const [stageEditTarget, setStageEditTarget] = useState<number | null>(null);
@@ -324,7 +292,6 @@ export default function StoryPage() {
           );
           setNarratorEnabled(meta?.narratorEnabled !== false);
           setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
-          setDialogLines(normalizeDialogLines(meta?.dialogLines));
         } catch (e) {
           /* ignore */
         }
@@ -358,7 +325,6 @@ export default function StoryPage() {
         setStagedMomentsByStage(normalizeStagedMomentsByStage(meta?.stagedMomentsByStage));
         setNarratorEnabled(meta?.narratorEnabled !== false);
         setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
-        setDialogLines(normalizeDialogLines(meta?.dialogLines));
       } catch (e) {
         /* ignore */
       }
@@ -619,14 +585,6 @@ export default function StoryPage() {
   const saveDirectorNotes = useCallback(async () => {
     await saveStoryMetadata({ directorNotes });
   }, [directorNotes, saveStoryMetadata]);
-
-  const saveDialogLines = useCallback(
-    async (lines: StoryDialogLine[]) => {
-      setDialogLines(lines);
-      await saveStoryMetadata({ dialogLines: lines });
-    },
-    [saveStoryMetadata],
-  );
 
   const saveStoryArcCurrentStage = useCallback(
     async (stageNumber: number) => {
@@ -1472,25 +1430,6 @@ export default function StoryPage() {
                     <p>Story arc</p>
                   </TooltipContent>
                 </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10"
-                      aria-label="Dialog"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <IoMdChatbubbles size={18} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={10}>
-                    <p>Dialog</p>
-                  </TooltipContent>
-                </Tooltip>
               </TooltipProvider>
             ) : null}
 
@@ -2105,120 +2044,6 @@ export default function StoryPage() {
           </div>
         </SheetContent>
       </Sheet>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent
-          className="max-w-2xl overflow-hidden p-0"
-          aria-describedby="story-dialog-description"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <DialogHeader className="sr-only">
-            <DialogTitle>Dialog</DialogTitle>
-            <DialogDescription id="story-dialog-description">
-              Write and preview dialog lines for this story.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex max-h-[85vh] min-h-0 flex-col">
-            <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
-              <h3 className="text-sm font-medium">Dialog</h3>
-              <button
-                type="button"
-                onClick={() => setDialogOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-foreground hover:bg-accent/20"
-                aria-label="Close dialog editor"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,140px)_1fr_auto]">
-                <input
-                  value={dialogSpeakerInput}
-                  onChange={(e) => setDialogSpeakerInput(e.target.value)}
-                  className="rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                  placeholder="Speaker"
-                />
-                <input
-                  value={dialogTextInput}
-                  onChange={(e) => setDialogTextInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    e.preventDefault();
-                    const text = dialogTextInput.trim();
-                    if (!text) return;
-                    const nextLine: StoryDialogLine = {
-                      id: newDialogLineId(),
-                      speaker: dialogSpeakerInput.trim(),
-                      text,
-                    };
-                    void saveDialogLines([...dialogLines, nextLine]);
-                    setDialogSpeakerInput("");
-                    setDialogTextInput("");
-                  }}
-                  className="rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                  placeholder="Dialog line"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = dialogTextInput.trim();
-                    if (!text) return;
-                    const nextLine: StoryDialogLine = {
-                      id: newDialogLineId(),
-                      speaker: dialogSpeakerInput.trim(),
-                      text,
-                    };
-                    void saveDialogLines([...dialogLines, nextLine]);
-                    setDialogSpeakerInput("");
-                    setDialogTextInput("");
-                  }}
-                  className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  disabled={!dialogTextInput.trim()}
-                >
-                  Add
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {dialogLines.length ? (
-                  dialogLines.map((line, index) => {
-                    const palette = getStagePalette(index);
-                    return (
-                      <div
-                        key={line.id}
-                        className="relative rounded border px-3 py-2 pr-10 text-sm"
-                        style={{ backgroundColor: palette.bg, color: palette.fg }}
-                      >
-                        {line.speaker ? (
-                          <div className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-80">
-                            {line.speaker}
-                          </div>
-                        ) : null}
-                        <div className="whitespace-pre-wrap">{line.text}</div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void saveDialogLines(dialogLines.filter((item) => item.id !== line.id));
-                          }}
-                          className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full opacity-70 transition-opacity hover:opacity-100"
-                          aria-label="Remove dialog line"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                    No dialog lines yet. Add a speaker and line above.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <StoryArcEditor
         open={storyArcOpen}
