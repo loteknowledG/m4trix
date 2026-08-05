@@ -140,7 +140,7 @@ export default function MomentsGrid({
                     : undefined
                 }
                 className={
-                  "relative rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
+                  "relative h-full rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
                 }
               >
                 <MomentCard
@@ -148,6 +148,7 @@ export default function MomentsGrid({
                   anySelected={selectedIds.length > 0}
                   toggleSelect={toggleSelect}
                   onOpen={onOpen}
+                  fullHeight
                 />
               </div>
             );

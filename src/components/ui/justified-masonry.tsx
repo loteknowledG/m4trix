@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isMomentVideoSrc } from "@/lib/moments";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,7 @@ type LayoutEntry<T> = {
   item: T;
   rowIndex: number;
   widthPercent: number;
+  heightPx: number;
 };
 
 export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: JustifiedMasonryProps<T>) {
@@ -51,47 +52,51 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
   const [containerWidth, setContainerWidth] = useState(0);
   const [ratios, setRatios] = useState<Record<string, number>>({});
 
+  const syncContainerWidth = (nextWidth: number) => {
+    if (nextWidth <= 0) return;
+    setContainerWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+  };
+
+  // Measure once before paint so the first row can fill horizontally immediately.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    syncContainerWidth(el.getBoundingClientRect().width);
+  }, [items.length]);
+
   // Track container width using ResizeObserver when available,
   // and fall back to a simple resize listener otherwise.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    // Modern browsers: use ResizeObserver for precise container width.
-    if (typeof ResizeObserver !== "undefined") {
-      const obs = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const w = entry.contentRect.width;
-          if (w && w !== containerWidth) {
-            setContainerWidth(w);
-          }
-        }
-      });
-      obs.observe(el);
-      return () => {
-        obs.disconnect();
-      };
-    }
-
-    // Fallback: measure via getBoundingClientRect + window resize.
     const updateWidth = () => {
       try {
-        const rect = el.getBoundingClientRect();
-        const w = rect?.width || 0;
-        if (w && w !== containerWidth) {
-          setContainerWidth(w);
-        }
+        syncContainerWidth(el.getBoundingClientRect().width);
       } catch {
         // ignore
       }
     };
+
+    if (typeof ResizeObserver !== "undefined") {
+      const obs = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          syncContainerWidth(entry.contentRect.width);
+        }
+      });
+      obs.observe(el);
+      updateWidth();
+      return () => {
+        obs.disconnect();
+      };
+    }
 
     updateWidth();
     window.addEventListener("resize", updateWidth);
     return () => {
       window.removeEventListener("resize", updateWidth);
     };
-  }, [containerWidth]);
+  }, []);
 
   // Compute layout rows based on aspect ratios
   const layout = useMemo<LayoutEntry<T>[]>(() => {
@@ -102,22 +107,25 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
     let currentRowWidthAtTarget = 0; // in px at targetRowHeight
     let rowIndex = 0;
 
-    const flushRow = (isLast: boolean) => {
+    const flushRow = () => {
       if (!currentRow.length) return;
       const totalItemSpacing = itemSpacing * (currentRow.length - 1);
+      const rowWidthAtTarget = currentRow.reduce(
+        (sum, entry) => sum + entry.ar * targetRowHeight,
+        0,
+      );
       let rowHeight = targetRowHeight;
-      let rowWidth = currentRow.reduce((sum, entry) => sum + entry.ar * targetRowHeight, 0);
 
-      if (!isLast && rowWidth > 0) {
-        const scale = (containerWidth - totalItemSpacing) / rowWidth;
+      // Scale every row (including the last) so moments fill the row horizontally first.
+      if (rowWidthAtTarget > 0) {
+        const scale = (containerWidth - totalItemSpacing) / rowWidthAtTarget;
         rowHeight = targetRowHeight * Math.max(scale, 0.5);
-        rowWidth *= scale;
       }
 
       currentRow.forEach(({ item, ar }) => {
         const w = ar * rowHeight; // px
         const widthPercent = (w / containerWidth) * 100;
-        result.push({ item, rowIndex, widthPercent });
+        result.push({ item, rowIndex, widthPercent, heightPx: rowHeight });
       });
 
       rowIndex += 1;
@@ -135,15 +143,14 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
         currentRow.length > 0 &&
         currentRowWidthAtTarget + itemWidthAtTarget + totalItemSpacing > containerWidth
       ) {
-        flushRow(false);
+        flushRow();
       }
 
       currentRow.push({ item, ar });
       currentRowWidthAtTarget += itemWidthAtTarget;
 
-      // Flush the last row at the end
       if (index === items.length - 1) {
-        flushRow(true);
+        flushRow();
       }
     });
 
@@ -188,11 +195,12 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
           {row.map((entry) => {
             const style: React.CSSProperties = {
               width: `${entry.widthPercent}%`,
+              height: entry.heightPx,
               flex: "0 0 auto",
             };
             return (
               <div key={getId(entry.item)} style={style}>
-                {renderItem(entry.item, { width: "100%" })}
+                {renderItem(entry.item, { width: "100%", height: "100%" })}
               </div>
             );
           })}
