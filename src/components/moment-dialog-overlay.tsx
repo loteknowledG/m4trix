@@ -198,7 +198,11 @@ function MomentDialogBubble({
     <div
       className={cn(
         'absolute min-w-0 max-w-none -translate-x-1/2 -translate-y-1/2 touch-none select-none',
-        editable ? 'pointer-events-auto z-50' : 'pointer-events-none z-20',
+        editable
+          ? gameDialog
+            ? 'pointer-events-none z-50'
+            : 'pointer-events-auto z-50'
+          : 'pointer-events-none z-20',
       )}
       style={{
         left: `${layout.x * 100}%`,
@@ -212,12 +216,22 @@ function MomentDialogBubble({
       <div
         className={cn(
           'relative touch-none',
-          editable && 'cursor-grab ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent active:cursor-grabbing',
+          editable &&
+            (gameDialog
+              ? 'ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent'
+              : 'cursor-grab ring-2 ring-primary/70 ring-offset-2 ring-offset-transparent active:cursor-grabbing'),
         )}
-        onPointerDown={editable ? onStartDrag : undefined}
+        onPointerDown={editable && !gameDialog ? onStartDrag : undefined}
       >
         {editable ? (
-          <div className="mb-1 flex shrink-0 items-center justify-center rounded-t-md bg-primary/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground pointer-events-none">
+          <div
+            className={cn(
+              'mb-1 flex shrink-0 items-center justify-center rounded-t-md bg-primary/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground',
+              gameDialog && 'pointer-events-auto cursor-grab active:cursor-grabbing',
+              !gameDialog && 'pointer-events-none',
+            )}
+            onPointerDown={gameDialog ? onStartDrag : undefined}
+          >
             Drag
           </div>
         ) : null}
@@ -258,7 +272,7 @@ function MomentDialogBubble({
             type="button"
             aria-label="Resize dialog"
             onPointerDown={onStartResize}
-            className="absolute -bottom-2.5 -right-2.5 z-40 h-5 w-5 cursor-se-resize rounded-sm border-2 border-white bg-primary shadow-md"
+            className="pointer-events-auto absolute -bottom-2.5 -right-2.5 z-40 h-5 w-5 cursor-se-resize rounded-sm border-2 border-white bg-primary shadow-md"
           />
         ) : null}
       </div>

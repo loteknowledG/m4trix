@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { CustomChatWindow } from '@/components/ai/custom-chat-window';
-import { GrokImagePromptButton } from '@/components/grok-image-prompt-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -771,16 +770,6 @@ export default function CharactersPage() {
             </Button>
           </div>
           <section className="relative flex flex-1 min-h-0 flex-col rounded-xl border bg-background/40 overflow-hidden h-full">
-            <div className="flex flex-none items-center justify-end gap-2 border-b border-border/60 bg-background/60 px-3 py-2">
-              <GrokImagePromptButton
-                agents={agents}
-                disabled={isRunning}
-                focusAgentId={agents[0]?.id}
-                messages={messages}
-                prompterAgent={prompterAgent}
-                story={story}
-              />
-            </div>
             <div className="flex flex-col flex-1 min-h-0 h-full">
               <CustomChatWindow
                 messages={messages.map(m => {
@@ -909,7 +898,7 @@ export default function CharactersPage() {
             </div>
             <p className="max-w-md text-xs text-zinc-300">
               {dragOverId
-                ? 'Or click a portrait, then paste (Ctrl+V) from Grok.'
+                ? 'Or click a portrait, then paste (Ctrl+V).'
                 : 'Portraits show a dashed border while you drag. Click a portrait first to paste from clipboard.'}
             </p>
             <p className="max-w-sm text-[11px] text-zinc-500">

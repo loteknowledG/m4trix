@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from '@/components/icons';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,12 @@ export function GameDialogComposer({
   const activeTab = tabs.find(tab => tab.id === activeCharacter) ?? tabs[0];
   const style = resolveCharacterDialogStyle(dialogStyle);
   const previewText = input.trim();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!open || disabled) return;
+    inputRef.current?.focus();
+  }, [activeCharacter, open, disabled]);
 
   if (!open) {
     return (
@@ -61,7 +68,7 @@ export function GameDialogComposer({
         variant="raised"
         size="icon"
         onClick={() => onOpenChange(true)}
-        className="m4-pushable-icon pointer-events-auto absolute top-1/2 right-0 z-30 translate-x-1/2 -translate-y-1/2"
+        className="m4-pushable-icon pointer-events-auto absolute top-1/2 right-0 z-[60] translate-x-1/2 -translate-y-1/2"
         aria-label="Open dialog panel"
         title="Open dialog panel"
       >
@@ -72,7 +79,7 @@ export function GameDialogComposer({
 
   return (
     <div
-      className="pointer-events-auto absolute inset-y-0 right-0 z-30 flex w-[min(100vw,26rem)] max-w-full flex-col border-l border-border/60 bg-background shadow-2xl"
+      className="pointer-events-auto absolute inset-y-0 right-0 z-[60] flex w-[min(100vw,26rem)] max-w-full flex-col border-l border-border/60 bg-background shadow-2xl"
       role="dialog"
       aria-label="Game dialog composer"
       onClick={event => event.stopPropagation()}
@@ -133,6 +140,7 @@ export function GameDialogComposer({
                 <label className="grid gap-1">
                   <span className="text-[11px] text-muted-foreground">Dialog text</span>
                   <Textarea
+                    ref={inputRef}
                     value={input}
                     onChange={event => {
                       const next = event.target.value;

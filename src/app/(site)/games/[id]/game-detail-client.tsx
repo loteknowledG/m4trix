@@ -10,7 +10,6 @@ import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { GameDialogComposer } from "@/components/game-dialog-composer";
 import { MomentDialogOverlay, type MomentDialogLayoutPatch } from "@/components/moment-dialog-overlay";
-import { GrokImagePromptButton } from "@/components/grok-image-prompt-button";
 import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
 import { GameCard } from "@/components/game-card";
@@ -61,7 +60,6 @@ import {
   resolveGameAgentContext,
   type GameCharacterContext,
 } from "@/lib/game/game-context";
-import { mapGameChatForGrokImage } from "@/lib/grok-image-game";
 import {
   buildGameAgentRequest,
   queueDemoReply,
@@ -115,6 +113,7 @@ import {
   storyTextForPrompt,
 } from "@/lib/game/story-moments";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const CHARACTER_MEMORY_INJECTION_LIMIT = 2;
 const PLAYGROUND_AGENTS_KEY = "PLAYGROUND_AGENTS";
@@ -547,23 +546,6 @@ export default function GamePage() {
       .slice(0, 8);
   }, [allTags, momentTags, tagInput]);
 
-  const grokStoryText = useMemo(
-    () => [storyTextForPrompt(storyDescription), storySummary.trim()].filter(Boolean).join("\n\n"),
-    [storyDescription, storySummary],
-  );
-
-  const grokSceneContext = useMemo(
-    () =>
-      buildSceneSummary({
-        title,
-        currentMomentName: currentMoment?.name ?? "",
-        npc: assignedNpc,
-        player: assignedPlayer,
-        npcKnowsPlayer: npcKnowsPlayerEffective,
-      }),
-    [title, currentMoment?.name, assignedNpc, assignedPlayer, npcKnowsPlayerEffective],
-  );
-
   const gameContextText = useMemo(() => {
     const characterSections = [
       assignedNpc
@@ -620,10 +602,6 @@ export default function GamePage() {
     directorNotes,
   ]);
 
-  const grokChatMapping = useMemo(
-    () => mapGameChatForGrokImage(chatMessages, assignedNpc, assignedPlayer),
-    [chatMessages, assignedNpc, assignedPlayer],
-  );
   const chatInFlight = useMemo(
     () =>
       chatMessages.some(
@@ -1488,6 +1466,11 @@ export default function GamePage() {
 
     if (responders.length === 0) return;
 
+    if (!connected) {
+      toast.error("Connect an AI provider in Connection settings before sending.");
+      return;
+    }
+
     // Get character names
     const speakerName = characterId === 'protagonist'
       ? (assignedPlayer?.name || 'Protagonist')
@@ -1500,9 +1483,23 @@ export default function GamePage() {
       getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
       getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
       "zen";
+    const lmstudioConnected =
+      getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioConnected) === "1";
+    const lmstudioSelected = activeProvider === "lmstudio" && lmstudioConnected;
     const lmstudioUrl = normalizeLmstudioUrl(
       getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
     );
+    const resolvedModel =
+      connectionModel ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.activeModel) ||
+      getConnectionItem(CONNECTION_STORAGE_KEYS.gameConnectionModel) ||
+      undefined;
+
+    if (lmstudioSelected && !resolvedModel) {
+      toast.error("Select an LM Studio model in Connection settings before sending.");
+      return;
+    }
+
     const zenApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) || undefined;
     const googleApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) || undefined;
     const hfApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) || undefined;
@@ -1535,11 +1532,11 @@ export default function GamePage() {
 
         // Call AI for this responder
         try {
-          const requestBody = {
+          const requestBody: Record<string, unknown> = {
             prompt: promptText,
-            model: connectionModel || undefined,
-            provider: activeProvider,
-            lmstudioUrl,
+            model: resolvedModel,
+            provider: lmstudioSelected ? "lmstudio" : activeProvider,
+            stream: false,
             zenApiKey,
             googleApiKey,
             hfApiKey,
@@ -1551,7 +1548,10 @@ export default function GamePage() {
             },
             maxTokens: 100,
           };
-          console.log('[DEBUG] AI request:', JSON.stringify({ provider: activeProvider, model: connectionModel, hasKey: !!zenApiKey, lmstudioUrl }).slice(0, 300));
+          if (lmstudioSelected) {
+            requestBody.lmstudioUrl = lmstudioUrl;
+          }
+          console.log('[DEBUG] AI request:', JSON.stringify({ provider: requestBody.provider, model: resolvedModel, lmstudioSelected, lmstudioUrl: lmstudioSelected ? lmstudioUrl : undefined }).slice(0, 300));
           // Use the helper that handles LM Studio clientProxy envelope
           const response = await fetchAgentsWithLmstudioBrowserProxy(requestBody);
 
@@ -1598,10 +1598,15 @@ export default function GamePage() {
               ? { reply }
               : data;
             setDebugData({ request: requestBody, response: debugDataValue, prompt: spokenText });
+          } else {
+            const errorText = await response.text().catch(() => "");
+            toast.error(errorText || `AI request failed (${response.status})`);
           }
         } catch (loopErr) {
-          // Silently log - don't add error to conversation since AI should only respond with one sentence
+          const message =
+            loopErr instanceof Error ? loopErr.message : "AI response failed";
           console.error('AI response error for', currentResponder, loopErr);
+          toast.error(message);
         }
       }
 
@@ -1628,7 +1633,9 @@ export default function GamePage() {
         });
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "AI response failed";
       console.error('AI response error:', err);
+      toast.error(message);
     }
   };
 
@@ -1850,6 +1857,7 @@ export default function GamePage() {
         event.key === CONNECTION_STORAGE_KEYS.hfKey ||
         event.key === CONNECTION_STORAGE_KEYS.nvidiaKey ||
         event.key === CONNECTION_STORAGE_KEYS.lmstudioConnected ||
+        event.key === CONNECTION_STORAGE_KEYS.lmstudioUrl ||
         event.key === CONNECTION_STORAGE_KEYS.activeProvider ||
         event.key === CONNECTION_STORAGE_KEYS.gameConnectionModel
       ) {
@@ -2378,17 +2386,6 @@ export default function GamePage() {
                 <div className="pointer-events-auto">
                   <ConnectionSheet
                     triggerClassName="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
-                  />
-                </div>
-                <div className="pointer-events-auto">
-                  <GrokImagePromptButton
-                    agents={grokChatMapping.agents}
-                    className="h-8 border-white/20 bg-black/45 text-xs text-white hover:bg-black/65"
-                    focusAgentId={grokChatMapping.focusAgentId}
-                    messages={grokChatMapping.messages}
-                    prompterAgent={grokChatMapping.prompterAgent}
-                    sceneContext={grokSceneContext}
-                    story={grokStoryText}
                   />
                 </div>
               </div>

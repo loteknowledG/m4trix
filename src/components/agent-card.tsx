@@ -77,7 +77,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
     }
     try {
       await copyImageToClipboardFromSrc(avatarUrl);
-      toast.success('Portrait copied — paste into Grok or another app.');
+      toast.success('Portrait copied — paste into another app.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not copy image.';
       toast.error(msg);

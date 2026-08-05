@@ -5,7 +5,6 @@ import { HeaderBackButton } from "@/components/ui/header-back-button";
 import { ChevronLeft, ChevronRight, SquarePen, Trash2, Upload } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GrUserFemale } from "react-icons/gr";
 import { IoPlaySharp, IoStopSharp } from "react-icons/io5";
 import { IoMdChatbubbles } from "react-icons/io";
 import { LuNotebookText } from "react-icons/lu";
@@ -28,20 +27,10 @@ import { Marquee } from "@/components/ui/marquee";
 import { SelectionHeaderBar } from "@/components/ui/selection-header-bar";
 import type { StoryExperienceMode } from "@/components/story-experience-mode-toggle";
 import { StoryMomentsViewer } from "@/components/story-moments-viewer";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { YesNoToggle } from "@/components/ui/yes-no-toggle";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MomentsProvider } from "@/context/moments-collection";
 import useSelection from "@/hooks/use-selection";
 import { useSidebar } from "@/hooks/use-sidebar";
-import { characterDetailHref } from "@/lib/character-routes";
 import {
   ensureNarratorCharacterRecord,
   NARRATOR_CHARACTER_ID,
@@ -132,15 +121,9 @@ type StoryMeta = {
   title?: string;
   description?: string;
   count?: number;
-  npcId?: string;
-  playerId?: string;
-  npcAppearance?: string;
-  playerAppearance?: string;
   storyArc?: unknown;
   storyArcCurrentStage?: number;
   stagedMomentsByStage?: StagedMomentsByStage;
-  npcKnowsPlayer?: boolean;
-  playerKnowsNpc?: boolean;
   narratorEnabled?: boolean;
   directorNotes?: string;
   dialogLines?: StoryDialogLine[];
@@ -209,32 +192,14 @@ export default function StoryPage() {
   const [stageEditTarget, setStageEditTarget] = useState<number | null>(null);
   const [stageEditForm, setStageEditForm] = useState<StageEditForm>(createEmptyStageEditForm);
   const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
-  const [assignNpcOpen, setAssignNpcOpen] = useState(false);
-  const [assignPlayerOpen, setAssignPlayerOpen] = useState(false);
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [assignedNpcId, setAssignedNpcId] = useState<string | null>(null);
-  const [assignedPlayerId, setAssignedPlayerId] = useState<string | null>(null);
-  const [assignedNpcAppearance, setAssignedNpcAppearance] = useState("");
-  const [assignedPlayerAppearance, setAssignedPlayerAppearance] = useState("");
   const [storyDescription, setStoryDescription] = useState("");
   const [storyArc, setStoryArc] = useState<StoryArc | null>(null);
   const [stagedMomentsByStage, setStagedMomentsByStage] = useState<StagedMomentsByStage>({});
-  const [npcKnowsPlayer, setNpcKnowsPlayer] = useState(false);
-  const [playerKnowsNpc, setPlayerKnowsNpc] = useState(true);
   const [narratorEnabled, setNarratorEnabled] = useState(true);
   const [directorNotes, setDirectorNotes] = useState("");
   const [storyMode, setStoryMode] = useState<StoryExperienceMode>("edit");
   const [viewMomentIndex, setViewMomentIndex] = useState(0);
-  const assignedNpcCharacter = assignedNpcId
-    ? characters.find((character) => character.id === assignedNpcId) || null
-    : null;
-  const assignedPlayerCharacter = assignedPlayerId
-    ? characters.find((character) => character.id === assignedPlayerId) || null
-    : null;
-  const assignableCharacters = useMemo(
-    () => characters.filter((character) => character.id !== NARRATOR_CHARACTER_ID),
-    [characters],
-  );
   const narratorCharacter = useMemo(
     () => characters.find((character) => character.id === NARRATOR_CHARACTER_ID) || null,
     [characters],
@@ -336,10 +301,6 @@ export default function StoryPage() {
           const saved = (await get<StoryMeta[]>("stories")) || [];
           const meta = saved.find((m: any) => m.id === id);
           if (meta && meta.title) t = meta.title;
-          setAssignedNpcId(meta?.npcId || null);
-          setAssignedPlayerId(meta?.playerId || null);
-          setAssignedNpcAppearance(meta?.npcAppearance || "");
-          setAssignedPlayerAppearance(meta?.playerAppearance || "");
           setStoryDescription(normalizeDescription(meta?.description || ""));
           const arcValue = meta?.storyArc ?? storedArc ?? null;
           setStoryArc(
@@ -351,8 +312,6 @@ export default function StoryPage() {
           setStagedMomentsByStage(
             normalizeStagedMomentsByStage(meta?.stagedMomentsByStage ?? storedStaged),
           );
-          setNpcKnowsPlayer(meta?.npcKnowsPlayer === true);
-          setPlayerKnowsNpc(meta?.playerKnowsNpc !== false);
           setNarratorEnabled(meta?.narratorEnabled !== false);
           setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
           setDialogLines(normalizeDialogLines(meta?.dialogLines));
@@ -372,17 +331,13 @@ export default function StoryPage() {
     };
   }, [id]);
 
-  // refresh assignedNpcId when stories-updated event fires
+  // refresh story metadata when stories-updated event fires
   useEffect(() => {
     if (!id) return;
     const handler = async () => {
       try {
         const saved = (await get<StoryMeta[]>("stories")) || [];
         const meta = saved.find((m: any) => m.id === id);
-        setAssignedNpcId(meta?.npcId || null);
-        setAssignedPlayerId(meta?.playerId || null);
-        setAssignedNpcAppearance(meta?.npcAppearance || "");
-        setAssignedPlayerAppearance(meta?.playerAppearance || "");
         setStoryDescription(normalizeDescription(meta?.description || ""));
         setStoryArc(
           meta?.storyArc && typeof meta.storyArc === "object" ? (meta.storyArc as StoryArc) : null,
@@ -391,8 +346,6 @@ export default function StoryPage() {
           typeof meta?.storyArcCurrentStage === "number" ? meta.storyArcCurrentStage : null,
         );
         setStagedMomentsByStage(normalizeStagedMomentsByStage(meta?.stagedMomentsByStage));
-        setNpcKnowsPlayer(meta?.npcKnowsPlayer === true);
-        setPlayerKnowsNpc(meta?.playerKnowsNpc !== false);
         setNarratorEnabled(meta?.narratorEnabled !== false);
         setDirectorNotes(typeof meta?.directorNotes === "string" ? meta.directorNotes : "");
         setDialogLines(normalizeDialogLines(meta?.dialogLines));
@@ -704,90 +657,6 @@ export default function StoryPage() {
     void loadCharacters();
   }, [loadCharacters]);
 
-  const createCharacter = useCallback(async () => {
-    try {
-      const saved = (await get<any[]>("PLAYGROUND_AGENTS")) || [];
-      const newCharacter = {
-        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        name: "",
-        description: "",
-      };
-      const next = [...saved, newCharacter];
-      await set("PLAYGROUND_AGENTS", next);
-      setCharacters(next);
-      try {
-        window.dispatchEvent(new Event("characters-updated"));
-      } catch (e) {
-        /* ignore */
-      }
-      if (id) {
-        const storyList = (await get<any[]>("stories")) || [];
-        const idx = storyList.findIndex((s: any) => s.id === id);
-        if (idx > -1) {
-          storyList[idx] = { ...storyList[idx], npcId: newCharacter.id };
-          await set("stories", storyList);
-          try {
-            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-          } catch (e) {
-            /* ignore */
-          }
-        }
-        setAssignedNpcId(newCharacter.id);
-      }
-      router.push(characterDetailHref(newCharacter.id));
-    } catch (e) {
-      logger.error("Failed to create character", e);
-    }
-  }, [router, id]);
-
-  const assignNpcToStory = useCallback(
-    async (characterId: string) => {
-      if (!id) return;
-      try {
-        const saved = (await get<any[]>("stories")) || [];
-        const idx = saved.findIndex((s: any) => s.id === id);
-        if (idx > -1) {
-          saved[idx] = { ...saved[idx], npcId: characterId };
-          await set("stories", saved);
-          try {
-            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-          } catch (e) {
-            /* ignore */
-          }
-        }
-        setAssignedNpcId(characterId);
-        setAssignNpcOpen(false);
-      } catch (e) {
-        logger.error("Failed to assign NPC", e);
-      }
-    },
-    [id],
-  );
-
-  const assignPlayerToStory = useCallback(
-    async (characterId: string) => {
-      if (!id) return;
-      try {
-        const saved = (await get<any[]>("stories")) || [];
-        const idx = saved.findIndex((s: any) => s.id === id);
-        if (idx > -1) {
-          saved[idx] = { ...saved[idx], playerId: characterId };
-          await set("stories", saved);
-          try {
-            window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-          } catch (e) {
-            /* ignore */
-          }
-        }
-        setAssignedPlayerId(characterId);
-        setAssignPlayerOpen(false);
-      } catch (e) {
-        logger.error("Failed to assign player", e);
-      }
-    },
-    [id],
-  );
-
   const saveStoryMetadata = useCallback(async (patch: Record<string, unknown>) => {
     if (!id) return;
     try {
@@ -1077,14 +946,6 @@ export default function StoryPage() {
     }
     setViewMomentIndex((prev) => Math.min(prev, viewMoments.length - 1));
   }, [viewMoments.length]);
-
-  const saveNpcAppearance = useCallback(async () => {
-    await saveStoryMetadata({ npcAppearance: assignedNpcAppearance });
-  }, [assignedNpcAppearance, saveStoryMetadata]);
-
-  const savePlayerAppearance = useCallback(async () => {
-    await saveStoryMetadata({ playerAppearance: assignedPlayerAppearance });
-  }, [assignedPlayerAppearance, saveStoryMetadata]);
 
   const saveStoryTitle = useCallback(async () => {
     if (!id) return;
@@ -1640,162 +1501,38 @@ export default function StoryPage() {
             </div>
 
             <div className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 text-sm">
-              <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <div className="min-w-0 space-y-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            setAssignNpcOpen(true);
-                            setStoryInfoOpen(false);
-                          }}
-                          className="flex w-full min-w-0 items-center gap-2 rounded border border-dashed p-2 text-sm text-muted-foreground hover:bg-accent/20"
-                          aria-label="Assign NPC"
-                        >
-                          {assignedNpcId && characters.find((c) => c.id === assignedNpcId) ? (
-                            <>
-                              {characters.find((c) => c.id === assignedNpcId)?.avatarUrl ? (
-                                <img
-                                  src={characters.find((c) => c.id === assignedNpcId)?.avatarUrl}
-                                  alt="Character"
-                                  className="h-5 w-5 shrink-0 rounded-full object-cover"
-                                />
-                              ) : (
-                                <GrUserFemale size={16} className="shrink-0" />
-                              )}
-                              <span className="truncate">
-                                {characters.find((c) => c.id === assignedNpcId)?.name || "Untitled"}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <GrUserFemale size={16} className="shrink-0" />
-                              <span>Assign character</span>
-                            </>
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={8}>
-                        <p>{assignedNpcId ? "Reassign character" : "Assign character"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  {assignedNpcId ? (
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground">
-                        {(assignedNpcCharacter?.name || "NPC")} appearance
-                      </div>
-                      <textarea
-                        value={assignedNpcAppearance}
-                        onChange={(e) => setAssignedNpcAppearance(e.target.value)}
-                        onBlur={() => {
-                          void saveNpcAppearance();
-                        }}
-                        placeholder="Describe how this character looks"
-                        className="min-h-[72px] w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="min-w-0 space-y-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            setAssignPlayerOpen(true);
-                            setStoryInfoOpen(false);
-                          }}
-                          className="flex w-full min-w-0 items-center gap-2 rounded border border-dashed p-2 text-sm text-muted-foreground hover:bg-accent/20"
-                          aria-label="Assign player"
-                        >
-                          {assignedPlayerId && characters.find((c) => c.id === assignedPlayerId) ? (
-                            <>
-                              {characters.find((c) => c.id === assignedPlayerId)?.avatarUrl ? (
-                                <img
-                                  src={characters.find((c) => c.id === assignedPlayerId)?.avatarUrl}
-                                  alt="Player"
-                                  className="h-5 w-5 shrink-0 rounded-full object-cover"
-                                />
-                              ) : (
-                                <GrUserFemale size={16} className="shrink-0" />
-                              )}
-                              <span className="truncate">
-                                {characters.find((c) => c.id === assignedPlayerId)?.name || "Untitled"}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <GrUserFemale size={16} className="shrink-0" />
-                              <span>Assign player</span>
-                            </>
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={8}>
-                        <p>{assignedPlayerId ? "Reassign player" : "Assign player"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  {assignedPlayerId ? (
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground">
-                        {(assignedPlayerCharacter?.name || "Player")} appearance
-                      </div>
-                      <textarea
-                        value={assignedPlayerAppearance}
-                        onChange={(e) => setAssignedPlayerAppearance(e.target.value)}
-                        onBlur={() => {
-                          void savePlayerAppearance();
-                        }}
-                        placeholder="Describe how this character looks"
-                        className="min-h-[72px] w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="min-w-0 space-y-2 md:col-span-2 xl:col-span-1">
-                  <div
-                    className="flex w-full min-w-0 items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-sm"
-                    aria-label="Narrator"
-                  >
-                    {narratorCharacter?.avatarUrl ? (
-                      <img
-                        src={narratorCharacter.avatarUrl}
-                        alt="Narrator"
-                        className="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                    ) : (
-                      <LuNotebookText size={16} className="shrink-0 text-amber-600" />
-                    )}
-                    <span className="font-medium">Narrator</span>
-                  </div>
-                  <label className="flex min-w-0 items-start gap-2 rounded border border-border/60 px-2 py-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={narratorEnabled}
-                      onChange={(e) => {
-                        const next = e.target.checked;
-                        setNarratorEnabled(next);
-                        void saveStoryMetadata({ narratorEnabled: next });
-                      }}
-                      className="mt-0.5 shrink-0"
+              <div className="min-w-0 space-y-2">
+                <div
+                  className="flex w-full min-w-0 items-center gap-2 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-sm"
+                  aria-label="Narrator"
+                >
+                  {narratorCharacter?.avatarUrl ? (
+                    <img
+                      src={narratorCharacter.avatarUrl}
+                      alt="Narrator"
+                      className="h-5 w-5 shrink-0 rounded-full object-cover"
                     />
-                    <span className="min-w-0 break-words text-muted-foreground">
-                      After each player/NPC exchange, recount what happened. When story arc stages
-                      have todo goals, the narrator tracks completion during play.
-                    </span>
-                  </label>
+                  ) : (
+                    <LuNotebookText size={16} className="shrink-0 text-amber-600" />
+                  )}
+                  <span className="font-medium">Narrator</span>
                 </div>
+                <label className="flex min-w-0 items-start gap-2 rounded border border-border/60 px-2 py-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={narratorEnabled}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setNarratorEnabled(next);
+                      void saveStoryMetadata({ narratorEnabled: next });
+                    }}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span className="min-w-0 break-words text-muted-foreground">
+                    After each player/NPC exchange, recount what happened. When story arc stages
+                    have todo goals, the narrator tracks completion during play.
+                  </span>
+                </label>
               </div>
 
               <div className="space-y-4 border-t border-border/40 pt-4">
@@ -1851,49 +1588,7 @@ export default function StoryPage() {
                 />
               </div>
 
-              <div className="flex flex-col gap-3 rounded border border-border/60 px-3 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
-                <span className="min-w-0">
-                  <span className="font-medium">Protagonist knows antagonist</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    When set to No, the protagonist treats the antagonist as unknown during play.
-                  </span>
-                </span>
-                <YesNoToggle
-                  value={playerKnowsNpc}
-                  onChange={(next) => {
-                    setPlayerKnowsNpc(next);
-                    void saveStoryMetadata({ playerKnowsNpc: next });
-                  }}
-                  ariaLabel="Does the protagonist know who the antagonist is?"
-                  className="shrink-0 self-start"
-                />
-              </div>
-
-              <label className="flex items-start gap-3 rounded border border-border/60 px-3 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={npcKnowsPlayer}
-                  onChange={(e) => {
-                    const next = e.target.checked;
-                    setNpcKnowsPlayer(next);
-                    void saveStoryMetadata({ npcKnowsPlayer: next });
-                  }}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="font-medium">NPC knows player</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    Leave unchecked for a first meeting. The NPC will not know the player&apos;s
-                    name or history until it comes up in chat.
-                  </span>
-                </span>
-              </label>
-
               <div className="pt-2 border-t border-border/40 space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  Story metadata is stored locally in your browser (IndexedDB). Deleting the story
-                  will remove its moments from this view, but not from Trash.
-                </div>
                 <button
                   type="button"
                   onClick={async () => {
@@ -2365,124 +2060,6 @@ export default function StoryPage() {
           </div>
         </DialogContent>
       </Dialog>
-      <Sheet open={assignNpcOpen} onOpenChange={setAssignNpcOpen}>
-        <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
-          <SheetHeader>
-            <div className="flex items-center justify-between">
-              <SheetTitle>Assign NPC</SheetTitle>
-              <SheetClose />
-            </div>
-            <SheetDescription className="text-sm">
-              Create a new character or select one to assign to this story.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 space-y-3 overflow-y-auto max-h-[60vh]">
-            <button
-              type="button"
-              onClick={createCharacter}
-              className="flex items-center gap-3 w-full p-3 rounded border"
-            >
-              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
-                +
-              </div>
-              <div className="text-sm">New character</div>
-            </button>
-            {assignableCharacters.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No characters yet.</div>
-            ) : (
-              assignableCharacters.map((character) => (
-                <button
-                  key={character.id}
-                  type="button"
-                  onClick={() => assignNpcToStory(character.id)}
-                  className={`flex items-center justify-between gap-3 w-full p-3 rounded hover:bg-accent text-left ${
-                    assignedNpcId === character.id ? "border border-primary/60" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
-                      {character.avatarUrl ? (
-                        <img
-                          src={character.avatarUrl}
-                          alt={character.name || "Character"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <GrUserFemale size={16} />
-                      )}
-                    </div>
-                    <div className="text-sm truncate">
-                      {character.name && character.name.trim() ? character.name : "Untitled"}
-                    </div>
-                  </div>
-                  {assignedNpcId === character.id ? (
-                    <span className="text-xs text-primary">Assigned</span>
-                  ) : null}
-                </button>
-              ))
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-      <Sheet open={assignPlayerOpen} onOpenChange={setAssignPlayerOpen}>
-        <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
-          <SheetHeader>
-            <div className="flex items-center justify-between">
-              <SheetTitle>Assign Player</SheetTitle>
-              <SheetClose />
-            </div>
-            <SheetDescription className="text-sm">
-              Select a character to assign as the player for this story.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 space-y-3 overflow-y-auto max-h-[60vh]">
-            <button
-              type="button"
-              onClick={createCharacter}
-              className="flex items-center gap-3 w-full p-3 rounded border"
-            >
-              <div className="w-10 h-10 bg-zinc-800 rounded flex items-center justify-center">
-                +
-              </div>
-              <div className="text-sm">New character</div>
-            </button>
-            {assignableCharacters.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No characters yet.</div>
-            ) : (
-              assignableCharacters.map((character) => (
-                <button
-                  key={character.id}
-                  type="button"
-                  onClick={() => assignPlayerToStory(character.id)}
-                  className={`flex items-center justify-between gap-3 w-full p-3 rounded hover:bg-accent text-left ${
-                    assignedPlayerId === character.id ? "border border-primary/60" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
-                      {character.avatarUrl ? (
-                        <img
-                          src={character.avatarUrl}
-                          alt={character.name || "Character"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <GrUserFemale size={16} />
-                      )}
-                    </div>
-                    <div className="text-sm truncate">
-                      {character.name && character.name.trim() ? character.name : "Untitled"}
-                    </div>
-                  </div>
-                  {assignedPlayerId === character.id ? (
-                    <span className="text-xs text-primary">Assigned</span>
-                  ) : null}
-                </button>
-              ))
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
