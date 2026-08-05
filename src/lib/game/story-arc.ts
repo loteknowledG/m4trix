@@ -22,6 +22,8 @@ export interface StoryArcStage {
   todos: StoryArcTodoItem[];
   exampleDialogTone: string;
   powerDynamic: string;
+  /** Characters present in this stage (excludes narrator). */
+  characterIds?: string[];
   objectives?: CheckpointObjective[];
   sceneObjects?: SceneObject[];
 }
@@ -185,6 +187,7 @@ export function addStoryArcStage(arc: StoryArc): StoryArc {
         todos: [],
         exampleDialogTone: '',
         powerDynamic: '',
+        characterIds: [],
       },
     ],
   };
@@ -251,6 +254,9 @@ export function normalizeStoryArcStage(
     exampleDialogTone:
       typeof raw.exampleDialogTone === "string" ? raw.exampleDialogTone : "",
     powerDynamic: typeof raw.powerDynamic === "string" ? raw.powerDynamic : "",
+    characterIds: Array.isArray(raw.characterIds)
+      ? raw.characterIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [],
     objectives: Array.isArray(raw.objectives) ? raw.objectives.filter(Boolean) : undefined,
     sceneObjects: Array.isArray(raw.sceneObjects) ? raw.sceneObjects.filter(Boolean) : undefined,
   };

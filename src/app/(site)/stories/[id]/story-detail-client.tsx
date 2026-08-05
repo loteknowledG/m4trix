@@ -2,7 +2,7 @@
 
 import { get, set } from "idb-keyval";
 import { HeaderBackButton } from "@/components/ui/header-back-button";
-import { ChevronLeft, ChevronRight, SquarePen, Trash2, Upload } from "@/components/icons";
+import { ChevronLeft, ChevronRight, Plus, SquarePen, Trash2, Upload, User } from "@/components/icons";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IoPlaySharp, IoStopSharp } from "react-icons/io5";
@@ -21,6 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import ErrorBoundary from "@/components/error-boundary";
 import MomentsGrid from "@/components/moments-grid";
 import { Marquee } from "@/components/ui/marquee";
@@ -61,15 +69,17 @@ import {
 import { logger } from "@/lib/logger";
 import { isMomentMediaFile, isEphemeralMomentSrc, materializeMomentSrc } from "@/lib/moments";
 import { cn } from "@/lib/utils";
+import { characterDetailHref } from "@/lib/character-routes";
 
 const MOMENT_REORDER_MIME = "application/x-m4trix-moment-reorder";
 
 type StageEditForm = {
   name: string;
+  characterIds: string[];
 };
 
 function createEmptyStageEditForm(): StageEditForm {
-  return { name: "" };
+  return { name: "", characterIds: [] };
 }
 
 type Moment = StoryMomentRecord;
@@ -156,6 +166,7 @@ export default function StoryPage() {
   const [stageAssignSelection, setStageAssignSelection] = useState("__new__");
   const [stageEditTarget, setStageEditTarget] = useState<number | null>(null);
   const [stageEditForm, setStageEditForm] = useState<StageEditForm>(createEmptyStageEditForm);
+  const [assignStageCharacterOpen, setAssignStageCharacterOpen] = useState(false);
   const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [storyDescription, setStoryDescription] = useState("");
@@ -169,6 +180,16 @@ export default function StoryPage() {
     () => characters.find((character) => character.id === NARRATOR_CHARACTER_ID) || null,
     [characters],
   );
+  const assignableCharacters = useMemo(
+    () => characters.filter((character) => character.id !== NARRATOR_CHARACTER_ID),
+    [characters],
+  );
+  const stageEditCharacters = useMemo(() => {
+    const byId = new Map(assignableCharacters.map((character) => [character.id, character]));
+    return stageEditForm.characterIds
+      .map((characterId) => byId.get(characterId))
+      .filter(Boolean) as Character[];
+  }, [assignableCharacters, stageEditForm.characterIds]);
 
   const selectedIds = useSelection((s) => s.selections["stories"] || []);
   const toggleSelect = useSelection((s) => s.toggle);
@@ -713,6 +734,7 @@ export default function StoryPage() {
       exampleDialogTone: "",
       powerDynamic: "",
       todos: [] as StoryArcTodoItem[],
+      characterIds: [] as string[],
     }));
   }, [storyArcStages]);
 
@@ -725,8 +747,24 @@ export default function StoryPage() {
     const stage = stagePickerOptions.find((item) => item.stageNumber === stageEditTarget);
     setStageEditForm({
       name: stage?.stageName ?? "",
+      characterIds: Array.isArray(stage?.characterIds) ? [...stage.characterIds] : [],
     });
   }, [stageEditTarget, stageOpen, stagePickerOptions]);
+
+  const addCharacterToStageEdit = useCallback((characterId: string) => {
+    setStageEditForm((prev) => {
+      if (prev.characterIds.includes(characterId)) return prev;
+      return { ...prev, characterIds: [...prev.characterIds, characterId] };
+    });
+    setAssignStageCharacterOpen(false);
+  }, []);
+
+  const removeCharacterFromStageEdit = useCallback((characterId: string) => {
+    setStageEditForm((prev) => ({
+      ...prev,
+      characterIds: prev.characterIds.filter((id) => id !== characterId),
+    }));
+  }, []);
 
   useEffect(() => {
     if (stageOpen && stageEditTarget == null) {
@@ -739,48 +777,81 @@ export default function StoryPage() {
     return createEmptyStoryArc(id ?? "", title);
   }, [id, storyArc, title]);
 
+  const persistStageEdit = useCallback(
+    async (form: StageEditForm, stageNumber: number, closeAfter = true) => {
+      const arc = buildStoryArcForEditing();
+      const existingStage = arc.stages.find((stage) => stage.stageNumber === stageNumber);
+      const nextStage: StoryArcStage = {
+        stageNumber,
+        stageName: form.name.trim(),
+        shortDescription: existingStage?.shortDescription ?? "",
+        emotionalState: existingStage?.emotionalState ?? [],
+        powerDynamic: existingStage?.powerDynamic ?? "",
+        keyTags: existingStage?.keyTags ?? [],
+        passTest: existingStage?.passTest ?? [],
+        exampleDialogTone: existingStage?.exampleDialogTone ?? "",
+        characterIds: form.characterIds,
+        objectives: existingStage?.objectives,
+        sceneObjects: existingStage?.sceneObjects,
+        todos: existingStage?.todos ?? [],
+      };
+
+      const stages = [...arc.stages];
+      const existingIndex = stages.findIndex((stage) => stage.stageNumber === stageNumber);
+      if (existingIndex >= 0) {
+        stages[existingIndex] = nextStage;
+      } else {
+        stages.push(nextStage);
+      }
+
+      const nextArc: StoryArc = {
+        ...arc,
+        stages: stages.sort((a, b) => a.stageNumber - b.stageNumber),
+      };
+      await saveStoryArcObject(nextArc);
+      await saveStoryArcCurrentStage(stageNumber);
+      if (closeAfter) {
+        setStageOpen(false);
+        setStageEditTarget(null);
+        setStageEditForm(createEmptyStageEditForm());
+      }
+    },
+    [buildStoryArcForEditing, saveStoryArcObject, saveStoryArcCurrentStage],
+  );
+
   const saveStageEdit = useCallback(async () => {
     if (stageEditTarget == null) return;
+    await persistStageEdit(stageEditForm, stageEditTarget);
+  }, [persistStageEdit, stageEditForm, stageEditTarget]);
 
-    const arc = buildStoryArcForEditing();
-    const existingStage = arc.stages.find((stage) => stage.stageNumber === stageEditTarget);
-    const nextStage: StoryArcStage = {
-      stageNumber: stageEditTarget,
-      stageName: stageEditForm.name.trim(),
-      shortDescription: existingStage?.shortDescription ?? "",
-      emotionalState: existingStage?.emotionalState ?? [],
-      powerDynamic: existingStage?.powerDynamic ?? "",
-      keyTags: existingStage?.keyTags ?? [],
-      passTest: existingStage?.passTest ?? [],
-      exampleDialogTone: existingStage?.exampleDialogTone ?? "",
-      objectives: existingStage?.objectives,
-      sceneObjects: existingStage?.sceneObjects,
-      todos: existingStage?.todos ?? [],
-    };
-
-    const stages = [...arc.stages];
-    const existingIndex = stages.findIndex((stage) => stage.stageNumber === stageEditTarget);
-    if (existingIndex >= 0) {
-      stages[existingIndex] = nextStage;
-    } else {
-      stages.push(nextStage);
+  const createCharacterForStage = useCallback(async () => {
+    if (stageEditTarget == null) return;
+    try {
+      const saved = (await get<Character[]>("PLAYGROUND_AGENTS")) || [];
+      const newCharacter: Character = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        name: "",
+      };
+      const next = [...saved, newCharacter];
+      await set("PLAYGROUND_AGENTS", next);
+      setCharacters(next);
+      try {
+        window.dispatchEvent(new Event("characters-updated"));
+      } catch (e) {
+        /* ignore */
+      }
+      const nextForm: StageEditForm = {
+        ...stageEditForm,
+        characterIds: [...stageEditForm.characterIds, newCharacter.id],
+      };
+      setStageEditForm(nextForm);
+      await persistStageEdit(nextForm, stageEditTarget);
+      setAssignStageCharacterOpen(false);
+      router.push(characterDetailHref(newCharacter.id));
+    } catch (e) {
+      logger.error("Failed to create character", e);
     }
-
-    const nextArc: StoryArc = {
-      ...arc,
-      stages: stages.sort((a, b) => a.stageNumber - b.stageNumber),
-    };
-    await saveStoryArcObject(nextArc);
-    await saveStoryArcCurrentStage(stageEditTarget);
-    setStageOpen(false);
-    setStageEditTarget(null);
-  }, [
-    buildStoryArcForEditing,
-    saveStoryArcObject,
-    saveStoryArcCurrentStage,
-    stageEditForm,
-    stageEditTarget,
-  ]);
+  }, [persistStageEdit, router, stageEditForm, stageEditTarget]);
 
   const stagedMomentIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1613,6 +1684,7 @@ export default function StoryPage() {
           if (!open) {
             setStageEditTarget(null);
             setStageEditForm(createEmptyStageEditForm());
+            setAssignStageCharacterOpen(false);
           }
         }}
       >
@@ -1625,7 +1697,7 @@ export default function StoryPage() {
             <DialogTitle>{stageEditTarget != null ? "Scene description" : "Add to stage"}</DialogTitle>
             <DialogDescription id="story-stage-description">
               {stageEditTarget != null
-                ? "Name this stage."
+                ? "Name this stage and assign characters."
                 : "Choose a stage for the selected moments."}
             </DialogDescription>
           </DialogHeader>
@@ -1662,6 +1734,55 @@ export default function StoryPage() {
                     placeholder={`Stage ${stageEditTarget}`}
                     className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs uppercase text-muted-foreground">Characters</div>
+                  {stageEditCharacters.length > 0 ? (
+                    <ul className="space-y-2">
+                      {stageEditCharacters.map((character) => (
+                        <li
+                          key={character.id}
+                          className="flex items-center justify-between gap-2 rounded border border-border/60 px-2 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            {character.avatarUrl ? (
+                              <img
+                                src={character.avatarUrl}
+                                alt=""
+                                className="h-8 w-8 shrink-0 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                                <User size={14} className="text-muted-foreground" />
+                              </div>
+                            )}
+                            <span className="truncate text-sm">
+                              {character.name?.trim() || "Untitled character"}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeCharacterFromStageEdit(character.id)}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`Remove ${character.name?.trim() || "character"} from stage`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No characters assigned yet.</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAssignStageCharacterOpen(true)}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:bg-accent/20"
+                  >
+                    <Plus size={16} />
+                    Add character
+                  </button>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">
@@ -1746,6 +1867,78 @@ export default function StoryPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={assignStageCharacterOpen} onOpenChange={setAssignStageCharacterOpen}>
+        <SheetContent side="center" onClick={(e) => e.stopPropagation()}>
+          <SheetHeader>
+            <div className="flex items-center justify-between">
+              <SheetTitle>Add character</SheetTitle>
+              <SheetClose />
+            </div>
+            <SheetDescription className="text-sm">
+              Create a new character or select one for this stage.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 max-h-[60vh] space-y-3 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                void createCharacterForStage();
+              }}
+              className="flex w-full items-center gap-3 rounded border p-3 hover:bg-accent/20"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded bg-zinc-800">
+                <Plus size={18} />
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-medium">Create new character</div>
+                <div className="text-xs text-muted-foreground">Opens the character editor</div>
+              </div>
+            </button>
+            {assignableCharacters.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No saved characters yet.</p>
+            ) : (
+              assignableCharacters.map((character) => {
+                const isAssigned = stageEditForm.characterIds.includes(character.id);
+                return (
+                  <button
+                    key={character.id}
+                    type="button"
+                    disabled={isAssigned}
+                    onClick={() => addCharacterToStageEdit(character.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded p-3 text-left hover:bg-accent/20",
+                      isAssigned ? "cursor-not-allowed opacity-50" : "",
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      {character.avatarUrl ? (
+                        <img
+                          src={character.avatarUrl}
+                          alt=""
+                          className="h-10 w-10 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+                          <User size={16} className="text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {character.name?.trim() || "Untitled character"}
+                        </div>
+                        {isAssigned ? (
+                          <div className="text-xs text-muted-foreground">Already on this stage</div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
