@@ -564,7 +564,7 @@ export default function CharacterDetailClient() {
             </div>
             <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
               <DescriptionEditor
-                className="character-description-editor lg:sticky lg:top-4"
+                className="character-description-editor lg:sticky lg:top-4 lg:self-start"
                 value={descriptionValue}
                 onChange={setDescriptionValue}
                 onBlur={() => {
@@ -573,21 +573,23 @@ export default function CharacterDetailClient() {
                 placeholder="No description"
                 dialogStyle={dialogStyle}
               />
-              <DialogLineStyleEditor
-                values={resolveCharacterDialogStyle(dialogStyle)}
-                onChange={patch => {
-                  setDialogStyle(prev => ({ ...prev, ...patch }));
-                }}
-              />
-              <CharacterTtsProfileEditor
-                value={ttsVoice}
-                previewText={
-                  nameValue.trim()
-                    ? `Hello. I'm ${nameValue.trim()}. This is how I will sound.`
-                    : undefined
-                }
-                onChange={setTtsVoice}
-              />
+              <div className="relative z-10 flex flex-col gap-4">
+                <DialogLineStyleEditor
+                  values={resolveCharacterDialogStyle(dialogStyle)}
+                  onChange={patch => {
+                    setDialogStyle(prev => ({ ...prev, ...patch }));
+                  }}
+                />
+                <CharacterTtsProfileEditor
+                  value={ttsVoice}
+                  previewText={
+                    nameValue.trim()
+                      ? `Hello. I'm ${nameValue.trim()}. This is how I will sound.`
+                      : undefined
+                  }
+                  onChange={setTtsVoice}
+                />
+              </div>
             </div>
           </section>
         </div>

@@ -63,7 +63,7 @@ export function CharacterTtsProfileEditor({
         <select
           value={settings.profileId}
           onChange={event => patch({ profileId: event.target.value as CharacterTtsVoice['profileId'] })}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          className="relative z-10 h-8 w-full cursor-pointer rounded-md border border-input bg-background px-2 text-xs"
           aria-label="Voice profile"
         >
           {CHARACTER_TTS_PROFILE_OPTIONS_ALPHABETICAL.map(option => (
