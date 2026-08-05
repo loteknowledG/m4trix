@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConnectionSheet } from '@/components/connection-sheet';
-import { speakWithCharacterTtsVoice } from '@/lib/tts';
+import { readVoiceEnabled, speakWithCharacterTtsVoice, writeVoiceEnabled } from '@/lib/tts';
 import type { CharacterTtsVoice } from '@/lib/character-tts-profile';
 import type { CharacterDialogStyle } from '@/lib/character-dialog-style';
 import { cn } from '@/lib/utils';
@@ -29,26 +29,6 @@ const CHAT_FOOTER_ICON_BOX: React.CSSProperties = {
   minHeight: '2.5rem',
   maxHeight: '2.5rem',
 };
-
-const VOICE_ENABLED_STORAGE_KEY = 'm4trix:voice-enabled';
-
-function readVoiceEnabled(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    const stored = window.localStorage.getItem(VOICE_ENABLED_STORAGE_KEY);
-    return stored === null ? true : stored === 'true';
-  } catch {
-    return true;
-  }
-}
-
-function writeVoiceEnabled(value: boolean): void {
-  try {
-    window.localStorage.setItem(VOICE_ENABLED_STORAGE_KEY, String(value));
-  } catch {
-    /* ignore storage failures */
-  }
-}
 
 const chatFooterIconLayoutClass =
   'inline-flex shrink-0 flex-none items-center justify-center gap-0 rounded-md p-0 [&_svg]:size-4 [&_svg]:shrink-0';

@@ -3,7 +3,7 @@
 import { del, get, keys, set } from "idb-keyval";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes } from "react-icons/fa";
+import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
@@ -43,7 +43,15 @@ import {
   probeLmstudioHealth,
 } from "@/lib/lmstudio";
 import { stripAssistantPromptLeak, stripHistoryMessageText, stripHtmlImages } from "@/lib/agents/providers";
-import { speakWithCachedStoryIntro, speakWithJennyVoice } from "@/lib/tts";
+import {
+  readVoiceEnabled,
+  speakWithCachedStoryIntro,
+  speakWithCharacterTtsVoice,
+  speakWithJennyVoice,
+  stopActiveTts,
+  unlockAudioPlayback,
+  writeVoiceEnabled,
+} from "@/lib/tts";
 import { formatDialogModeLabel, formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import { NARRATOR_CHARACTER_DIALOG_STYLE, normalizeCharacterDialogStyle, resolveCharacterDialogStyle, type CharacterDialogStyle } from "@/lib/character-dialog-style";
@@ -253,6 +261,8 @@ export default function GamePage() {
   const historyPushedForOpenRef = useRef(false);
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => readVoiceEnabled());
+  const lastSpokenBySlotRef = useRef<Partial<Record<CharacterId, string>>>({});
   const [title, setTitle] = useState("Game");
   const [storyMoments, setStoryMoments] = useState<any[]>([]);
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
@@ -1047,6 +1057,7 @@ export default function GamePage() {
     if (!spokenText) return;
 
     const trySpeak = async () => {
+      if (!voiceEnabled) return false;
       const ok = id ? await speakWithCachedStoryIntro(spokenText, id) : await speakWithJennyVoice(spokenText);
       if (ok) {
         hasSpokenOpeningRef.current = id;
@@ -1071,7 +1082,73 @@ export default function GamePage() {
       window.removeEventListener("pointerdown", onFirstInteraction);
       window.removeEventListener("keydown", onFirstInteraction);
     };
-  }, [id, loading, storyDescription, gameData?.description, title]);
+  }, [id, loading, storyDescription, gameData?.description, title, voiceEnabled]);
+
+  useEffect(() => {
+    if (!voiceEnabled) {
+      stopActiveTts();
+      return;
+    }
+
+    for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
+      const messages = conversations[slot] || [];
+      const latest = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.from === "agent" &&
+            message.id !== "story-opening" &&
+            !message.id.startsWith("pending-") &&
+            !/^Working on that request\b/i.test(message.text.trim()) &&
+            !/^Waiting for LM Studio\b/i.test(message.text.trim()),
+        );
+      if (!latest) continue;
+
+      if (lastSpokenBySlotRef.current[slot] === undefined) {
+        lastSpokenBySlotRef.current[slot] = latest.id;
+        continue;
+      }
+      if (lastSpokenBySlotRef.current[slot] === latest.id) continue;
+
+      lastSpokenBySlotRef.current[slot] = latest.id;
+      const voice =
+        slot === "protagonist"
+          ? assignedPlayer?.ttsVoice
+          : slot === "antagonist"
+            ? assignedNpc?.ttsVoice
+            : undefined;
+      void speakWithCharacterTtsVoice(latest.text, voice, undefined, { allowFallback: true });
+    }
+  }, [assignedNpc?.ttsVoice, assignedPlayer?.ttsVoice, conversations, voiceEnabled]);
+
+  const seedVoiceSpeechRefs = useCallback(() => {
+    for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
+      const messages = conversations[slot] || [];
+      const latest = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.from === "agent" &&
+            message.id !== "story-opening" &&
+            !message.id.startsWith("pending-"),
+        );
+      if (latest) {
+        lastSpokenBySlotRef.current[slot] = latest.id;
+      }
+    }
+  }, [conversations]);
+
+  const handleVoiceToggle = useCallback(() => {
+    const next = !voiceEnabled;
+    setVoiceEnabled(next);
+    writeVoiceEnabled(next);
+    unlockAudioPlayback();
+    if (next) {
+      seedVoiceSpeechRefs();
+    } else {
+      stopActiveTts();
+    }
+  }, [seedVoiceSpeechRefs, voiceEnabled]);
 
   const refreshStorySummary = async (options: {
     sceneSummary: string;
@@ -1704,6 +1781,7 @@ export default function GamePage() {
 
     const text = nextText.trim();
     if (!text) return;
+    if (!voiceEnabled) return;
 
     void speakWithJennyVoice(text);
   };
@@ -2294,6 +2372,33 @@ export default function GamePage() {
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
                   Memory
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Pressable
+                    type="button"
+                    onClick={() => {
+                      handleVoiceToggle();
+                      setFabOpen(false);
+                    }}
+                    className={`pushable-effect pointer-events-auto h-12 w-12 rounded-full shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white ${
+                      voiceEnabled
+                        ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                        : "bg-white text-zinc-900 hover:bg-zinc-100"
+                    }`}
+                    aria-label={voiceEnabled ? "Turn voice off" : "Turn voice on"}
+                  >
+                    {voiceEnabled ? (
+                      <FaVolumeUp className="h-5 w-5" />
+                    ) : (
+                      <FaVolumeMute className="h-5 w-5" />
+                    )}
+                  </Pressable>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={10} className="z-[60] border-0 bg-black/90 text-white">
+                  {voiceEnabled ? "Voice on" : "Voice off"}
                 </TooltipContent>
               </Tooltip>
 

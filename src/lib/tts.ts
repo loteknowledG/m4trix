@@ -25,6 +25,33 @@ export type TtsSpeakOptions = {
   allowFallback?: boolean;
 };
 
+export const VOICE_ENABLED_STORAGE_KEY = 'm4trix:voice-enabled';
+
+export function readVoiceEnabled(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const stored = window.localStorage.getItem(VOICE_ENABLED_STORAGE_KEY);
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export function writeVoiceEnabled(value: boolean): void {
+  try {
+    window.localStorage.setItem(VOICE_ENABLED_STORAGE_KEY, String(value));
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+export function stopActiveTts(): void {
+  stopActiveAudio();
+  if (typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined') {
+    window.speechSynthesis.cancel();
+  }
+}
+
 function sanitizeSpeechText(text: string) {
   return storyTextForPrompt(text);
 }
