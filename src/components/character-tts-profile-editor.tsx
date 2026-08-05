@@ -56,7 +56,7 @@ export function CharacterTtsProfileEditor({
   };
 
   return (
-    <div className="space-y-2 rounded-md border border-border/50 bg-muted/20 p-2">
+    <div className="space-y-2 overflow-visible rounded-md border border-border/50 bg-muted/20 p-2 pb-3">
       <div>
         <div className="text-[11px] font-medium text-muted-foreground">Voice profile</div>
         <p className="text-[10px] leading-relaxed text-muted-foreground/80">
@@ -84,7 +84,7 @@ export function CharacterTtsProfileEditor({
         <p className="text-[10px] leading-relaxed text-muted-foreground">{selectedProfile.description}</p>
       ) : null}
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 overflow-visible pb-1">
         <span className="text-[11px] text-muted-foreground">{characterTtsVoiceLabel(settings)}</span>
         <button
           type="button"
@@ -96,7 +96,7 @@ export function CharacterTtsProfileEditor({
             void handlePreview();
           }}
           className={cn(
-            'pushable-effect pushable-wall-neutral pointer-events-auto inline-flex h-7 shrink-0 items-center justify-center rounded-md border-2 border-border bg-background px-2.5 text-[11px] font-medium text-foreground shadow-sm transition-transform transition-shadow duration-150 ease-out',
+            'm4-paper-pushable-btn pointer-events-auto h-7 px-2.5 text-[11px] font-medium',
             'hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >

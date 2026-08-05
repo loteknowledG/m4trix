@@ -302,6 +302,31 @@ body,
     @apply bg-destructive text-destructive-foreground;
   }
 
+  /** Flat slab button — rest flush; hover lifts face with sidewall anchored below. */
+  .m4-paper-pushable-btn {
+    @apply inline-flex shrink-0 items-center justify-center rounded-md border-2 border-border bg-background text-foreground transition-[transform,box-shadow] duration-150 ease-out;
+    box-shadow: none;
+    transform: translate(0, 0);
+    --pushable-wall-depth: 0px;
+    --pushable-wall: color-mix(in srgb, hsl(var(--background)) 55%, hsl(var(--foreground)) 45%);
+  }
+  .m4-paper-pushable-btn:hover:not(:disabled) {
+    transform: translateY(-4px);
+    --pushable-wall-depth: 12px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+      0 var(--pushable-wall-depth) 0 var(--pushable-wall),
+      0 16px 24px rgba(0, 0, 0, 0.5);
+  }
+  .m4-paper-pushable-btn:active:not(:disabled) {
+    transform: translateY(4px);
+    --pushable-wall-depth: 2px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 var(--pushable-wall-depth) 0 var(--pushable-wall),
+      0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
   /** 40×40 circular actions with slab / pushable treatment (align with Button size="icon"). */
   .m4-circle-action {
     @apply pushable-effect inline-flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium;
