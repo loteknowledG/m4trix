@@ -10,6 +10,7 @@ import { ButtonGroup, ButtonGroupText } from '@/components/ui/button-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AvatarCropPortrait } from '@/components/avatar-crop-portrait';
 import { UserIcon } from '@/components/icons';
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -36,24 +37,11 @@ export const Message = ({
   >
     {avatarUrl && (
       <Avatar className="h-8 w-8 shrink-0">
-        <AvatarImage
-          src={avatarUrl}
-          style={
-            avatarCrop
-              ? {
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  // 32px avatar / 400px workspace = 0.08 for translation
-                  // Fine-tuned zoom multiplier + Y-offset correction
-                  transform: `translate(${avatarCrop.x * 0.08 + 3.2}px, ${
-                    avatarCrop.y * 0.08 + 10.88
-                  }px) scale(${avatarCrop.zoom * 1.38})`,
-                }
-              : undefined
-          }
-          className={cn(avatarCrop && 'max-w-none')}
-        />
+        {avatarCrop ? (
+          <AvatarCropPortrait src={avatarUrl} crop={avatarCrop} sizePx={32} className="h-full w-full" />
+        ) : (
+          <AvatarImage src={avatarUrl} />
+        )}
         <AvatarFallback>
           <UserIcon className="h-4 w-4" />
         </AvatarFallback>

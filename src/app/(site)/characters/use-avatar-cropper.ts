@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { cropAvatarFromImage } from './crop-image';
 
 export type AvatarCropTarget = string | 'user';
 
@@ -55,54 +54,32 @@ export function useAvatarCropper<TAgent extends AgentLike>({
     reader.readAsDataURL(file);
   }
 
-  async function applyGifImmediately() {
+  async function applyPortraitUpdate(avatarCrop?: { x: number; y: number; zoom: number }) {
     if (!croppingImage || !croppingTarget || isApplying) return;
 
     setIsApplying(true);
     try {
+      const updates = { avatarUrl: croppingImage, avatarCrop };
       if (croppingTarget === 'user') {
-        await updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: undefined });
+        await updatePrompterAgent(updates);
       } else {
-        await updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: undefined });
+        await updateAgent(croppingTarget, updates);
       }
       clearCropper();
     } catch (error) {
-      console.error('[avatar-crop] skip crop failed', error);
+      console.error('[avatar-crop] save failed', error);
       toast.error('Could not save avatar. Try again.');
     } finally {
       setIsApplying(false);
     }
   }
 
+  async function applyGifImmediately() {
+    await applyPortraitUpdate(undefined);
+  }
+
   async function handleApplyCrop() {
-    if (!croppingImage || !croppingTarget || isApplying) return;
-
-    setIsApplying(true);
-    try {
-      if (isGif) {
-        if (croppingTarget === 'user') {
-          await updatePrompterAgent({ avatarUrl: croppingImage, avatarCrop: { ...crop } });
-        } else {
-          await updateAgent(croppingTarget, { avatarUrl: croppingImage, avatarCrop: { ...crop } });
-        }
-        clearCropper();
-        return;
-      }
-
-      const croppedDataUrl = await cropAvatarFromImage(croppingImage, crop);
-      if (croppingTarget === 'user') {
-        await updatePrompterAgent({ avatarUrl: croppedDataUrl, avatarCrop: undefined });
-      } else {
-        await updateAgent(croppingTarget, { avatarUrl: croppedDataUrl, avatarCrop: undefined });
-      }
-
-      clearCropper();
-    } catch (error) {
-      console.error('[avatar-crop] apply failed', error);
-      toast.error('Could not apply avatar crop. Try a smaller image or Skip Crop for GIFs.');
-    } finally {
-      setIsApplying(false);
-    }
+    await applyPortraitUpdate({ ...crop });
   }
 
   return {

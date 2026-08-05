@@ -20,10 +20,7 @@ import {
   type CharacterTtsVoice,
 } from '@/lib/character-tts-profile';
 import { AvatarCropDialog } from '@/app/(site)/characters/avatar-crop-dialog';
-import {
-  avatarCropPortraitStyle,
-  avatarCropPortraitWorkspacePx,
-} from '@/app/(site)/characters/avatar-crop-math';
+import { AvatarCropPortrait } from '@/components/avatar-crop-portrait';
 import { useAvatarCropper } from '@/app/(site)/characters/use-avatar-cropper';
 import { HeaderBackButton } from '@/components/ui/header-back-button';
 import { Trash2, ImagePlus, User } from '@/components/icons';
@@ -49,8 +46,6 @@ type Agent = {
 
 const AGENTS_KEY = 'PLAYGROUND_AGENTS';
 const PORTRAIT_SIZE_PX = 160;
-const PORTRAIT_WORKSPACE_PX = avatarCropPortraitWorkspacePx(PORTRAIT_SIZE_PX);
-const PORTRAIT_WORKSPACE_OFFSET_PX = (PORTRAIT_SIZE_PX - PORTRAIT_WORKSPACE_PX) / 2;
 
 function normalizeDescription(value: string) {
   if (!value) return '';
@@ -144,9 +139,7 @@ export default function CharacterDetailClient() {
 
       try {
         await persistAgentRecord(next);
-        toast.success(
-          updates.avatarCrop ? 'Animated avatar crop saved.' : 'Avatar portrait updated.',
-        );
+        toast.success('Avatar portrait updated.');
       } catch (error) {
         agentRef.current = current;
         setAgent(current);
@@ -482,24 +475,13 @@ export default function CharacterDetailClient() {
             >
               {agent.avatarUrl ? (
                 agent.avatarCrop ? (
-                  <div
-                    className="absolute aspect-square"
-                    style={{
-                      width: PORTRAIT_WORKSPACE_PX,
-                      height: PORTRAIT_WORKSPACE_PX,
-                      left: PORTRAIT_WORKSPACE_OFFSET_PX,
-                      top: PORTRAIT_WORKSPACE_OFFSET_PX,
-                    }}
-                  >
-                    <img
-                      key={avatarDisplayKey}
-                      src={agent.avatarUrl}
-                      alt=""
-                      draggable={false}
-                      className="pointer-events-none h-full w-full max-w-none object-contain"
-                      style={avatarCropPortraitStyle(agent.avatarCrop, PORTRAIT_SIZE_PX)}
-                    />
-                  </div>
+                  <AvatarCropPortrait
+                    key={avatarDisplayKey}
+                    src={agent.avatarUrl}
+                    crop={agent.avatarCrop}
+                    sizePx={PORTRAIT_SIZE_PX}
+                    className="absolute inset-0"
+                  />
                 ) : (
                   <img
                     key={avatarDisplayKey}

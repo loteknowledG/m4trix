@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileUp, ImagePlus, User } from '@/components/icons';
+import { AvatarCropPortrait } from '@/components/avatar-crop-portrait';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { copyImageToClipboardFromSrc, getImageFileFromPasteEvent } from '@/lib/clipboard-image';
@@ -139,37 +140,16 @@ export const AgentCard: React.FC<AgentCardProps> = ({
               (fileDropHint || dragOverId === dropId) && 'border-cyan-400/80'
             )}
           >
-            <AvatarImage
-              src={avatarUrl}
-              style={
-                avatarCrop
-                  ? (() => {
-                      // Match the crop/export logic from the cropper (object-fit: contain, -20px offset)
-                      const UI_WORKSPACE = 400;
-                      const UI_CROP_CIRCLE = 320;
-                      const AVATAR_SIZE = 32; // px, matches .h-8.w-8
-                      // Assume the avatar image is a square crop of 256x256 exported
-                      const EXPORT_SIZE = 256;
-                      // The crop circle is mapped to the avatar size
-                      const scale = AVATAR_SIZE / UI_CROP_CIRCLE;
-                      // The offset in the cropper UI (including -20px vertical offset)
-                      // Flip the crop sign so UI drag direction matches final avatar result
-                      const offsetX = avatarCrop.x * scale;
-                      const offsetY = avatarCrop.y * scale;
-                      // Slightly increase displayed avatar zoom so the final avatar appears closer.
-                      const ZOOM_ADJUST = 1.38; // match message avatar scaling
-                      const zoom = avatarCrop.zoom * ZOOM_ADJUST;
-                      return {
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`,
-                      };
-                    })()
-                  : undefined
-              }
-              className={cn(avatarCrop && 'max-w-none')}
-            />
+            {avatarUrl && avatarCrop ? (
+              <AvatarCropPortrait
+                src={avatarUrl}
+                crop={avatarCrop}
+                sizePx={32}
+                className="h-full w-full"
+              />
+            ) : (
+              <AvatarImage src={avatarUrl} />
+            )}
             <AvatarFallback>
               <User className="h-4 w-4" />
             </AvatarFallback>

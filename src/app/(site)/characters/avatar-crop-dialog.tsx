@@ -16,7 +16,6 @@ import {
   AVATAR_CROP_WORKSPACE,
   avatarCropPreviewStyle,
   clampCropZoom,
-  renderAvatarCropWorkspace,
 } from '@/app/(site)/characters/avatar-crop-math';
 
 type Crop = { x: number; y: number; zoom: number };
@@ -49,10 +48,7 @@ export function AvatarCropDialog({
   setIsHoveringEdge,
 }: AvatarCropDialogProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
   const [workspacePx, setWorkspacePx] = useState(AVATAR_CROP_WORKSPACE);
-  const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -68,41 +64,6 @@ export function AvatarCropDialog({
     observer.observe(element);
     return () => observer.disconnect();
   }, [open, croppingImage]);
-
-  useEffect(() => {
-    if (!open || !croppingImage || isGif) {
-      imageRef.current = null;
-      setImageLoaded(false);
-      return;
-    }
-
-    let cancelled = false;
-    const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-      imageRef.current = img;
-      setImageLoaded(true);
-    };
-    img.src = croppingImage;
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, croppingImage, isGif]);
-
-  useEffect(() => {
-    if (isGif || !imageLoaded) return;
-    const canvas = canvasRef.current;
-    const img = imageRef.current;
-    if (!canvas || !img) return;
-
-    canvas.width = AVATAR_CROP_WORKSPACE;
-    canvas.height = AVATAR_CROP_WORKSPACE;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    renderAvatarCropWorkspace(ctx, img, img.naturalWidth, img.naturalHeight, crop);
-  }, [crop, imageLoaded, isGif]);
 
   const startPan = (e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-resize-handle]')) return;
@@ -209,23 +170,16 @@ export function AvatarCropDialog({
               setCrop(prev => ({ ...prev, zoom: newZoom }));
             }}
           >
-            {croppingImage &&
-              (isGif ? (
-                <img
-                  src={croppingImage}
-                  alt=""
-                  draggable={false}
-                  aria-label="Crop preview"
-                  className="pointer-events-none absolute inset-0 h-full w-full max-w-none object-contain"
-                  style={avatarCropPreviewStyle(crop, workspacePx)}
-                />
-              ) : (
-                <canvas
-                  ref={canvasRef}
-                  aria-label="Crop preview"
-                  className="pointer-events-none h-full w-full max-w-none"
-                />
-              ))}
+            {croppingImage ? (
+              <img
+                src={croppingImage}
+                alt=""
+                draggable={false}
+                aria-label="Crop preview"
+                className="pointer-events-none absolute inset-0 h-full w-full max-w-none object-contain"
+                style={avatarCropPreviewStyle(crop, workspacePx)}
+              />
+            ) : null}
 
             <div className="pointer-events-none absolute right-4 top-4 z-30">
               <div className="rounded border border-white/10 bg-black/60 px-2 py-1 font-mono text-[10px] text-white/80 shadow-xl backdrop-blur-md">
