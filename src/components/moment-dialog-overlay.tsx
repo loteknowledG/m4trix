@@ -25,7 +25,6 @@ export type MomentDialogLayoutPatch = Partial<{
 type MomentDialogOverlayLine = MomentDialogLine & {
   speakerName: string;
   isPlayerLine?: boolean;
-  forceVisible?: boolean;
 };
 
 type MomentDialogOverlayProps = {
@@ -202,10 +201,12 @@ function MomentDialogBubble({
       : line.isPlayerLine
         ? '#7dd3fc'
         : '#a3e635');
-  const showSpeakerLabel = !isNarratorDialogLine(line, speakerName);
   const hasDialogText = line.text.trim().length > 0;
+  const showSpeakerLabel = gameDialog
+    ? hasDialogText
+    : hasDialogText && !isNarratorDialogLine(line, speakerName);
   const showEditorGear = editable && gameDialog && !hasDialogText && onOpenEditor != null;
-  const showVisibleContent = !gameDialog || editable || hasDialogText || Boolean(line.forceVisible);
+  const showVisibleContent = !gameDialog || editable || hasDialogText;
 
   const onOpenEditorClick = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -282,7 +283,7 @@ function MomentDialogBubble({
                     textShadow: buildCueTextShadow(style.shadowColor),
                   }}
                 >
-                  {speakerName}
+                  {gameDialog ? `${speakerName}:` : speakerName}
                 </div>
               ) : null}
               <div

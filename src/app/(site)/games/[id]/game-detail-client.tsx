@@ -178,9 +178,9 @@ function buildGameOverlayLines(params: {
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
   draftInputs?: Record<GameCharacterSlot, string>;
-}): Array<MomentDialogLine & { speakerName: string; forceVisible?: boolean }> {
+}): Array<MomentDialogLine & { speakerName: string }> {
   const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
-  const lines: Array<MomentDialogLine & { speakerName: string; forceVisible?: boolean }> = [];
+  const lines: Array<MomentDialogLine & { speakerName: string }> = [];
 
   for (const slot of slots) {
     const latest = latestSpeakableMessage(params.conversations[slot] || []);
@@ -221,8 +221,7 @@ function buildGameOverlayLines(params: {
       shadowColor: style.shadowColor,
       speakerColor: style.speakerColor,
       textEffects: style.textEffects,
-      speakerName: `${speakerLabel} says`,
-      forceVisible: isActive || Boolean(latest) || Boolean(draftText),
+      speakerName: speakerLabel,
     });
   }
 
