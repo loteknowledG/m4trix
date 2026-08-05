@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes } from "react-icons/fa";
 import { MdExitToApp } from "react-icons/md";
-import { ArrowDownIcon, ChevronLeft, ChevronRight, Upload } from "@/components/icons";
+import { ArrowDownIcon, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { GameDialogComposer } from "@/components/game-dialog-composer";
@@ -726,28 +726,6 @@ export default function GamePage() {
 
     return chunks.join("\n\n");
   }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
-
-  const goToPreviousMoment = useCallback(() => {
-    console.log('[DEBUG] goToPreviousMoment clicked', { hasMoments, storyMomentsLength: storyMoments.length, currentMomentIndex });
-    if (!hasMoments || storyMoments.length === 0) return;
-    setMomentSelectionMode("manual");
-    setCurrentMomentIndex((current) => {
-      const len = storyMoments.length;
-      if (len === 0) return 0;
-      return (current - 1 + len) % len;
-    });
-  }, [hasMoments, storyMoments.length]);
-
-  const goToNextMoment = useCallback(() => {
-    console.log('[DEBUG] goToNextMoment clicked', { hasMoments, storyMomentsLength: storyMoments.length, currentMomentIndex });
-    if (!hasMoments || storyMoments.length === 0) return;
-    setMomentSelectionMode("manual");
-    setCurrentMomentIndex((current) => {
-      const len = storyMoments.length;
-      if (len === 0) return 0;
-      return (current + 1) % len;
-    });
-  }, [hasMoments, storyMoments.length]);
 
   // Moment selection and saved story state
   useEffect(() => {
@@ -2354,28 +2332,6 @@ export default function GamePage() {
                     className="h-full w-full rounded-none border-0 ring-0"
                   />
                 )}
-                <div className="pointer-events-none absolute inset-0 top-[42%] z-10 flex -mt-6 items-center justify-between px-2">
-                  <button
-                    type="button"
-                    onClick={() => { console.log('[DEBUG] INLINE onclick fired!'); goToNextMoment(); }}
-                    disabled={!hasMoments}
-                    aria-label="Next moment"
-                    title={`Next moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
-                    className="pointer-events-auto h-12 w-12 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { console.log('[DEBUG] INLINE prev onclick fired!'); goToPreviousMoment(); }}
-                    disabled={!hasMoments}
-                    aria-label="Previous moment"
-                    title={`Prev moment (hasMoments: ${hasMoments}, moments: ${storyMoments.length})`}
-                    className="pointer-events-auto h-12 w-12 rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
 
               <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4 pl-64">
