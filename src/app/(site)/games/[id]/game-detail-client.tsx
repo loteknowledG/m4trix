@@ -57,7 +57,9 @@ import { formatDialogModeLabel, formatGameDialogSpeakerHeader, formatPlayerMemor
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import { NARRATOR_CHARACTER_DIALOG_STYLE, normalizeCharacterDialogStyle, resolveCharacterDialogStyle, type CharacterDialogStyle } from "@/lib/character-dialog-style";
 import {
+  DEFAULT_CHARACTER_TTS_VOICE,
   normalizeCharacterTtsVoice,
+  type CharacterTtsVoice,
 } from "@/lib/character-tts-profile";
 import {
   buildCharacterReplyPrompt,
@@ -165,6 +167,30 @@ function dialogStyleForGameSlot(
     return resolveCharacterDialogStyle(assignedNpc?.dialogStyle);
   }
   return resolveCharacterDialogStyle(narratorDialogStyle);
+}
+
+function ttsVoiceForGameSlot(
+  slot: GameCharacterSlot,
+  assignedPlayer: GameCharacterContext,
+  assignedNpc: GameCharacterContext,
+): CharacterTtsVoice | undefined {
+  if (slot === "protagonist") {
+    return assignedPlayer?.ttsVoice ?? undefined;
+  }
+  if (slot === "antagonist") {
+    return assignedNpc?.ttsVoice ?? undefined;
+  }
+  return DEFAULT_CHARACTER_TTS_VOICE;
+}
+
+function isBlockedGameSpeechMessage(message: CustomChatMessage): boolean {
+  const text = message.text.trim();
+  if (!text || text === "…") return true;
+  if (message.id === "story-opening") return true;
+  if (message.id.startsWith("pending-")) return true;
+  if (/^Working on that request\b/i.test(text)) return true;
+  if (/^Waiting for LM Studio\b/i.test(text)) return true;
+  return false;
 }
 
 function buildGameOverlayLines(params: {
@@ -1090,18 +1116,8 @@ export default function GamePage() {
     }
 
     for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
-      const messages = conversations[slot] || [];
-      const latest = [...messages]
-        .reverse()
-        .find(
-          (message) =>
-            message.from === "agent" &&
-            message.id !== "story-opening" &&
-            !message.id.startsWith("pending-") &&
-            !/^Working on that request\b/i.test(message.text.trim()) &&
-            !/^Waiting for LM Studio\b/i.test(message.text.trim()),
-        );
-      if (!latest) continue;
+      const latest = latestSpeakableMessage(conversations[slot] || []);
+      if (!latest || isBlockedGameSpeechMessage(latest)) continue;
 
       if (lastSpokenBySlotRef.current[slot] === undefined) {
         lastSpokenBySlotRef.current[slot] = latest.id;
@@ -1111,27 +1127,15 @@ export default function GamePage() {
 
       lastSpokenBySlotRef.current[slot] = latest.id;
       const voice =
-        slot === "protagonist"
-          ? assignedPlayer?.ttsVoice
-          : slot === "antagonist"
-            ? assignedNpc?.ttsVoice
-            : undefined;
+        latest.ttsVoice ?? ttsVoiceForGameSlot(slot, assignedPlayer, assignedNpc);
       void speakWithCharacterTtsVoice(latest.text, voice, undefined, { allowFallback: true });
     }
-  }, [assignedNpc?.ttsVoice, assignedPlayer?.ttsVoice, conversations, voiceEnabled]);
+  }, [assignedNpc, assignedPlayer, conversations, voiceEnabled]);
 
   const seedVoiceSpeechRefs = useCallback(() => {
     for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
-      const messages = conversations[slot] || [];
-      const latest = [...messages]
-        .reverse()
-        .find(
-          (message) =>
-            message.from === "agent" &&
-            message.id !== "story-opening" &&
-            !message.id.startsWith("pending-"),
-        );
-      if (latest) {
+      const latest = latestSpeakableMessage(conversations[slot] || []);
+      if (latest && !isBlockedGameSpeechMessage(latest)) {
         lastSpokenBySlotRef.current[slot] = latest.id;
       }
     }
@@ -1271,6 +1275,7 @@ export default function GamePage() {
                 ...message,
                 id: `narrator-${Date.now()}`,
                 text: narratorText,
+                ttsVoice: DEFAULT_CHARACTER_TTS_VOICE,
               }
             : message,
         ),
@@ -1535,6 +1540,7 @@ export default function GamePage() {
       id: `user-${Date.now()}`,
       from: 'user',
       text: spokenText,
+      ttsVoice: ttsVoiceForGameSlot(characterId, assignedPlayer, assignedNpc),
     };
 
     setConversations((prev) => ({
@@ -1670,6 +1676,7 @@ export default function GamePage() {
                 id: `agent-${Date.now()}-${currentResponder}`,
                 from: 'agent',
                 text: reply,
+                ttsVoice: ttsVoiceForGameSlot(currentResponder, assignedPlayer, assignedNpc),
               };
 
               setConversations((prev) => ({
@@ -1775,14 +1782,21 @@ export default function GamePage() {
       ...conversations.antagonist,
       ...conversations.narrator,
     ].find((message) => message.id === messageId);
-    if (!editedMessage || editedMessage.from !== "agent") return;
+    if (!editedMessage) return;
     if (typeof window === "undefined") return;
 
     const text = nextText.trim();
     if (!text) return;
     if (!voiceEnabled) return;
 
-    void speakWithJennyVoice(text);
+    const slot: GameCharacterSlot = conversations.protagonist.some((message) => message.id === messageId)
+      ? "protagonist"
+      : conversations.antagonist.some((message) => message.id === messageId)
+        ? "antagonist"
+        : "narrator";
+    const voice =
+      editedMessage.ttsVoice ?? ttsVoiceForGameSlot(slot, assignedPlayer, assignedNpc);
+    void speakWithCharacterTtsVoice(text, voice, undefined, { allowFallback: true });
   };
 
   const handleSteerChatMessage = (messageId: string, nextText: string) => {
