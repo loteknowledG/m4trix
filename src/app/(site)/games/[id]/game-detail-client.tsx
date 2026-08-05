@@ -362,6 +362,7 @@ export default function GamePage() {
     defaultGameDialogLayouts(),
   );
   const [dialogComposerOpen, setDialogComposerOpen] = useState(false);
+  const [focusedGameDialogSlot, setFocusedGameDialogSlot] = useState<GameCharacterSlot | null>(null);
   const [narratorDialogStyle, setNarratorDialogStyle] = useState<CharacterDialogStyle>(() => ({
     ...NARRATOR_CHARACTER_DIALOG_STYLE,
   }));
@@ -463,9 +464,23 @@ export default function GamePage() {
     (open: boolean) => {
       setDialogComposerOpen(open);
       saveGameDialogComposerOpen(id, open);
+      if (open) {
+        setFocusedGameDialogSlot(activeCharacter);
+      } else {
+        setFocusedGameDialogSlot(null);
+      }
     },
-    [id],
+    [activeCharacter, id],
   );
+
+  const handleGameDialogFocusChange = useCallback((lineId: string | null) => {
+    const slot =
+      lineId === "protagonist" || lineId === "antagonist" || lineId === "narrator"
+        ? lineId
+        : null;
+    setFocusedGameDialogSlot(slot);
+    if (slot) setActiveCharacter(slot);
+  }, []);
 
   const handleGameDialogLayoutChange = useCallback(
     (lineId: string, patch: MomentDialogLayoutPatch) => {
@@ -2348,7 +2363,8 @@ export default function GamePage() {
 
               <MomentDialogOverlay
                 lines={gameOverlayLines}
-                editLineId={dialogComposerOpen ? activeCharacter : null}
+                editLineId={focusedGameDialogSlot}
+                onEditLineIdChange={handleGameDialogFocusChange}
                 stageRef={stageRef}
                 onLayoutChange={handleGameDialogLayoutChange}
                 gameDialog
@@ -2359,7 +2375,10 @@ export default function GamePage() {
                 onOpenChange={handleDialogComposerOpenChange}
                 tabs={gameDialogTabs}
                 activeCharacter={activeCharacter}
-                onActiveCharacterChange={setActiveCharacter}
+                onActiveCharacterChange={(slot) => {
+                  setActiveCharacter(slot);
+                  if (dialogComposerOpen) setFocusedGameDialogSlot(slot);
+                }}
                 input={chatInput}
                 onInputChange={setChatInput}
                 onSend={sendChatMessage}

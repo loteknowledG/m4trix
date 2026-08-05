@@ -33,6 +33,7 @@ type MomentDialogOverlayProps = {
   loopEpoch?: number;
   className?: string;
   editLineId?: string | null;
+  onEditLineIdChange?: (lineId: string | null) => void;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
   /** Game dialog bubbles: half the min height of a square at the same width; height grows with content. */
@@ -63,9 +64,11 @@ function MomentDialogBubble({
   speakerName,
   momentId,
   editable = false,
+  selectable = false,
   loopEpoch = 0,
   stageRef,
   onLayoutChange,
+  onSelect,
   gameDialog = false,
 }: {
   line: MomentDialogOverlayLine;
@@ -73,8 +76,10 @@ function MomentDialogBubble({
   momentId?: string | null;
   loopEpoch?: number;
   editable?: boolean;
+  selectable?: boolean;
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (patch: MomentDialogLayoutPatch) => void;
+  onSelect?: () => void;
   gameDialog?: boolean;
 }) {
   const style = resolveMomentDialogLineStyle(line);
@@ -194,6 +199,16 @@ function MomentDialogBubble({
         : '#a3e635');
   const showSpeakerLabel = !isNarratorDialogLine(line, speakerName);
 
+  const onSelectBubble = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!selectable || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onSelect?.();
+    },
+    [onSelect, selectable],
+  );
+
   return (
     <div
       className={cn(
@@ -202,8 +217,11 @@ function MomentDialogBubble({
           ? gameDialog
             ? 'pointer-events-none z-50'
             : 'pointer-events-auto z-50'
-          : 'pointer-events-none z-20',
+          : selectable
+            ? 'pointer-events-auto z-20'
+            : 'pointer-events-none z-20',
       )}
+      onPointerDown={selectable ? onSelectBubble : undefined}
       style={{
         left: `${layout.x * 100}%`,
         top: `${layout.y * 100}%`,
@@ -287,6 +305,7 @@ export function MomentDialogOverlay({
   loopEpoch = 0,
   className,
   editLineId = null,
+  onEditLineIdChange,
   stageRef: externalStageRef,
   onLayoutChange,
   gameDialog = false,
@@ -296,10 +315,22 @@ export function MomentDialogOverlay({
   const editMode = editLineId != null;
   const onLayoutChangeRef = useRef(onLayoutChange);
   onLayoutChangeRef.current = onLayoutChange;
+  const onEditLineIdChangeRef = useRef(onEditLineIdChange);
+  onEditLineIdChangeRef.current = onEditLineIdChange;
+  const gameDialogSelectable = gameDialog && onEditLineIdChange != null;
 
   const handleLayoutChange = useCallback((lineId: string, patch: MomentDialogLayoutPatch) => {
     onLayoutChangeRef.current?.(lineId, patch);
   }, []);
+
+  const handleBackdropPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!gameDialogSelectable || event.button !== 0) return;
+      if (event.target !== event.currentTarget) return;
+      onEditLineIdChangeRef.current?.(null);
+    },
+    [gameDialogSelectable],
+  );
 
   const activeLines = useMemo(() => {
     if (currentTime == null) return lines;
@@ -326,7 +357,12 @@ export function MomentDialogOverlay({
   return (
     <div
       ref={internalStageRef}
-      className={cn('pointer-events-none absolute inset-0 z-20 [container-type:size]', className)}
+      className={cn(
+        'absolute inset-0 z-20 [container-type:size]',
+        gameDialogSelectable ? 'pointer-events-auto' : 'pointer-events-none',
+        className,
+      )}
+      onPointerDown={gameDialogSelectable ? handleBackdropPointerDown : undefined}
     >
       {playbackLines.map((line) => (
         <MomentDialogBubble
@@ -336,6 +372,8 @@ export function MomentDialogOverlay({
           momentId={momentId}
           loopEpoch={loopEpoch}
           gameDialog={gameDialog}
+          selectable={gameDialogSelectable}
+          onSelect={() => onEditLineIdChangeRef.current?.(line.id)}
         />
       ))}
 
