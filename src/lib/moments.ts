@@ -1,4 +1,4 @@
-import { isMediaReference, resolveMediaSrc } from '@/lib/media-blob-store';
+import { isMediaReference, readMediaRefAsDataUrl } from '@/lib/media-blob-store';
 
 const MOMENT_VIDEO_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i;
 
@@ -103,10 +103,9 @@ export async function materializeMomentSrc(src: string | undefined | null): Prom
   if (original.startsWith('data:')) return original;
 
   if (isMediaReference(original)) {
-    const resolved = await resolveMediaSrc(original);
-    if (!resolved || resolved === original) return original;
-    if (resolved.startsWith('data:')) return resolved;
-    return materializeMomentSrc(resolved);
+    const dataUrl = await readMediaRefAsDataUrl(original);
+    if (dataUrl) return dataUrl;
+    return original;
   }
 
   if (!isEphemeralMomentSrc(original)) return original;

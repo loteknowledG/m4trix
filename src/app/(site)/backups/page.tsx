@@ -10,7 +10,10 @@ import {
 } from '@/components/ui/breadcrumb';
 import JsonTree from '@/components/ui/json-tree';
 import { logger } from '@/lib/logger';
-import { materializeMomentList } from '@/lib/moments';
+import {
+  externalizeMediaInValue,
+  materializeMediaInValueForBackup,
+} from '@/lib/media-blob-store';
 import {
   listAllStoryMomentAutoBackups,
   restoreStoryMomentAutoBackup,
@@ -75,37 +78,24 @@ function normalizeStoryBackupRecord(meta: any, stored: any): StoryBackupRecord {
 
 async function embedMomentSources(items: any[]): Promise<any[]> {
   if (!Array.isArray(items) || items.length === 0) return Array.isArray(items) ? items : [];
-  return materializeMomentList(items);
+  return materializeMediaInValueForBackup(items);
 }
 
 async function embedStorySources(stories: StoryBackupRecord[]): Promise<StoryBackupRecord[]> {
-  return Promise.all(
-    stories.map(async story => {
-      const items = await embedMomentSources(Array.isArray(story.items) ? story.items : []);
-      return {
-        ...story,
-        items,
-        count: story.count ?? items.length,
-      };
-    })
-  );
+  return materializeMediaInValueForBackup(stories);
 }
 
 async function embedPlaylistSources(
   playlists: PlaylistBackupRecord[],
 ): Promise<PlaylistBackupRecord[]> {
-  return Promise.all(
-    playlists.map(async playlist => {
-      const videos = await embedMomentSources(
-        Array.isArray(playlist.videos) ? playlist.videos : [],
-      );
-      return {
-        ...playlist,
-        videos,
-        count: playlist.count ?? videos.length,
-      };
-    }),
-  );
+  return materializeMediaInValueForBackup(playlists);
+}
+
+async function embedCharacterSources(characters: any[]): Promise<any[]> {
+  if (!Array.isArray(characters) || characters.length === 0) {
+    return Array.isArray(characters) ? characters : [];
+  }
+  return materializeMediaInValueForBackup(characters);
 }
 
 function normalizePlaylistBackupRecord(meta: any, stored: any): PlaylistBackupRecord {
@@ -243,27 +233,38 @@ export default function BackupsPage() {
         }),
       );
 
-      // Inline remote / proxied images so imported games keep their pictures.
-      setMessage('Embedding pictures into backup…');
-      const [trashEmbedded, storiesEmbedded, playlistsEmbedded] = await Promise.all([
-        embedMomentSources(Array.isArray(trash) ? trash : []),
-        embedStorySources(storiesWithItems),
-        embedPlaylistSources(playlistsWithVideos),
-      ]);
-
       const agents = (await get('PLAYGROUND_AGENTS')) || [];
       const prompter = await get('PLAYGROUND_PROMPTER');
       const story = await get('PLAYGROUND_STORY');
       const prompterMode = await get('PLAYGROUND_PROMPTER_MODE');
       const selectedAgentId = await get('PLAYGROUND_SELECTED_AGENT_ID');
 
+      // Inline media refs, blob URLs, and proxied images into portable data URLs.
+      setMessage('Embedding pictures into backup…');
+      const [
+        trashEmbedded,
+        storiesEmbedded,
+        playlistsEmbedded,
+        agentsEmbedded,
+        trashCharactersEmbedded,
+      ] = await Promise.all([
+        embedMomentSources(Array.isArray(trash) ? trash : []),
+        embedStorySources(storiesWithItems),
+        embedPlaylistSources(playlistsWithVideos),
+        embedCharacterSources(Array.isArray(agents) ? agents : []),
+        embedCharacterSources(Array.isArray(trashCharacters) ? trashCharacters : []),
+      ]);
+      const prompterEmbedded = prompter
+        ? await materializeMediaInValueForBackup(prompter)
+        : prompter;
+
       const payload = {
         trash: trashEmbedded,
         stories: storiesEmbedded,
         playlists: playlistsEmbedded,
-        agents,
-        trashCharacters,
-        prompter,
+        agents: agentsEmbedded,
+        trashCharacters: trashCharactersEmbedded,
+        prompter: prompterEmbedded,
         story,
         prompterMode,
         selectedAgentId,
@@ -272,7 +273,7 @@ export default function BackupsPage() {
         trashCount: Array.isArray(trashEmbedded) ? trashEmbedded.length : 0,
         storiesCount: Array.isArray(storiesEmbedded) ? storiesEmbedded.length : 0,
         playlistsCount: Array.isArray(playlistsEmbedded) ? playlistsEmbedded.length : 0,
-        charactersCount: Array.isArray(agents) ? agents.length : 0,
+        charactersCount: Array.isArray(agentsEmbedded) ? agentsEmbedded.length : 0,
       };
       // collect any per-item overlay text saved in indexedDB
       try {
@@ -519,7 +520,7 @@ export default function BackupsPage() {
         // restore trash items if present
         if (trashPayload && trashPayload.length > 0) {
           try {
-            await set('trash-moments', trashPayload);
+            await set('trash-moments', await externalizeMediaInValue(trashPayload));
           } catch (e) {
             logger.warn('Failed to restore trash items', e);
           }
@@ -549,7 +550,7 @@ export default function BackupsPage() {
         }
         if (trashCharactersPayload) {
           try {
-            await set('trash-characters', trashCharactersPayload);
+            await set('trash-characters', await externalizeMediaInValue(trashCharactersPayload));
           } catch (e) {
             logger.warn('Failed to restore trash characters', e);
           }
@@ -611,7 +612,7 @@ export default function BackupsPage() {
         // restore agents if present
         if (agentsPayload) {
           try {
-            await set('PLAYGROUND_AGENTS', agentsPayload);
+            await set('PLAYGROUND_AGENTS', await externalizeMediaInValue(agentsPayload));
             try {
               window.dispatchEvent(new CustomEvent('characters-updated', { detail: {} }));
             } catch (e) {
@@ -633,7 +634,7 @@ export default function BackupsPage() {
         // restore prompter/story mode data if present
         if (prompterPayload !== null) {
           try {
-            await set('PLAYGROUND_PROMPTER', prompterPayload);
+            await set('PLAYGROUND_PROMPTER', await externalizeMediaInValue(prompterPayload));
           } catch (e) {
             logger.warn('Failed to restore prompter data', e);
           }

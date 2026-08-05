@@ -85,6 +85,31 @@ async function readBlobRecord(id: string): Promise<BlobRecord | null> {
   });
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string' && result.startsWith('data:')) {
+        resolve(result);
+        return;
+      }
+      reject(new Error('Failed to encode media as data URL'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read media blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Read a durable media ref directly from the blob store as a data URL. */
+export async function readMediaRefAsDataUrl(ref: string): Promise<string | null> {
+  if (!isMediaReference(ref)) return null;
+  const record = await readBlobRecord(mediaIdFromRef(ref));
+  if (!record) return null;
+  const blob = new Blob([record.bytes], { type: record.mimeType || 'application/octet-stream' });
+  return blobToDataUrl(blob);
+}
+
 async function writeBlobRecord(record: BlobRecord): Promise<void> {
   const idb = await openMediaStore();
   return new Promise((resolve, reject) => {
@@ -224,6 +249,50 @@ export async function externalizeMediaString(src: string | undefined | null): Pr
 
 export async function hydrateMediaString(src: string | undefined | null): Promise<string> {
   return resolveMediaSrc(src);
+}
+
+function normalizeBackupFetchUrl(src: string): string {
+  if (src.startsWith('/api/img?u=')) return src;
+  if (/googleusercontent\.com\//.test(src)) {
+    let withSize = src;
+    if (!/[?&]w=\d+/.test(withSize) && !/=[ws]\d+/.test(withSize)) {
+      withSize = `${withSize}=s0`;
+    }
+    return `/api/img?u=${encodeURIComponent(withSize)}`;
+  }
+  return src;
+}
+
+/** Inline media refs and ephemeral URLs into portable data URLs for JSON backup export. */
+export async function materializeMediaSrcForBackup(src: string | undefined | null): Promise<string> {
+  if (!src) return '';
+  const original = String(src);
+  if (original.startsWith('data:')) return original;
+
+  if (original.startsWith(MEDIA_REF_PREFIX)) {
+    const dataUrl = await readMediaRefAsDataUrl(original);
+    return dataUrl ?? original;
+  }
+
+  const shouldFetch =
+    original.startsWith('blob:') ||
+    original.startsWith('/api/img?u=') ||
+    (/^https?:\/\//i.test(original) && /googleusercontent\.com\//.test(original));
+
+  if (!shouldFetch) return original;
+
+  try {
+    const res = await fetch(normalizeBackupFetchUrl(original));
+    if (!res.ok) return original;
+    return await blobToDataUrl(await res.blob());
+  } catch {
+    return original;
+  }
+}
+
+export async function materializeMediaInValueForBackup<T>(value: T): Promise<T> {
+  if (!isBrowser()) return value;
+  return mapMediaFields(value, materializeMediaSrcForBackup);
 }
 
 /** Map a hydrated blob URL back to its durable m4trix-media ref when possible. */
