@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import { MdExitToApp } from "react-icons/md";
-import { ArrowDownIcon, Upload } from "@/components/icons";
+import { ArrowDownIcon, ArrowLeft, ArrowRight, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { GameDialogComposer } from "@/components/game-dialog-composer";
@@ -1505,6 +1505,13 @@ export default function GamePage() {
     setNextMomentReady(false);
   }, [currentMomentIndex, nextMomentReady, storyMoments.length]);
 
+  const handleGoToPreviousMoment = useCallback(() => {
+    if (!nextMomentReady || currentMomentIndex <= 0) return;
+    setMomentSelectionMode("manual");
+    setCurrentMomentIndex(currentMomentIndex - 1);
+    setNextMomentReady(false);
+  }, [currentMomentIndex, nextMomentReady]);
+
   const handleNpcTurnComplete = useCallback(
     async (
       turn: ConnectedChatTurnResult,
@@ -2728,16 +2735,32 @@ export default function GamePage() {
               />
 
               {nextMomentReady ? (
-                <div className="pointer-events-none absolute inset-x-0 bottom-6 z-50 flex justify-center">
-                  <Pressable
-                    type="button"
-                    onClick={handleAdvanceToNextMoment}
-                    className="pointer-events-auto rounded-full border-2 border-lime-400/80 bg-black/70 px-8 py-3 text-sm font-semibold uppercase tracking-widest text-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.35)] backdrop-blur-sm transition hover:border-lime-300 hover:bg-black/85 hover:text-lime-200"
-                    aria-label="Go to next moment"
-                  >
-                    Next
-                  </Pressable>
-                </div>
+                <>
+                  {currentMomentIndex > 0 ? (
+                    <div className="pointer-events-none absolute left-1 top-[54%] z-50 -mt-6">
+                      <CarouselNavButton
+                        type="button"
+                        onClick={handleGoToPreviousMoment}
+                        className="pointer-events-auto"
+                        aria-label="Previous moment"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="sr-only">Previous moment</span>
+                      </CarouselNavButton>
+                    </div>
+                  ) : null}
+                  <div className="pointer-events-none absolute right-1 top-[54%] z-50 -mt-6">
+                    <CarouselNavButton
+                      type="button"
+                      onClick={handleAdvanceToNextMoment}
+                      className="pointer-events-auto"
+                      aria-label="Next moment"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      <span className="sr-only">Next moment</span>
+                    </CarouselNavButton>
+                  </div>
+                </>
               ) : null}
 
               <GameDialogComposer
