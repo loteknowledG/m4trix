@@ -140,6 +140,7 @@ export function AvatarCropDialog({
       }}
     >
       <DialogContent
+        aria-describedby={undefined}
         className={cn(
           'fixed left-0 top-0 z-50 flex h-[100dvh] w-screen max-h-none max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-0 bg-zinc-950 p-0 shadow-none',
           'gap-0 overflow-hidden data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0',

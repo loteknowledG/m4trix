@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
         error: text || response.statusText,
       };
       return new Response(JSON.stringify(payload), {
-        status: 502,
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
           : String(err),
     };
     return new Response(JSON.stringify(payload), {
-      status: 502,
+      status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   } finally {

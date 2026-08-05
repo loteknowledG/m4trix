@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_LMSTUDIO_URL,
+  getLmstudioBrowserReachabilityError,
   normalizeLmstudioUrl,
   probeLmstudioHealth,
   type LmstudioModelOption,
@@ -51,7 +52,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
   const [didExplicitlySelectModel, setDidExplicitlySelectModel] = useState(false);
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [activeProvider, setActiveProvider] = useState<Provider>('zen');
-  const [lmstudioUrl, setLmstudioUrl] = useState('');
+  const [lmstudioUrl, setLmstudioUrl] = useState(DEFAULT_LMSTUDIO_URL);
   const [lmstudioConnected, setLmstudioConnected] = useState(false);
   const [lmstudioHealth, setLmstudioHealth] = useState<{
     state: 'idle' | 'checking' | 'healthy' | 'error';
@@ -155,34 +156,6 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     const targetUrl = normalizeLmstudioUrl(urlOverride || lmstudioUrl || DEFAULT_LMSTUDIO_URL);
     setLmstudioHealth({ state: 'checking' });
 
-    try {
-      const res = await fetch(`/api/lmstudio/health?lmstudio_url=${encodeURIComponent(targetUrl)}`);
-      const payload = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: string; modelCount?: number; models?: string[] }
-        | null;
-
-      if (!res.ok || !payload?.ok) {
-        setLmstudioHealth({
-          state: 'error',
-          message: payload?.error || `Unable to reach ${targetUrl}`,
-        });
-        return;
-      }
-
-      const healthModels = Array.isArray(payload.models) ? payload.models : [];
-      if (healthModels.length) {
-        applyLmstudioModels(healthModels);
-      }
-
-      setLmstudioHealth({
-        state: 'healthy',
-        modelCount: payload.modelCount ?? healthModels.length,
-      });
-      return;
-    } catch {
-      // Packaged desktop builds can lack the local route; probe LM Studio directly.
-    }
-
     const result = await probeLmstudioHealth(targetUrl);
     if (!result.ok) {
       setLmstudioHealth({
@@ -257,6 +230,7 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
     else if (storedProvider) setActiveProvider(storedProvider);
     if (storedLmstudio === '1') setLmstudioConnected(true);
     if (storedLmstudioUrl) setLmstudioUrl(normalizeLmstudioUrl(storedLmstudioUrl));
+    else setLmstudioUrl(DEFAULT_LMSTUDIO_URL);
 
     if (storedZen) {
       setZenApiKey(storedZen);
@@ -373,85 +347,28 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setIsConnecting(true);
       try {
         const normalizedLmstudioUrl = normalizeLmstudioUrl(lmstudioUrl || DEFAULT_LMSTUDIO_URL);
-        const res = await fetch(
-          `/api/models?provider=lmstudio&lmstudio_url=${encodeURIComponent(
-            normalizedLmstudioUrl
-          )}`,
-          {
-            method: 'GET',
-          }
-        );
-        if (!res.ok) throw new Error('Failed to fetch LM Studio models');
-        const payload = (await res.json().catch(() => null)) as unknown;
-        let rawModels: unknown[] = [];
-        if (Array.isArray(payload)) {
-          rawModels = payload;
-        } else if (payload && typeof payload === 'object') {
-          const obj = payload as { data?: unknown[]; models?: unknown[]; object?: string };
-          if (Array.isArray(obj.data)) rawModels = obj.data;
-          else if (Array.isArray(obj.models)) rawModels = obj.models;
+        const blocked = getLmstudioBrowserReachabilityError(normalizedLmstudioUrl);
+        if (blocked) {
+          throw new Error(blocked);
         }
-
-        let options: Array<{ id: string; label: string; provider: Provider }> = rawModels.flatMap(
-          (m: unknown) => {
-            if (!m || typeof m !== 'object') return [];
-            const row = m as { id?: string; model_id?: string; name?: string; display_name?: string };
-            const id =
-              (typeof row.id === 'string' && row.id) ||
-              (typeof row.model_id === 'string' && row.model_id) ||
-              (typeof row.name === 'string' && row.name);
-            if (!id) return [];
-            const label =
-              (typeof row.display_name === 'string' && row.display_name) ||
-              (typeof row.name === 'string' && row.name) ||
-              id;
-            return [{ id, label, provider: 'lmstudio' as const }];
-          },
-        );
-
-        // Desktop builds previously baked an empty /api/models response; fall back to health.
-        if (!options.length) {
-          const healthRes = await fetch(
-            `/api/lmstudio/health?lmstudio_url=${encodeURIComponent(normalizedLmstudioUrl)}`
-          );
-          const health = (await healthRes.json().catch(() => null)) as
-            | { ok?: boolean; models?: string[] }
-            | null;
-          if (health?.ok && Array.isArray(health.models) && health.models.length) {
-            options = applyLmstudioModels(health.models);
-          }
-        } else {
-          setModelOptions((prev) => {
-            const filtered = prev.filter((p) => p.provider !== 'lmstudio');
-            return [...filtered, ...options.map((o) => ({ ...o, provider: 'lmstudio' as Provider }))];
-          });
-          if (options.length && (!model || activeProvider === provider)) {
-            setModel(options[0]!.id);
-          }
-        }
-
-        if (!options.length) {
-          const fallback = await fetchLmstudioModels(normalizedLmstudioUrl);
-          options = fallback.map((option) => ({ ...option, provider }));
-          if (options.length) {
-            mergeLmstudioModelOptions(fallback);
-            setModel((current) =>
-              current && options.some((option) => option.id === current) ? current : options[0]!.id,
-            );
-          }
-        }
+        const options = await fetchLmstudioModels(normalizedLmstudioUrl);
         if (!options.length) {
           throw new Error('LM Studio returned no models');
         }
+        mergeLmstudioModelOptions(options);
+        setModel((current) =>
+          current && options.some((option) => option.id === current) ? current : options[0]!.id,
+        );
         setLmstudioConnected(true);
 
         toast.success(
-          `LM Studio connected — ${options.length} model${options.length === 1 ? '' : 's'} loaded`
+          `LM Studio connected — ${options.length} model${options.length === 1 ? '' : 's'} loaded`,
         );
       } catch (e) {
-        setConnectionError('Failed to connect to LM Studio');
+        const message = e instanceof Error ? e.message : 'Failed to connect to LM Studio';
+        setConnectionError(message);
         setLmstudioConnected(false);
-        toast.error('Failed to connect to LM Studio');
+        toast.error(message);
       } finally {
         setIsConnecting(false);
       }
@@ -836,10 +753,15 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
                     placeholder={
                       activeProviderConnected
                         ? 'Connected'
-                        : 'LM Studio URL (use http://localhost:3000 for local HTTP servers)'
+                        : `LM Studio base URL (e.g. ${DEFAULT_LMSTUDIO_URL})`
                     }
                     value={lmstudioUrl}
                     onChange={e => setLmstudioUrl(e.target.value)}
+                    onBlur={() => {
+                      if (lmstudioUrl.trim()) {
+                        setLmstudioUrl(normalizeLmstudioUrl(lmstudioUrl));
+                      }
+                    }}
                   />
                   <div className="text-[11px] leading-4 text-muted-foreground">
                     {lmstudioHealth.state === 'checking' ? (
