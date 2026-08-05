@@ -20,6 +20,8 @@ type DescriptionEditorProps = {
   placeholder?: string;
   className?: string;
   dialogStyle?: CharacterDialogStyle;
+  /** Counts plain text (no HTML) against this cap. */
+  maxPlainTextLength?: number;
 };
 
 function stripDescriptionForDisplay(value: string): string {
@@ -37,8 +39,35 @@ export function DescriptionEditor({
   placeholder,
   className,
   dialogStyle,
+  maxPlainTextLength,
 }: DescriptionEditorProps) {
   const [isFocused, setIsFocused] = useState(false);
+
+  const plainTextLength = stripDescriptionForDisplay(value).length;
+  const charactersLeft =
+    maxPlainTextLength != null ? Math.max(0, maxPlainTextLength - plainTextLength) : null;
+  const nearLimit =
+    charactersLeft != null && charactersLeft <= 20;
+  const atLimit = charactersLeft === 0;
+
+  const handleChange = useCallback(
+    (next: string) => {
+      if (maxPlainTextLength == null) {
+        onChange(next);
+        return;
+      }
+      const nextLength = stripDescriptionForDisplay(next).length;
+      if (nextLength <= maxPlainTextLength || nextLength <= plainTextLength) {
+        onChange(next);
+      }
+    },
+    [maxPlainTextLength, onChange, plainTextLength],
+  );
+
+  const charCountLabel =
+    charactersLeft != null
+      ? `${charactersLeft} character${charactersLeft === 1 ? '' : 's'} left`
+      : null;
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -52,12 +81,12 @@ export function DescriptionEditor({
         const dataUrl = event.target?.result as string;
         const imgTag = `\n<img src="${dataUrl}" alt="Pasted image" style="max-width:100%;border-radius:8px;" />\n`;
         const newValue = value + imgTag;
-        onChange(newValue);
+        handleChange(newValue);
         toast.success('Image pasted into description.');
       };
       reader.readAsDataURL(file);
     },
-    [value, onChange],
+    [value, handleChange],
   );
 
   const resolvedStyle = resolveCharacterDialogStyle(dialogStyle);
@@ -87,23 +116,37 @@ export function DescriptionEditor({
 
   if (!dialogStyle) {
     return (
-      <textarea
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        onBlur={onBlur}
-        onPaste={handlePaste}
-        placeholder={placeholder}
-        aria-label="Description"
-        rows={6}
-        className={cn(
-          'w-full min-h-[120px] resize-y rounded border border-zinc-700 bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-zinc-500 focus:border-primary',
-          className,
-        )}
-      />
+      <div className="space-y-1">
+        <textarea
+          value={value}
+          onChange={event => handleChange(event.target.value)}
+          onBlur={onBlur}
+          onPaste={handlePaste}
+          placeholder={placeholder}
+          aria-label="Description"
+          rows={6}
+          className={cn(
+            'w-full min-h-[120px] resize-y rounded border border-zinc-700 bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-zinc-500 focus:border-primary',
+            className,
+          )}
+        />
+        {charCountLabel ? (
+          <div
+            className={cn(
+              'text-right text-[11px] tabular-nums',
+              atLimit ? 'text-red-400' : nearLimit ? 'text-amber-400' : 'text-muted-foreground',
+            )}
+            aria-live="polite"
+          >
+            {charCountLabel}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
   return (
+    <div className="space-y-1">
     <div
       className={cn(
         'relative w-full min-h-[220px] rounded border border-zinc-700 bg-black/20 transition-colors focus-within:border-primary',
@@ -129,7 +172,7 @@ export function DescriptionEditor({
       ) : null}
       <textarea
         value={value}
-        onChange={event => onChange(event.target.value)}
+        onChange={event => handleChange(event.target.value)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => {
           setIsFocused(false);
@@ -145,6 +188,18 @@ export function DescriptionEditor({
         )}
         style={textareaStyle}
       />
+    </div>
+    {charCountLabel ? (
+      <div
+        className={cn(
+          'text-right text-[11px] tabular-nums',
+          atLimit ? 'text-red-400' : nearLimit ? 'text-amber-400' : 'text-muted-foreground',
+        )}
+        aria-live="polite"
+      >
+        {charCountLabel}
+      </div>
+    ) : null}
     </div>
   );
 }

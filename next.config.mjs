@@ -35,9 +35,14 @@ const nextConfig = {
 					assetPrefix: isGithubActions && repositoryName ? `/${repositoryName}/` : "",
 				}
 			: {}),
-	// Treat as external in the Node.js server runtime
+	// Native / WS deps must stay external so Vercel can require() them at runtime.
 	serverExternalPackages: [
 		"google-photos-album-image-url-fetch",
+		"edge-tts-universal",
+		"ws",
+		"isomorphic-ws",
+		"bufferutil",
+		"utf-8-validate",
 	],
 	images: {
 		unoptimized: true,

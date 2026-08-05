@@ -1,6 +1,9 @@
 /** Twitter-style cap for protagonist player/AI lines. */
 export const PROTAGONIST_DIALOGUE_MAX_CHARS = 280;
 
+/** Plain-text cap for story description (logline / opening). */
+export const STORY_DESCRIPTION_MAX_CHARS = 280;
+
 /** Short narrator turn summary (1–2 sentences). */
 export const NARRATOR_SUMMARY_MAX_CHARS = 200;
 

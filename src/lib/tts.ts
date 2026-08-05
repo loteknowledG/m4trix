@@ -29,38 +29,52 @@ function sanitizeSpeechText(text: string) {
   return storyTextForPrompt(text);
 }
 
+let speakQueueTail: Promise<TtsSpeakResult> = Promise.resolve({ ok: true });
+let audioContext: AudioContext | null = null;
 let activeAudio: HTMLAudioElement | null = null;
 let activeObjectUrl: string | null = null;
-let speakQueueTail: Promise<TtsSpeakResult> = Promise.resolve({ ok: true });
-let audioPlaybackUnlocked = false;
+let primedAudio: HTMLAudioElement | null = null;
 
-/** Call synchronously from a click handler before awaiting TTS fetches. */
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const AudioContextCtor =
+    window.AudioContext ||
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  if (!audioContext) {
+    audioContext = new AudioContextCtor();
+  }
+  return audioContext;
+}
+
+/** Call synchronously from a click/pointer handler before awaiting TTS fetches. */
 export function unlockAudioPlayback(): void {
-  if (audioPlaybackUnlocked || typeof window === 'undefined') return;
+  if (typeof window === 'undefined') return;
+
+  const context = getAudioContext();
+  if (context) {
+    void context.resume();
+  }
+
   try {
-    const AudioContextCtor =
-      window.AudioContext ||
-      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (AudioContextCtor) {
-      const context = new AudioContextCtor();
-      void context.resume();
-      const buffer = context.createBuffer(1, 1, 22050);
-      const source = context.createBufferSource();
-      source.buffer = buffer;
-      source.connect(context.destination);
-      source.start(0);
+    if (!primedAudio) {
+      primedAudio = new Audio();
+      primedAudio.preload = 'auto';
     }
-    const probe = new Audio();
-    probe.muted = true;
-    probe.src =
-      'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjQ1LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV6urq6urq6urq6urq6urq6urq6urq6urq6v////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASDs90hvAAAAAAAAAAAAAAAAAAAA//MUZAAAAAGkAAAAAAAAA0gAAAAATEFN//MUZAMAAAGkAAAAAAAAA0gAAAAARTMu//MUZAYAAAGkAAAAAAAAA0gAAAAAOTku//MUZAkAAAGkAAAAAAAAA0gAAAAANVVV';
-    void probe.play().finally(() => {
-      probe.pause();
-      probe.removeAttribute('src');
+    primedAudio.volume = 0.001;
+    primedAudio.muted = false;
+    if (!primedAudio.src) {
+      primedAudio.src =
+        'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAA=';
+    }
+    void primedAudio.play().then(() => {
+      primedAudio?.pause();
+      if (primedAudio) primedAudio.currentTime = 0;
+    }).catch(() => {
+      /* ignore — best-effort unlock during user gesture */
     });
-    audioPlaybackUnlocked = true;
   } catch {
-    /* ignore — playback may still work without unlock */
+    /* ignore */
   }
 }
 
@@ -76,17 +90,56 @@ function stopActiveAudio() {
   }
 }
 
-async function speakAudioBase64(audioBase64: string, contentType = 'audio/mpeg') {
+async function speakAudioBase64WebAudio(audioBase64: string): Promise<boolean> {
+  const context = getAudioContext();
+  if (!context) return false;
+
+  try {
+    await context.resume();
+    const binary = atob(audioBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    const buffer = await context.decodeAudioData(bytes.buffer.slice(0));
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+
+    await new Promise<void>((resolve, reject) => {
+      source.onended = () => resolve();
+      try {
+        source.start(0);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error('Audio playback failed'));
+      }
+    });
+    return true;
+  } catch (error) {
+    console.warn('[tts] Web Audio playback failed', error);
+    return false;
+  }
+}
+
+async function speakAudioBase64(audioBase64: string, contentType = 'audio/mpeg'): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+
   try {
     const binary = atob(audioBase64);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
     stopActiveAudio();
     const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
     activeObjectUrl = url;
     const audio = new Audio(url);
     activeAudio = audio;
     audio.preload = 'auto';
+    audio.volume = 1;
+
     await new Promise<void>((resolve, reject) => {
       audio.onended = () => resolve();
       audio.onerror = () => reject(new Error('Audio playback failed'));
@@ -94,8 +147,8 @@ async function speakAudioBase64(audioBase64: string, contentType = 'audio/mpeg')
     });
     return true;
   } catch (error) {
-    console.warn('[tts] base64 audio playback failed', error);
-    return false;
+    console.warn('[tts] HTML Audio playback failed', error);
+    return speakAudioBase64WebAudio(audioBase64);
   } finally {
     if (activeAudio) {
       activeAudio = null;
@@ -135,7 +188,7 @@ async function speakViaVoiceProfile(text: string, profile: string): Promise<TtsS
     if (data.audioBase64 && (await speakAudioBase64(data.audioBase64, data.contentType || 'audio/mpeg'))) {
       return { ok: true };
     }
-    return { ok: false, error: 'TTS returned no playable audio.' };
+    return { ok: false, error: 'TTS returned no playable audio. Check browser sound permissions and try again.' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'TTS request failed';
     console.warn('[tts] profile speech failed', error);
