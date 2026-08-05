@@ -176,14 +176,13 @@ function buildGameOverlayLines(params: {
   narratorDialogStyle: CharacterDialogStyle;
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
-}): Array<MomentDialogLine & { speakerName: string }> {
+}): Array<MomentDialogLine & { speakerName: string; forceVisible?: boolean }> {
   const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
-  const lines: Array<MomentDialogLine & { speakerName: string }> = [];
+  const lines: Array<MomentDialogLine & { speakerName: string; forceVisible?: boolean }> = [];
 
   for (const slot of slots) {
     const latest = latestSpeakableMessage(params.conversations[slot] || []);
     const isActive = slot === params.activeCharacter;
-    if (!latest && !isActive) continue;
 
     const layout = params.layouts[slot];
     const style = dialogStyleForGameSlot(
@@ -220,6 +219,7 @@ function buildGameOverlayLines(params: {
       speakerColor: style.speakerColor,
       textEffects: style.textEffects,
       speakerName: `${speakerLabel} says`,
+      forceVisible: isActive || Boolean(latest),
     });
   }
 
@@ -2305,8 +2305,9 @@ export default function GamePage() {
 
             {/* Expanded buttons - appear when FAB is open - using carousel button style */}
             <div
+              hidden={!fabOpen}
               className={`fixed left-4 top-12 z-50 flex items-center gap-2 transition-all duration-300 ease-out ${
-                fabOpen ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 -translate-x-4 pointer-events-none'
+                fabOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'
               }`}
               style={{ left: '60px' }}
             >
@@ -2315,7 +2316,7 @@ export default function GamePage() {
                   <Pressable
                     type="button"
                     onClick={() => { setConfirmQuit(true); setFabOpen(false); }}
-                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
+                    className="pushable-effect h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
                     aria-label="Quit game"
                   >
                     <MdExitToApp className="h-5 w-5" />
@@ -2331,7 +2332,7 @@ export default function GamePage() {
                   <Pressable
                     type="button"
                     onClick={() => { setDebugOpen(true); setFabOpen(false); }}
-                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
+                    className="pushable-effect h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
                     aria-label="Debug"
                   >
                     <FaBug className="h-5 w-5" />
@@ -2347,7 +2348,7 @@ export default function GamePage() {
                   <Pressable
                     type="button"
                     onClick={() => { setTagDialogOpen(true); setFabOpen(false); }}
-                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="pushable-effect h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Tag current moment"
                     disabled={!currentMoment}
                   >
@@ -2364,7 +2365,7 @@ export default function GamePage() {
                   <Pressable
                     type="button"
                     onClick={() => { setMemoryDialogOpen(true); setFabOpen(false); }}
-                    className="pushable-effect pointer-events-auto h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
+                    className="pushable-effect h-12 w-12 rounded-full bg-white text-zinc-900 shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white"
                     aria-label="Show memory"
                   >
                     <FaBrain className="h-5 w-5" />
@@ -2383,7 +2384,7 @@ export default function GamePage() {
                       handleVoiceToggle();
                       setFabOpen(false);
                     }}
-                    className={`pushable-effect pointer-events-auto h-12 w-12 rounded-full shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white ${
+                    className={`pushable-effect h-12 w-12 rounded-full shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-white ${
                       voiceEnabled
                         ? "bg-emerald-600 text-white hover:bg-emerald-500"
                         : "bg-white text-zinc-900 hover:bg-zinc-100"
@@ -2424,7 +2425,7 @@ export default function GamePage() {
               ) : null}
 
               {/* Connection button - always at the end */}
-              <div className="pointer-events-auto">
+              <div>
                 <ConnectionSheet
                   triggerClassName="h-10 w-10 rounded-full bg-black text-white hover:bg-zinc-800 border-0"
                 />

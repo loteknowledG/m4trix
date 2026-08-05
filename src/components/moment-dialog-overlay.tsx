@@ -25,6 +25,7 @@ export type MomentDialogLayoutPatch = Partial<{
 type MomentDialogOverlayLine = MomentDialogLine & {
   speakerName: string;
   isPlayerLine?: boolean;
+  forceVisible?: boolean;
 };
 
 type MomentDialogOverlayProps = {
@@ -204,6 +205,7 @@ function MomentDialogBubble({
   const showSpeakerLabel = !isNarratorDialogLine(line, speakerName);
   const hasDialogText = line.text.trim().length > 0;
   const showEditorGear = editable && gameDialog && !hasDialogText && onOpenEditor != null;
+  const showVisibleContent = !gameDialog || editable || hasDialogText || Boolean(line.forceVisible);
 
   const onOpenEditorClick = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -237,6 +239,7 @@ function MomentDialogBubble({
             : 'pointer-events-none z-20',
       )}
       onPointerDown={selectable ? onSelectBubble : undefined}
+      onPointerDownCapture={selectable ? onSelectBubble : undefined}
       style={{
         left: `${layout.x * 100}%`,
         top: `${layout.y * 100}%`,
@@ -268,51 +271,60 @@ function MomentDialogBubble({
             Drag
           </div>
         ) : null}
-        <div className={cn(editable && 'px-0.5 pb-0.5')}>
-          {showSpeakerLabel ? (
-            <div
-              className="mb-1 text-[0.85em] font-bold uppercase tracking-wide"
-              style={{
-                color: speakerColor,
-                textShadow: buildCueTextShadow(style.shadowColor),
-              }}
-            >
-              {speakerName}
-            </div>
-          ) : null}
-          <div
-            className="whitespace-pre-wrap"
-            style={{
-              color: style.color,
-              textShadow: buildCueTextShadow(style.shadowColor),
-            }}
-          >
-            {showEditorGear ? (
-              <button
-                type="button"
-                onPointerDown={onOpenEditorClick}
-                onClick={onOpenEditorClick}
-                className="pointer-events-auto inline-flex items-center justify-center rounded-md p-1 opacity-80 transition-opacity hover:bg-black/20 hover:opacity-100"
-                aria-label="Open dialog editor"
-                title="Open dialog editor"
-                style={{ color: style.color }}
+        <div className={cn(editable && 'px-0.5 pb-0.5', gameDialog && selectable && 'h-full min-h-[inherit]')}>
+          {showVisibleContent ? (
+            <>
+              {showSpeakerLabel ? (
+                <div
+                  className="mb-1 text-[0.85em] font-bold uppercase tracking-wide"
+                  style={{
+                    color: speakerColor,
+                    textShadow: buildCueTextShadow(style.shadowColor),
+                  }}
+                >
+                  {speakerName}
+                </div>
+              ) : null}
+              <div
+                className="whitespace-pre-wrap"
+                style={{
+                  color: style.color,
+                  textShadow: buildCueTextShadow(style.shadowColor),
+                }}
               >
-                <FaCog className="h-[1.1em] w-[1.1em]" aria-hidden />
-              </button>
-            ) : (
-              <VideoCueTextEffectView
-                text={line.text}
-                effects={style.textEffects}
-                color={style.color}
-                shadowColor={style.shadowColor}
-                lineKey={line.id}
-                replayKey={
-                  momentId ? `${momentId}-${line.id}-${loopEpoch}` : `${line.id}-${loopEpoch}`
-                }
-                className="text-inherit"
-              />
-            )}
-          </div>
+                {showEditorGear ? (
+                  <button
+                    type="button"
+                    onPointerDown={onOpenEditorClick}
+                    onClick={onOpenEditorClick}
+                    className="pointer-events-auto inline-flex items-center justify-center rounded-md p-1 opacity-80 transition-opacity hover:bg-black/20 hover:opacity-100"
+                    aria-label="Open dialog editor"
+                    title="Open dialog editor"
+                    style={{ color: style.color }}
+                  >
+                    <FaCog className="h-[1.1em] w-[1.1em]" aria-hidden />
+                  </button>
+                ) : (
+                  <VideoCueTextEffectView
+                    text={line.text}
+                    effects={style.textEffects}
+                    color={style.color}
+                    shadowColor={style.shadowColor}
+                    lineKey={line.id}
+                    replayKey={
+                      momentId ? `${momentId}-${line.id}-${loopEpoch}` : `${line.id}-${loopEpoch}`
+                    }
+                    className="text-inherit"
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <div
+              className="h-full min-h-[inherit] w-full"
+              aria-label={`${speakerName} dialog`}
+            />
+          )}
         </div>
         {editable ? (
           <button
@@ -388,7 +400,7 @@ export function MomentDialogOverlay({
     <div
       ref={internalStageRef}
       className={cn(
-        'absolute inset-0 z-20 [container-type:size]',
+        'absolute inset-0 z-30 [container-type:size]',
         gameDialogSelectable ? 'pointer-events-auto' : 'pointer-events-none',
         className,
       )}
