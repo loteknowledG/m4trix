@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight } from '@/components/icons';
+import { ChevronRight } from '@/components/icons';
 import { DialogLineStyleEditor } from '@/components/dialog-line-style-editor';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,19 +66,7 @@ export function GameDialogComposer({
   }, [effectiveCharacter, open, disabled]);
 
   if (!open) {
-    return (
-      <Button
-        type="button"
-        variant="raised"
-        size="icon"
-        onClick={() => onOpenChange(true)}
-        className="m4-pushable-icon pointer-events-auto absolute top-1/2 right-0 z-[60] translate-x-1/2 -translate-y-1/2"
-        aria-label="Open dialog panel"
-        title="Open dialog panel"
-      >
-        <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
-      </Button>
-    );
+    return null;
   }
 
   return (
