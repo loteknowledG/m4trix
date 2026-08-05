@@ -24,6 +24,7 @@ export type MomentDialogLayoutPatch = Partial<{
 
 type MomentDialogOverlayLine = MomentDialogLine & {
   speakerName: string;
+  dialogHeader?: string;
   isPlayerLine?: boolean;
 };
 
@@ -64,6 +65,7 @@ function gameDialogFontSize(fontScale: number) {
 function MomentDialogBubble({
   line,
   speakerName,
+  dialogHeader,
   momentId,
   editable = false,
   selectable = false,
@@ -76,6 +78,7 @@ function MomentDialogBubble({
 }: {
   line: MomentDialogOverlayLine;
   speakerName: string;
+  dialogHeader?: string;
   momentId?: string | null;
   loopEpoch?: number;
   editable?: boolean;
@@ -283,7 +286,7 @@ function MomentDialogBubble({
                     textShadow: buildCueTextShadow(style.shadowColor),
                   }}
                 >
-                  {gameDialog ? `${speakerName}:` : speakerName}
+                  {gameDialog ? dialogHeader ?? speakerName : speakerName}
                 </div>
               ) : null}
               <div
@@ -412,6 +415,7 @@ export function MomentDialogOverlay({
           key={line.id}
           line={line}
           speakerName={line.speakerName}
+          dialogHeader={line.dialogHeader}
           momentId={momentId}
           loopEpoch={loopEpoch}
           gameDialog={gameDialog}
@@ -425,6 +429,7 @@ export function MomentDialogOverlay({
           key={editingLine.id}
           line={editingLine}
           speakerName={editingLine.speakerName}
+          dialogHeader={editingLine.dialogHeader}
           momentId={momentId}
           loopEpoch={loopEpoch}
           editable

@@ -53,7 +53,7 @@ import {
   unlockAudioPlayback,
   writeVoiceEnabled,
 } from "@/lib/tts";
-import { formatDialogModeLabel, formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
+import { formatDialogModeLabel, formatGameDialogSpeakerHeader, formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
 import type { OrchestratedMessage } from "@/lib/agents/types";
 import { NARRATOR_CHARACTER_DIALOG_STYLE, normalizeCharacterDialogStyle, resolveCharacterDialogStyle, type CharacterDialogStyle } from "@/lib/character-dialog-style";
 import {
@@ -178,14 +178,16 @@ function buildGameOverlayLines(params: {
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
   draftInputs?: Record<GameCharacterSlot, string>;
-}): Array<MomentDialogLine & { speakerName: string }> {
+}): Array<MomentDialogLine & { speakerName: string; dialogHeader?: string }> {
   const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
-  const lines: Array<MomentDialogLine & { speakerName: string }> = [];
+  const lines: Array<MomentDialogLine & { speakerName: string; dialogHeader?: string }> = [];
 
   for (const slot of slots) {
     const latest = latestSpeakableMessage(params.conversations[slot] || []);
     const isActive = slot === params.activeCharacter;
     const draftText = params.draftInputs?.[slot]?.trim() ?? "";
+    const label = params.labels[slot];
+    const mode = isActive ? params.playerMode : "say";
 
     const layout = params.layouts[slot];
     const style = dialogStyleForGameSlot(
@@ -194,17 +196,6 @@ function buildGameOverlayLines(params: {
       params.assignedNpc,
       params.narratorDialogStyle,
     );
-    const label = params.labels[slot];
-    const mode = isActive ? params.playerMode : "say";
-
-    let speakerLabel: string;
-    if (slot === "protagonist") {
-      speakerLabel = formatPlayerMemoryLabel({ name: label }, params.npcKnowsPlayer, mode);
-    } else if (slot === "antagonist") {
-      speakerLabel = formatDialogModeLabel(label, mode);
-    } else {
-      speakerLabel = label;
-    }
 
     lines.push({
       id: slot,
@@ -221,7 +212,11 @@ function buildGameOverlayLines(params: {
       shadowColor: style.shadowColor,
       speakerColor: style.speakerColor,
       textEffects: style.textEffects,
-      speakerName: speakerLabel,
+      speakerName: label,
+      dialogHeader: formatGameDialogSpeakerHeader(slot, label, {
+        playerMode: mode,
+        npcKnowsPlayer: params.npcKnowsPlayer,
+      }),
     });
   }
 
@@ -2536,6 +2531,8 @@ export default function GamePage() {
                 inputMaxLength={
                   activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
                 }
+                playerMode={playerMode}
+                npcKnowsPlayer={npcKnowsPlayerEffective}
               />
             </div>
             )}

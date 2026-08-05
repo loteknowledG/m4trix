@@ -27,3 +27,37 @@ export function formatPlayerMemoryLabel(
     npcKnowsPlayer === false ? "Stranger" : player?.name?.trim() || "Player";
   return formatDialogModeLabel(baseName, playerMode);
 }
+
+type GameDialogSpeakerSlot = "protagonist" | "antagonist" | "narrator";
+
+/** Single "says"/"does"/"thinks" label for game dialog headers. */
+export function formatGameDialogSpeakerLabel(
+  slot: GameDialogSpeakerSlot,
+  name: string,
+  options?: {
+    playerMode?: PlayerMode | string | null;
+    npcKnowsPlayer?: boolean;
+  },
+): string {
+  const mode = options?.playerMode;
+  const npcKnows = options?.npcKnowsPlayer ?? true;
+  const trimmedName = name.trim();
+  if (slot === "protagonist") {
+    return formatPlayerMemoryLabel({ name: trimmedName || "Protagonist" }, npcKnows, mode);
+  }
+  if (slot === "narrator") {
+    return formatDialogModeLabel(trimmedName || "Narrator", mode);
+  }
+  return formatDialogModeLabel(trimmedName || "Antagonist", mode);
+}
+
+export function formatGameDialogSpeakerHeader(
+  slot: GameDialogSpeakerSlot,
+  name: string,
+  options?: {
+    playerMode?: PlayerMode | string | null;
+    npcKnowsPlayer?: boolean;
+  },
+): string {
+  return `${formatGameDialogSpeakerLabel(slot, name, options)}:`;
+}

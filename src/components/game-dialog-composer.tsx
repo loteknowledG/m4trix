@@ -14,6 +14,7 @@ import {
   resolveVideoCueFontFamily,
 } from '@/lib/video-timed-cues';
 import { videoCueTextEffectsKey } from '@/lib/video-cue-text-effects';
+import { formatGameDialogSpeakerLabel, type PlayerMode } from '@/lib/player-mode';
 import { cn } from '@/lib/utils';
 
 type CharacterTab = {
@@ -36,6 +37,8 @@ type GameDialogComposerProps = {
   onDialogStyleChange: (patch: Partial<CharacterDialogStyle>) => void;
   disabled?: boolean;
   inputMaxLength?: number;
+  playerMode?: PlayerMode;
+  npcKnowsPlayer?: boolean;
 };
 
 export function GameDialogComposer({
@@ -52,6 +55,8 @@ export function GameDialogComposer({
   onDialogStyleChange,
   disabled = false,
   inputMaxLength,
+  playerMode = 'say',
+  npcKnowsPlayer = true,
 }: GameDialogComposerProps) {
   const effectiveCharacter = lockedCharacter ?? activeCharacter;
   const activeTab = tabs.find(tab => tab.id === effectiveCharacter) ?? tabs[0];
@@ -121,7 +126,12 @@ export function GameDialogComposer({
             {activeTab ? (
               <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3 ring-1 ring-primary/20">
                 <div>
-                  <div className="text-sm font-medium">{activeTab.label} says</div>
+                  <div className="text-sm font-medium">
+                    {formatGameDialogSpeakerLabel(activeTab.id, activeTab.label, {
+                      playerMode,
+                      npcKnowsPlayer,
+                    })}
+                  </div>
                   <div className="text-[11px] text-muted-foreground">
                     {activeTab.role === 'narrator'
                       ? 'Narrator'
