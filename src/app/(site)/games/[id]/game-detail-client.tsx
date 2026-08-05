@@ -1454,14 +1454,6 @@ export default function GamePage() {
         await new Promise((resolve) => setTimeout(resolve, 2500));
       }
 
-      setConversations((prev) => ({
-        ...prev,
-        protagonist: [],
-        antagonist: [],
-      }));
-      delete lastSpokenBySlotRef.current.protagonist;
-      delete lastSpokenBySlotRef.current.antagonist;
-
       sceneLinesRef.current = [];
       sceneSpokeRef.current = { protagonist: false, antagonist: false };
       sceneClosingRef.current = false;
@@ -1493,6 +1485,16 @@ export default function GamePage() {
     ],
   );
 
+  const clearCharacterSceneDialogs = useCallback(() => {
+    setConversations((prev) => ({
+      ...prev,
+      protagonist: [],
+      antagonist: [],
+    }));
+    delete lastSpokenBySlotRef.current.protagonist;
+    delete lastSpokenBySlotRef.current.antagonist;
+  }, []);
+
   const handleAdvanceToNextMoment = useCallback(() => {
     if (!nextMomentReady) return;
     const nextIndex = currentMomentIndex + 1;
@@ -1500,10 +1502,11 @@ export default function GamePage() {
       setNextMomentReady(false);
       return;
     }
+    clearCharacterSceneDialogs();
     setMomentSelectionMode("manual");
     setCurrentMomentIndex(nextIndex);
     setNextMomentReady(false);
-  }, [currentMomentIndex, nextMomentReady, storyMoments.length]);
+  }, [clearCharacterSceneDialogs, currentMomentIndex, nextMomentReady, storyMoments.length]);
 
   const handleGoToPreviousMoment = useCallback(() => {
     if (!nextMomentReady || currentMomentIndex <= 0) return;
