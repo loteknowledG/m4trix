@@ -310,6 +310,8 @@ type MomentRecord = {
   name?: string;
   dialogLines?: unknown;
   dialogScript?: unknown;
+  gameReplayScript?: unknown;
+  gameReplayLines?: unknown;
 };
 
 type MomentLocation = { kind: "story"; storyId: string; useItemsWrapper: boolean };
@@ -629,6 +631,12 @@ async function findMomentLocation(
   const readScript = (entry: unknown): MomentDialogScript | null => {
     if (!entry || typeof entry !== "object") return null;
     const record = entry as MomentRecord;
+    if (record.gameReplayScript) {
+      return normalizeMomentDialogScript(record.gameReplayScript);
+    }
+    if (record.gameReplayLines) {
+      return normalizeMomentDialogScript(record.gameReplayLines);
+    }
     if (record.dialogScript) {
       return normalizeMomentDialogScript(record.dialogScript);
     }

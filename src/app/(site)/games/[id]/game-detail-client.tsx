@@ -92,6 +92,7 @@ import {
   saveGameSummary,
   saveGameSession,
 } from "@/lib/game/game-storage";
+import { saveGameMomentReplay } from "@/lib/game/game-moment-replay";
 import {
   backfillNpcKnewPlayerOnHistory,
   historyRevealedPlayerIdentity,
@@ -1495,18 +1496,73 @@ export default function GamePage() {
     delete lastSpokenBySlotRef.current.antagonist;
   }, []);
 
-  const handleAdvanceToNextMoment = useCallback(() => {
+  const handleAdvanceToNextMoment = useCallback(async () => {
     if (!nextMomentReady) return;
     const nextIndex = currentMomentIndex + 1;
     if (nextIndex >= storyMoments.length) {
       setNextMomentReady(false);
       return;
     }
+
+    if (id && currentMoment?.id) {
+      try {
+        await saveGameMomentReplay({
+          storyId: id,
+          momentId: currentMoment.id,
+          momentIndex: currentMomentIndex,
+          stageNumber: resolvedArcStageNumber ?? 0,
+          conversations: {
+            protagonist: (conversations.protagonist || []).map((message) => ({
+              id: message.id,
+              from: message.from,
+              text: message.text,
+              playerMode: message.from === "user" ? playerMode : undefined,
+            })),
+            antagonist: (conversations.antagonist || []).map((message) => ({
+              id: message.id,
+              from: message.from,
+              text: message.text,
+            })),
+            narrator: (conversations.narrator || []).map((message) => ({
+              id: message.id,
+              from: message.from,
+              text: message.text,
+            })),
+          },
+          layouts: gameDialogLayouts,
+          labels: characterTabLabels,
+          assignedPlayer,
+          assignedNpc,
+          narratorDialogStyle,
+          defaultPlayerMode: playerMode,
+        });
+      } catch (err) {
+        console.warn("[game] failed to save moment replay dialog", err);
+      }
+    }
+
     clearCharacterSceneDialogs();
     setMomentSelectionMode("manual");
     setCurrentMomentIndex(nextIndex);
     setNextMomentReady(false);
-  }, [clearCharacterSceneDialogs, currentMomentIndex, nextMomentReady, storyMoments.length]);
+  }, [
+    assignedNpc,
+    assignedPlayer,
+    characterTabLabels,
+    clearCharacterSceneDialogs,
+    conversations.antagonist,
+    conversations.narrator,
+    conversations.protagonist,
+    currentMoment?.id,
+    currentMomentIndex,
+    gameDialogLayouts,
+    id,
+    narratorDialogStyle,
+    nextMomentReady,
+    playerMode,
+    resolvedArcStageNumber,
+    storyMoments.length,
+  ]);
 
   const handleGoToPreviousMoment = useCallback(() => {
     if (!nextMomentReady || currentMomentIndex <= 0) return;

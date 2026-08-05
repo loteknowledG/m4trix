@@ -7,6 +7,8 @@ export type StoryMomentRecord = {
   fingerprint?: string;
   dialogScript?: unknown;
   dialogLines?: unknown;
+  gameReplayScript?: unknown;
+  gameReplayLines?: unknown;
 };
 
 const UUID_RE =
