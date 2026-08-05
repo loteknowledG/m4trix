@@ -32,7 +32,7 @@ export type JustifiedMasonryProps<T extends JustifiedMasonryItem> = {
 type LayoutEntry<T> = {
   item: T;
   rowIndex: number;
-  widthPercent: number;
+  widthPx: number;
   heightPx: number;
 };
 
@@ -52,31 +52,29 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
   const [containerWidth, setContainerWidth] = useState(0);
   const [ratios, setRatios] = useState<Record<string, number>>({});
 
+  const itemIds = useMemo(() => items.map((item) => getId(item)).join("|"), [items, getId]);
+
   const syncContainerWidth = (nextWidth: number) => {
     if (nextWidth <= 0) return;
     setContainerWidth((prev) => (prev === nextWidth ? prev : nextWidth));
   };
 
-  // Measure once before paint so the first row can fill horizontally immediately.
-  useLayoutEffect(() => {
+  const measureContainerWidth = () => {
     const el = containerRef.current;
     if (!el) return;
     syncContainerWidth(el.getBoundingClientRect().width);
-  }, [items.length]);
+  };
+
+  // Measure before paint and whenever the item set changes.
+  useLayoutEffect(() => {
+    measureContainerWidth();
+  }, [itemIds]);
 
   // Track container width using ResizeObserver when available,
   // and fall back to a simple resize listener otherwise.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
-    const updateWidth = () => {
-      try {
-        syncContainerWidth(el.getBoundingClientRect().width);
-      } catch {
-        // ignore
-      }
-    };
 
     if (typeof ResizeObserver !== "undefined") {
       const obs = new ResizeObserver((entries) => {
@@ -85,18 +83,39 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
         }
       });
       obs.observe(el);
-      updateWidth();
+      measureContainerWidth();
       return () => {
         obs.disconnect();
       };
     }
 
-    updateWidth();
-    window.addEventListener("resize", updateWidth);
+    measureContainerWidth();
+    window.addEventListener("resize", measureContainerWidth);
     return () => {
-      window.removeEventListener("resize", updateWidth);
+      window.removeEventListener("resize", measureContainerWidth);
     };
-  }, []);
+  }, [itemIds]);
+
+  // Below-the-fold stage grids can mount before width is stable; remeasure when visible.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            measureContainerWidth();
+          }
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+    };
+  }, [itemIds]);
 
   // Compute layout rows based on aspect ratios
   const layout = useMemo<LayoutEntry<T>[]>(() => {
@@ -123,9 +142,8 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
       }
 
       currentRow.forEach(({ item, ar }) => {
-        const w = ar * rowHeight; // px
-        const widthPercent = (w / containerWidth) * 100;
-        result.push({ item, rowIndex, widthPercent, heightPx: rowHeight });
+        const widthPx = ar * rowHeight;
+        result.push({ item, rowIndex, widthPx, heightPx: rowHeight });
       });
 
       rowIndex += 1;
@@ -183,10 +201,13 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
       {rows.length === 0 && items.length === 0 && (
         <div className="w-full" />
       )}
+      {rows.length === 0 && items.length > 0 ? (
+        <div className="w-full min-h-[220px]" aria-hidden="true" />
+      ) : null}
       {rows.map((row, rowIdx) => (
         <div
           key={rowIdx}
-          className="flex"
+          className="flex w-full flex-nowrap"
           style={{
             columnGap: itemSpacing,
             marginBottom: rowIdx === rows.length - 1 ? 0 : rowSpacing,
@@ -194,7 +215,7 @@ export function JustifiedMasonry<T extends JustifiedMasonryItem>(props: Justifie
         >
           {row.map((entry) => {
             const style: React.CSSProperties = {
-              width: `${entry.widthPercent}%`,
+              width: entry.widthPx,
               height: entry.heightPx,
               flex: "0 0 auto",
             };

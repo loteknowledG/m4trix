@@ -1447,7 +1447,7 @@ export default function StoryPage() {
                         );
                         const palette = getStagePalette(stageNumber - 1);
                         return (
-                          <div key={`stage-${stageNumber}`} className="mb-8">
+                          <div key={`stage-${stageNumber}`} className="mb-8 w-full min-w-0">
                             <div
                               className="mb-3 flex items-start justify-between gap-3 rounded border px-3 py-2"
                               style={{ backgroundColor: palette.bg, color: palette.fg }}
