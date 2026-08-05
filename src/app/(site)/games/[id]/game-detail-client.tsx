@@ -349,6 +349,7 @@ export default function GamePage() {
     antagonist: false,
   });
   const sceneClosingRef = useRef(false);
+  const [nextMomentReady, setNextMomentReady] = useState(false);
 
   // Multi-character conversations
   type CharacterId = 'protagonist' | 'antagonist' | 'narrator';
@@ -835,6 +836,7 @@ export default function GamePage() {
     sceneLinesRef.current = [];
     sceneSpokeRef.current = { protagonist: false, antagonist: false };
     sceneClosingRef.current = false;
+    setNextMomentReady(false);
   }, [currentMomentIndex]);
 
   useEffect(() => {
@@ -1462,8 +1464,7 @@ export default function GamePage() {
       sceneClosingRef.current = false;
 
       if (canAdvance) {
-        setMomentSelectionMode("manual");
-        setCurrentMomentIndex(nextIndex);
+        setNextMomentReady(true);
       }
     },
     [
@@ -1488,6 +1489,18 @@ export default function GamePage() {
       voiceEnabled,
     ],
   );
+
+  const handleAdvanceToNextMoment = useCallback(() => {
+    if (!nextMomentReady) return;
+    const nextIndex = currentMomentIndex + 1;
+    if (nextIndex >= storyMoments.length) {
+      setNextMomentReady(false);
+      return;
+    }
+    setMomentSelectionMode("manual");
+    setCurrentMomentIndex(nextIndex);
+    setNextMomentReady(false);
+  }, [currentMomentIndex, nextMomentReady, storyMoments.length]);
 
   const handleNpcTurnComplete = useCallback(
     async (
@@ -2703,11 +2716,24 @@ export default function GamePage() {
                 input={chatInput}
                 onInputChange={setChatInput}
                 onSend={sendChatMessage}
-                disabled={chatInFlight}
+                disabled={chatInFlight || nextMomentReady}
                 inputMaxLength={
                   activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
                 }
               />
+
+              {nextMomentReady ? (
+                <div className="pointer-events-none absolute inset-x-0 bottom-6 z-50 flex justify-center">
+                  <Pressable
+                    type="button"
+                    onClick={handleAdvanceToNextMoment}
+                    className="pointer-events-auto rounded-full border-2 border-lime-400/80 bg-black/70 px-8 py-3 text-sm font-semibold uppercase tracking-widest text-lime-300 shadow-[0_0_24px_rgba(163,230,53,0.35)] backdrop-blur-sm transition hover:border-lime-300 hover:bg-black/85 hover:text-lime-200"
+                    aria-label="Go to next moment"
+                  >
+                    Next
+                  </Pressable>
+                </div>
+              ) : null}
 
               <GameDialogComposer
                 open={dialogComposerOpen}
