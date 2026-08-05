@@ -231,15 +231,14 @@ function buildGameOverlayLines(params: {
   narratorDialogStyle: CharacterDialogStyle;
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
-  draftInputs?: Record<GameCharacterSlot, string>;
-}): Array<MomentDialogLine & { speakerName: string; dialogHeader?: string }> {
+}): Array<MomentDialogLine & { speakerName: string; dialogHeader?: string; contentKey?: string }> {
   const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
-  const lines: Array<MomentDialogLine & { speakerName: string; dialogHeader?: string }> = [];
+  const lines: Array<MomentDialogLine & { speakerName: string; dialogHeader?: string; contentKey?: string }> = [];
 
   for (const slot of slots) {
     const latest = latestSpeakableMessage(params.conversations[slot] || []);
     const isActive = slot === params.activeCharacter;
-    const draftText = params.draftInputs?.[slot]?.trim() ?? "";
+    const text = latest?.text?.trim() ?? "";
     const label = params.labels[slot];
     const mode = isActive ? params.playerMode : "say";
 
@@ -255,7 +254,7 @@ function buildGameOverlayLines(params: {
       id: slot,
       characterId: slot,
       speaker: label,
-      text: draftText || latest?.text || "",
+      text,
       playerMode: mode,
       x: layout.x,
       y: layout.y,
@@ -267,10 +266,13 @@ function buildGameOverlayLines(params: {
       speakerColor: style.speakerColor,
       textEffects: style.textEffects,
       speakerName: label,
-      dialogHeader: formatGameDialogSpeakerHeader(slot, label, {
-        playerMode: mode,
-        npcKnowsPlayer: params.npcKnowsPlayer,
-      }),
+      contentKey: latest?.id,
+      dialogHeader: text
+        ? formatGameDialogSpeakerHeader(slot, label, {
+            playerMode: mode,
+            npcKnowsPlayer: params.npcKnowsPlayer,
+          })
+        : undefined,
     });
   }
 
@@ -597,13 +599,11 @@ export default function GamePage() {
         narratorDialogStyle,
         npcKnowsPlayer: npcKnowsPlayerEffective,
         playerMode,
-        draftInputs: characterInputs,
       }),
     [
       activeCharacter,
       assignedNpc,
       assignedPlayer,
-      characterInputs,
       characterTabLabels,
       conversations,
       gameDialogLayouts,
@@ -2317,17 +2317,6 @@ export default function GamePage() {
               ? storyObj.description
               : "";
         setStoryDescription(resolvedDescription);
-        // Initialize narrator conversation with the story description
-        if (resolvedDescription && resolvedDescription.trim()) {
-          setConversations((prev) => ({
-            ...prev,
-            narrator: [{
-              id: `narrator-initial-${Date.now()}`,
-              from: 'agent',
-              text: resolvedDescription.trim(),
-            }],
-          }));
-        }
         const resolvedArc = storyMeta?.storyArc ?? storyObj?.storyArc ?? null;
         setStoryArc(resolvedArc);
 

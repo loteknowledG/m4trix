@@ -25,6 +25,7 @@ export type MomentDialogLayoutPatch = Partial<{
 type MomentDialogOverlayLine = MomentDialogLine & {
   speakerName: string;
   dialogHeader?: string;
+  contentKey?: string;
   isPlayerLine?: boolean;
 };
 
@@ -316,7 +317,9 @@ function MomentDialogBubble({
                     shadowColor={style.shadowColor}
                     lineKey={line.id}
                     replayKey={
-                      momentId ? `${momentId}-${line.id}-${loopEpoch}` : `${line.id}-${loopEpoch}`
+                      momentId
+                        ? `${momentId}-${line.id}-${line.contentKey ?? ""}-${loopEpoch}`
+                        : `${line.id}-${line.contentKey ?? ""}-${loopEpoch}`
                     }
                     className="text-inherit"
                   />
