@@ -107,8 +107,11 @@ export async function GET(req: NextRequest) {
           `[API/models] LM Studio fetch failed: ${resp.status} ${resp.statusText} - ${text}`
         );
         return new Response(
-          `Failed to fetch LM Studio models: ${resp.status} ${resp.statusText} - ${text}`,
-          { status: 500 }
+          JSON.stringify({
+            error: `Failed to fetch LM Studio models: ${resp.status} ${resp.statusText}${text ? ` - ${text}` : ''}`,
+            models: [],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
       const data = await resp.json();
@@ -122,9 +125,10 @@ export async function GET(req: NextRequest) {
       });
     } catch (err) {
       console.error('[API/models] Exception fetching LM Studio models:', err);
+      const message = err instanceof Error ? err.message : String(err);
       return new Response(
-        'Failed to fetch LM Studio models: ' + (err instanceof Error ? err.message : String(err)),
-        { status: 500 }
+        JSON.stringify({ error: `Failed to fetch LM Studio models: ${message}`, models: [] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     }
   }
