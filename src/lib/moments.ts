@@ -1,3 +1,5 @@
+import { isMediaReference, resolveMediaSrc } from '@/lib/media-blob-store';
+
 const MOMENT_VIDEO_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i;
 
 export function isMomentVideoSrc(src: string | undefined | null): boolean {
@@ -99,6 +101,14 @@ export async function materializeMomentSrc(src: string | undefined | null): Prom
   if (!src) return '';
   const original = String(src);
   if (original.startsWith('data:')) return original;
+
+  if (isMediaReference(original)) {
+    const resolved = await resolveMediaSrc(original);
+    if (!resolved || resolved === original) return original;
+    if (resolved.startsWith('data:')) return resolved;
+    return materializeMomentSrc(resolved);
+  }
+
   if (!isEphemeralMomentSrc(original)) return original;
 
   try {
@@ -123,7 +133,8 @@ export async function materializeMomentRecord<T extends { src?: string; url?: st
   moment: T
 ): Promise<T> {
   const candidate = moment?.src || moment?.url;
-  if (!candidate || !isEphemeralMomentSrc(candidate)) return moment;
+  if (!candidate) return moment;
+  if (!isEphemeralMomentSrc(candidate) && !isMediaReference(candidate)) return moment;
   const dataUrl = await materializeMomentSrc(candidate);
   if (!dataUrl || dataUrl === candidate) return moment;
   return { ...moment, src: dataUrl };

@@ -95,6 +95,28 @@ async function writeBlobRecord(record: BlobRecord): Promise<void> {
   });
 }
 
+export async function clearAllMediaBlobs(): Promise<void> {
+  if (!isBrowser()) return;
+
+  for (const url of resolvedUrlCache.values()) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
+  }
+  resolvedUrlCache.clear();
+  reverseUrlCache.clear();
+
+  const idb = await openMediaStore();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = idb.transaction(STORE_NAME, 'readwrite');
+    transaction.objectStore(STORE_NAME).clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
 export async function deleteMediaRef(ref: string): Promise<void> {
   if (!isMediaReference(ref)) return;
   const id = mediaIdFromRef(ref);

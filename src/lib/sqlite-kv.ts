@@ -1,8 +1,10 @@
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 
 import {
+  clearAllMediaBlobs,
   externalizeMediaInValue,
   hydrateMediaInValue,
+  MEDIA_MIGRATION_KEY,
 } from './media-blob-store';
 import {
   createRelationalSchema,
@@ -12,6 +14,7 @@ import {
   relationalGet,
   relationalMigrationDone,
   relationalSet,
+  RELATIONAL_MIGRATION_KEY,
 } from './sqlite-relational';
 import { migrateMediaInDatabase, mediaMigrationDone } from './sqlite-media-migrate';
 
@@ -262,6 +265,25 @@ export async function kvClear(): Promise<void> {
     await persistDatabase();
   });
   await writeQueue;
+}
+
+/** Wipe app data for import/reset while keeping SQLite migration markers. */
+export async function kvClearAll(): Promise<void> {
+  await ensureReady();
+  writeQueue = writeQueue.then(async () => {
+    database!.run('DELETE FROM story_moments');
+    database!.run('DELETE FROM stories');
+    database!.run('DELETE FROM playlist_videos');
+    database!.run('DELETE FROM playlists');
+    database!.run('DELETE FROM kv WHERE key NOT IN (?, ?, ?)', [
+      MIGRATION_KEY,
+      RELATIONAL_MIGRATION_KEY,
+      MEDIA_MIGRATION_KEY,
+    ]);
+    await persistDatabase();
+  });
+  await writeQueue;
+  await clearAllMediaBlobs();
 }
 
 export async function kvReady(): Promise<void> {

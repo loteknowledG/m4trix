@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { get, set, clear, keys } from 'idb-keyval';
+import { get, set, keys } from 'idb-keyval';
+import { clearAll } from '@/lib/kv-store-shim';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -25,6 +26,15 @@ type StoryBackupRecord = {
   playerId?: string;
   titleMomentId?: string;
   items: any[];
+};
+
+type PlaylistBackupRecord = {
+  id: string;
+  title?: string;
+  count?: number;
+  coverSrc?: string;
+  titleVideoId?: string;
+  videos: any[];
 };
 
 function removeSrc(obj: any): any {
@@ -79,6 +89,32 @@ async function embedStorySources(stories: StoryBackupRecord[]): Promise<StoryBac
       };
     })
   );
+}
+
+async function embedPlaylistSources(
+  playlists: PlaylistBackupRecord[],
+): Promise<PlaylistBackupRecord[]> {
+  return Promise.all(
+    playlists.map(async playlist => {
+      const videos = await embedMomentSources(
+        Array.isArray(playlist.videos) ? playlist.videos : [],
+      );
+      return {
+        ...playlist,
+        videos,
+        count: playlist.count ?? videos.length,
+      };
+    }),
+  );
+}
+
+function normalizePlaylistBackupRecord(meta: any, stored: any): PlaylistBackupRecord {
+  const videos = Array.isArray(stored) ? stored : [];
+  return {
+    ...meta,
+    videos,
+    count: meta?.count ?? videos.length,
+  };
 }
 
 function sanitizeAndStringify(raw: string): string {
@@ -186,11 +222,33 @@ export default function BackupsPage() {
         })
       );
 
+      const savedPlaylists =
+        (await get<
+          Array<{
+            id: string;
+            title?: string;
+            count?: number;
+            coverSrc?: string;
+            titleVideoId?: string;
+          }>
+        >('playlists')) || [];
+      const playlistsWithVideos = await Promise.all(
+        savedPlaylists.map(async playlist => {
+          try {
+            const storedVideos = (await get<any>(`playlist:${playlist.id}`)) || [];
+            return normalizePlaylistBackupRecord(playlist, storedVideos);
+          } catch (e) {
+            return normalizePlaylistBackupRecord(playlist, []);
+          }
+        }),
+      );
+
       // Inline remote / proxied images so imported games keep their pictures.
       setMessage('Embedding pictures into backup…');
-      const [trashEmbedded, storiesEmbedded] = await Promise.all([
+      const [trashEmbedded, storiesEmbedded, playlistsEmbedded] = await Promise.all([
         embedMomentSources(Array.isArray(trash) ? trash : []),
         embedStorySources(storiesWithItems),
+        embedPlaylistSources(playlistsWithVideos),
       ]);
 
       const agents = (await get('PLAYGROUND_AGENTS')) || [];
@@ -202,6 +260,7 @@ export default function BackupsPage() {
       const payload = {
         trash: trashEmbedded,
         stories: storiesEmbedded,
+        playlists: playlistsEmbedded,
         agents,
         trashCharacters,
         prompter,
@@ -212,6 +271,7 @@ export default function BackupsPage() {
       previewSummary = {
         trashCount: Array.isArray(trashEmbedded) ? trashEmbedded.length : 0,
         storiesCount: Array.isArray(storiesEmbedded) ? storiesEmbedded.length : 0,
+        playlistsCount: Array.isArray(playlistsEmbedded) ? playlistsEmbedded.length : 0,
         charactersCount: Array.isArray(agents) ? agents.length : 0,
       };
       // collect any per-item overlay text saved in indexedDB
@@ -351,6 +411,7 @@ export default function BackupsPage() {
         // Handle old flat-array backups (legacy moment lists)
         let legacyMoments: any[] = [];
         let storiesPayload: any[] | null = null;
+        let playlistsPayload: any[] | null = null;
         let trashPayload: any[] | null = null;
         let trashCharactersPayload: any[] | null = null;
         let overlaysPayload: any | null = null;
@@ -390,6 +451,16 @@ export default function BackupsPage() {
               };
             });
           }
+          if (Array.isArray(parsed.playlists)) {
+            playlistsPayload = parsed.playlists.map((playlist: any) => {
+              const videos = Array.isArray(playlist.videos) ? playlist.videos : [];
+              return {
+                ...playlist,
+                videos,
+                count: playlist.count ?? videos.length,
+              };
+            });
+          }
           // legacy or structured trash payloads
           const trashArr = parsed.trash ?? parsed['trash-moments'] ?? parsed['trash-gifs'] ?? null;
           if (Array.isArray(trashArr)) {
@@ -425,11 +496,12 @@ export default function BackupsPage() {
           trashPayload = [...(trashPayload ?? []), ...legacyMoments];
         }
         if (storiesPayload) storiesPayload = await embedStorySources(storiesPayload);
-        // wipe existing IndexedDB data before restoring
+        if (playlistsPayload) playlistsPayload = await embedPlaylistSources(playlistsPayload);
+        // wipe existing local data before restoring
         try {
-          await clear();
+          await clearAll();
         } catch (e) {
-          logger.warn('Failed to clear IndexedDB before import', e);
+          logger.warn('Failed to clear local database before import', e);
         }
         // immediately clear story metadata/submenus and notify UI so submenus disappear before restore
         try {
@@ -510,6 +582,32 @@ export default function BackupsPage() {
           }
         }
 
+        if (playlistsPayload) {
+          const meta = playlistsPayload.map(({ videos, ...playlist }) => ({
+            ...playlist,
+            count: playlist.count ?? (Array.isArray(videos) ? videos.length : 0),
+          }));
+          try {
+            await set('playlists', meta);
+            await Promise.all(
+              playlistsPayload.map(async playlist => {
+                try {
+                  await set(`playlist:${playlist.id}`, playlist.videos ?? []);
+                } catch (e) {
+                  logger.warn('Failed to write playlist videos', playlist.id, e);
+                }
+              }),
+            );
+            try {
+              window.dispatchEvent(new CustomEvent('playlists-updated', { detail: {} }));
+            } catch (e) {
+              /* ignore in non-browser */
+            }
+          } catch (e) {
+            logger.warn('Failed to restore playlists metadata', e);
+          }
+        }
+
         // restore agents if present
         if (agentsPayload) {
           try {
@@ -556,6 +654,7 @@ export default function BackupsPage() {
         }
         const importedMomentCount = Array.isArray(trashPayload) ? trashPayload.length : 0;
         const importedStoryCount = Array.isArray(storiesPayload) ? storiesPayload.length : 0;
+        const importedPlaylistCount = Array.isArray(playlistsPayload) ? playlistsPayload.length : 0;
         // notify app to refresh any in-memory state
         try {
           window.dispatchEvent(
@@ -567,7 +666,8 @@ export default function BackupsPage() {
         // don't reload the page; dispatch events above already notify the app
         setMessage(
           `Imported ${importedStoryCount} stories` +
-            (importedMomentCount > 0 ? ` and ${importedMomentCount} trashed moments` : ''),
+            (importedPlaylistCount > 0 ? `, ${importedPlaylistCount} playlists` : '') +
+            (importedMomentCount > 0 ? `, and ${importedMomentCount} trashed moments` : ''),
         );
         setTimeout(() => setMessage(null), 4000);
       } catch (err) {
@@ -608,9 +708,9 @@ export default function BackupsPage() {
 
     setMessage('Resetting local database…');
     try {
-      await clear();
+      await clearAll();
     } catch (e) {
-      logger.warn('Failed to clear IndexedDB', e);
+      logger.warn('Failed to clear local database', e);
     }
 
     try {
@@ -647,10 +747,9 @@ export default function BackupsPage() {
       <h2 className="text-2xl font-bold mb-4">Backups</h2>
       <p className="mb-4">Export or import your moment backups as JSON.</p>
       <p className="mb-4 text-sm text-slate-500">
-        m4trix stores moments, stories, and characters in your browser IndexedDB (
-        <code className="text-xs">keyval-db</code>
-        ). If that database is corrupted, export a backup if possible, reset below, then import your
-        JSON backup.
+        m4trix stores moments, stories, playlists, and characters in your browser using a local
+        SQLite database and media blob store. If data looks corrupted, export a backup if you can,
+        reset below, then import your JSON backup.
       </p>
       {/* buttons in two-column grid align with preview panels below */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -747,8 +846,8 @@ export default function BackupsPage() {
       <div className="mt-8 rounded border border-amber-500/40 bg-amber-500/5 p-4">
         <h3 className="font-semibold mb-2">Repair corrupted local data</h3>
         <p className="text-sm text-slate-600 mb-3">
-          Use this if pages fail to load, moments disappear, or DevTools shows IndexedDB errors on{' '}
-          <code className="text-xs">localhost</code>.
+          Use this if pages fail to load, moments disappear, or DevTools shows errors in the local
+          SQLite database on <code className="text-xs">localhost</code>.
         </p>
         <button
           type="button"
