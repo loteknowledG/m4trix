@@ -37,6 +37,7 @@ import {
 } from "@/lib/game/narrator-agent";
 import {
   createEmptyStoryArc,
+  addStoryArcStage,
   type StoryArc,
   type StoryArcStage,
   type StoryArcTodoItem,
@@ -189,6 +190,7 @@ export default function StoryPage() {
   const [dialogSpeakerInput, setDialogSpeakerInput] = useState("");
   const [dialogTextInput, setDialogTextInput] = useState("");
   const [stageOpen, setStageOpen] = useState(false);
+  const [stageAssignSelection, setStageAssignSelection] = useState("__new__");
   const [stageEditTarget, setStageEditTarget] = useState<number | null>(null);
   const [stageEditForm, setStageEditForm] = useState<StageEditForm>(createEmptyStageEditForm);
   const [storyArcCurrentStage, setStoryArcCurrentStage] = useState<number | null>(null);
@@ -773,6 +775,12 @@ export default function StoryPage() {
     });
   }, [stageEditTarget, stageOpen, stagePickerOptions]);
 
+  useEffect(() => {
+    if (stageOpen && stageEditTarget == null) {
+      setStageAssignSelection("__new__");
+    }
+  }, [stageOpen, stageEditTarget]);
+
   const buildStoryArcForEditing = useCallback((): StoryArc => {
     if (storyArc) return storyArc;
     return createEmptyStoryArc(id ?? "", title);
@@ -843,6 +851,28 @@ export default function StoryPage() {
     [stagedMomentsByStage],
   );
 
+  const stageAssignOptions = useMemo(() => {
+    const byNumber = new Map(storyArcStages.map((stage) => [stage.stageNumber, stage]));
+    for (const stageNumber of populatedStageNumbers) {
+      if (!byNumber.has(stageNumber)) {
+        byNumber.set(stageNumber, {
+          stageNumber,
+          stageName: "",
+          shortDescription: "",
+          emotionalState: [],
+          keyTags: [],
+          passTest: [],
+          exampleDialogTone: "",
+          powerDynamic: "",
+          objectives: [],
+          sceneObjects: [],
+          todos: [],
+        });
+      }
+    }
+    return [...byNumber.values()].sort((a, b) => a.stageNumber - b.stageNumber);
+  }, [populatedStageNumbers, storyArcStages]);
+
   const saveStagedMoments = useCallback(
     async (next: StagedMomentsByStage) => {
       if (!id) return;
@@ -898,6 +928,25 @@ export default function StoryPage() {
       stagedMomentsByStage,
     ],
   );
+
+  const assignSelectedToNewStage = useCallback(async () => {
+    const arc = buildStoryArcForEditing();
+    const nextArc = addStoryArcStage(arc);
+    await saveStoryArcObject(nextArc);
+    const newStageNumber = nextArc.stages[nextArc.stages.length - 1]?.stageNumber;
+    if (newStageNumber == null) return;
+    await assignSelectedToStage(newStageNumber);
+  }, [assignSelectedToStage, buildStoryArcForEditing, saveStoryArcObject]);
+
+  const confirmStageAssignment = useCallback(async () => {
+    if (stageAssignSelection === "__new__") {
+      await assignSelectedToNewStage();
+      return;
+    }
+    const stageNumber = Number(stageAssignSelection);
+    if (!Number.isFinite(stageNumber)) return;
+    await assignSelectedToStage(stageNumber);
+  }, [assignSelectedToNewStage, assignSelectedToStage, stageAssignSelection]);
 
   const getStageMoments = useCallback(
     (stageNumber: number) => {
@@ -1251,10 +1300,11 @@ export default function StoryPage() {
                       <button
                         type="button"
                         className="m4-circle-ghost bg-transparent text-foreground hover:bg-accent/10"
-                        aria-label="Stage"
+                        aria-label="Add to stage"
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
+                          setStageEditTarget(null);
                           setStageOpen(true);
                         }}
                       >
@@ -1262,7 +1312,7 @@ export default function StoryPage() {
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" sideOffset={10}>
-                      <p>Stage</p>
+                      <p>Add to stage</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1621,17 +1671,17 @@ export default function StoryPage() {
           onClick={(e) => e.stopPropagation()}
         >
           <DialogHeader className="sr-only">
-            <DialogTitle>{stageEditTarget != null ? "Edit stage" : "Stage"}</DialogTitle>
+            <DialogTitle>{stageEditTarget != null ? "Edit stage" : "Add to stage"}</DialogTitle>
             <DialogDescription id="story-stage-description">
               {stageEditTarget != null
                 ? "Edit story stage metadata."
-                : "Assign selected moments to a story stage."}
+                : "Choose a stage for the selected moments."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex max-h-[75vh] flex-col p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-sm font-medium">
-                {stageEditTarget != null ? `Edit Stage ${stageEditTarget}` : "Stage"}
+                {stageEditTarget != null ? `Edit Stage ${stageEditTarget}` : "Add to stage"}
               </h3>
               <button
                 type="button"
@@ -2010,51 +2060,61 @@ export default function StoryPage() {
                   </button>
                 </div>
               </div>
-            ) : stagePickerOptions.length === 0 ? (
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>No story arc stages found.</p>
-                <p className="text-xs">
-                  Open the story arc editor to add stages and todo goals.
-                </p>
-              </div>
             ) : (
-              <div className="space-y-2 overflow-auto">
-                {stagePickerOptions.map((stage: StoryArcStage, index: number) => {
-                  const palette = getStagePalette(index);
-                  const isActive =
-                    stageEditTarget === stage.stageNumber ||
-                    storyArcCurrentStage === stage.stageNumber;
-                  const stagedCount = stagedMomentsByStage[stage.stageNumber]?.length ?? 0;
-                  return (
-                    <button
-                      key={stage.stageNumber}
-                      type="button"
-                      onClick={() => {
-                        void assignSelectedToStage(stage.stageNumber);
-                      }}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded border p-3 text-left transition-colors hover:opacity-95",
-                        isActive ? "border-primary ring-1 ring-primary/40" : "border-border",
-                      )}
-                      style={{ backgroundColor: palette.bg, color: palette.fg }}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold">
-                          Stage {stage.stageNumber}
-                          {stage.stageName ? `: ${stage.stageName}` : ""}
-                        </div>
-                        {stage.shortDescription ? (
-                          <div className="mt-1 text-xs opacity-80">{stage.shortDescription}</div>
-                        ) : null}
-                      </div>
-                      {stagedCount > 0 ? (
-                        <span className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide opacity-80">
-                          {stagedCount} staged
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                <p className="text-xs text-muted-foreground">
+                  {(selectedIds || []).length} moment
+                  {(selectedIds || []).length === 1 ? "" : "s"} selected
+                </p>
+                <select
+                  size={Math.min(10, Math.max(4, stageAssignOptions.length + 1))}
+                  value={stageAssignSelection}
+                  onChange={(e) => setStageAssignSelection(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void confirmStageAssignment();
+                    }
+                  }}
+                  aria-label="Choose a stage"
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-sm outline-none focus:border-primary"
+                >
+                  <option value="__new__">Add to new stage</option>
+                  {stageAssignOptions.map((stage) => {
+                    const stagedCount = stagedMomentsByStage[stage.stageNumber]?.length ?? 0;
+                    const label = [
+                      `Stage ${stage.stageNumber}`,
+                      stage.stageName ? `: ${stage.stageName}` : "",
+                      stagedCount > 0 ? ` (${stagedCount} moment${stagedCount === 1 ? "" : "s"})` : "",
+                    ].join("");
+                    return (
+                      <option key={stage.stageNumber} value={String(stage.stageNumber)}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStageOpen(false);
+                      setStageEditTarget(null);
+                    }}
+                    className="inline-flex items-center justify-center rounded border px-3 py-1.5 text-sm hover:bg-accent/30"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void confirmStageAssignment();
+                    }}
+                    className="inline-flex items-center justify-center rounded border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
             )}
           </div>
