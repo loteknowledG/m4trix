@@ -9,6 +9,7 @@ import { ArrowDownIcon, Upload } from "@/components/icons";
 import { ContentLayout } from "@/components/admin-panel/content-layout";
 import type { CustomChatMessage } from "@/components/ai/custom-chat-window";
 import { GameDialogComposer } from "@/components/game-dialog-composer";
+import { GameFloatingMessageBox } from "@/components/game-floating-message-box";
 import { MomentDialogOverlay, type MomentDialogLayoutPatch } from "@/components/moment-dialog-overlay";
 import { ConnectionSheet } from "@/components/connection-sheet";
 import ErrorBoundary from "@/components/error-boundary";
@@ -176,6 +177,7 @@ function buildGameOverlayLines(params: {
   narratorDialogStyle: CharacterDialogStyle;
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
+  draftInputs?: Record<GameCharacterSlot, string>;
 }): Array<MomentDialogLine & { speakerName: string; forceVisible?: boolean }> {
   const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
   const lines: Array<MomentDialogLine & { speakerName: string; forceVisible?: boolean }> = [];
@@ -183,6 +185,7 @@ function buildGameOverlayLines(params: {
   for (const slot of slots) {
     const latest = latestSpeakableMessage(params.conversations[slot] || []);
     const isActive = slot === params.activeCharacter;
+    const draftText = params.draftInputs?.[slot]?.trim() ?? "";
 
     const layout = params.layouts[slot];
     const style = dialogStyleForGameSlot(
@@ -207,7 +210,7 @@ function buildGameOverlayLines(params: {
       id: slot,
       characterId: slot,
       speaker: label,
-      text: latest?.text ?? "",
+      text: draftText || latest?.text || "",
       playerMode: mode,
       x: layout.x,
       y: layout.y,
@@ -219,7 +222,7 @@ function buildGameOverlayLines(params: {
       speakerColor: style.speakerColor,
       textEffects: style.textEffects,
       speakerName: `${speakerLabel} says`,
-      forceVisible: isActive || Boolean(latest),
+      forceVisible: isActive || Boolean(latest) || Boolean(draftText),
     });
   }
 
@@ -540,11 +543,13 @@ export default function GamePage() {
         narratorDialogStyle,
         npcKnowsPlayer: npcKnowsPlayerEffective,
         playerMode,
+        draftInputs: characterInputs,
       }),
     [
       activeCharacter,
       assignedNpc,
       assignedPlayer,
+      characterInputs,
       characterTabLabels,
       conversations,
       gameDialogLayouts,
@@ -2494,6 +2499,23 @@ export default function GamePage() {
                 onLayoutChange={handleGameDialogLayoutChange}
                 onOpenEditor={handleOpenGameDialogEditor}
                 gameDialog
+              />
+
+              <GameFloatingMessageBox
+                stageRef={stageRef}
+                tabs={gameDialogTabs}
+                activeCharacter={activeCharacter}
+                onActiveCharacterChange={(slot) => {
+                  setActiveCharacter(slot);
+                  setFocusedGameDialogSlot(slot);
+                }}
+                input={chatInput}
+                onInputChange={setChatInput}
+                onSend={sendChatMessage}
+                disabled={chatInFlight}
+                inputMaxLength={
+                  activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
+                }
               />
 
               <GameDialogComposer
