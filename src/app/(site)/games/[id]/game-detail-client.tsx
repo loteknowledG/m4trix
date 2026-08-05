@@ -51,6 +51,7 @@ import {
   speakWithJennyVoice,
   stopActiveTts,
   unlockAudioPlayback,
+  waitForTtsQueueIdle,
   writeVoiceEnabled,
 } from "@/lib/tts";
 import { formatDialogModeLabel, formatGameDialogSpeakerHeader, formatPlayerMemoryLabel, normalizePlayerMode, type PlayerMode } from "@/lib/player-mode";
@@ -1338,6 +1339,10 @@ export default function GamePage() {
 
   const appendSceneNarratorBeat = useCallback(
     async (args: { sceneLines: SceneRoundLine[] }) => {
+      if (voiceEnabled) {
+        await waitForTtsQueueIdle();
+      }
+
       const sceneSummary = buildSceneSummary({
         title,
         currentMomentName: currentMoment?.name ?? "",
@@ -1354,70 +1359,70 @@ export default function GamePage() {
         text: line.text,
       }));
 
-      if (narratorEnabled) {
-        const pendingId = `pending-narrator-${Date.now()}`;
-        setConversations((prev) => ({
-          ...prev,
-          narrator: [
-            ...(prev.narrator || []),
-            {
-              id: pendingId,
-              from: "agent",
-              text: "…",
-            },
-          ],
-        }));
+      const pendingId = `pending-narrator-${Date.now()}`;
+      setConversations((prev) => ({
+        ...prev,
+        narrator: [
+          ...(prev.narrator || []),
+          {
+            id: pendingId,
+            from: "agent",
+            text: "…",
+          },
+        ],
+      }));
 
-        const beat = await runSceneNarratorBeat({
-          connected,
-          connectionModel,
-          storyContext,
-          sceneSummary,
-          sceneLines: sceneDialogLines,
-          nextMomentName: nextMoment?.name ?? undefined,
-          isLastMoment: !canAdvance,
-          history: storyHistory,
-          arcStage: resolvedArcStage,
-          completedTodoIds:
-            resolvedArcStageNumber == null
-              ? []
-              : getCompletedTodoIds(storyArcTodoProgress, resolvedArcStageNumber),
-        });
+      const beat = await runSceneNarratorBeat({
+        connected,
+        connectionModel,
+        storyContext,
+        sceneSummary,
+        sceneLines: sceneDialogLines,
+        nextMomentName: nextMoment?.name ?? undefined,
+        isLastMoment: !canAdvance,
+        history: storyHistory,
+        arcStage: resolvedArcStage,
+        completedTodoIds:
+          resolvedArcStageNumber == null
+            ? []
+            : getCompletedTodoIds(storyArcTodoProgress, resolvedArcStageNumber),
+      });
 
-        const evaluation = evaluateStageProgressWithArc({
-          storyArc,
-          currentStageNumber: resolvedArcStageNumber,
-          progress: storyArcTodoProgress,
-          newlyCompleted: beat.completedTodoIds,
-          stageCompleteFlag: beat.stageComplete,
-        });
+      const evaluation = evaluateStageProgressWithArc({
+        storyArc,
+        currentStageNumber: resolvedArcStageNumber,
+        progress: storyArcTodoProgress,
+        newlyCompleted: beat.completedTodoIds,
+        stageCompleteFlag: beat.stageComplete,
+      });
 
-        setStoryArcTodoProgress(evaluation.progress);
+      setStoryArcTodoProgress(evaluation.progress);
 
-        let narratorText = beat.text;
-        if (evaluation.stageWon && evaluation.nextStage) {
-          setStoryArcCurrentStage(evaluation.nextStageNumber);
-          await persistStoryArcStage(evaluation.nextStageNumber ?? evaluation.nextStage.stageNumber);
-          const stageLabel = evaluation.nextStage.stageName
-            ? `: ${evaluation.nextStage.stageName}`
-            : "";
-          narratorText += `\n\nStage ${resolvedArcStageNumber} complete. Stage ${evaluation.nextStage.stageNumber} begins${stageLabel}.`;
-        }
-
-        setConversations((prev) => ({
-          ...prev,
-          narrator: (prev.narrator || []).map((message) =>
-            message.id === pendingId
-              ? {
-                  ...message,
-                  id: `narrator-${Date.now()}`,
-                  text: narratorText,
-                  ttsVoice: DEFAULT_CHARACTER_TTS_VOICE,
-                }
-              : message,
-          ),
-        }));
+      let narratorText = beat.text;
+      if (evaluation.stageWon && evaluation.nextStage) {
+        setStoryArcCurrentStage(evaluation.nextStageNumber);
+        await persistStoryArcStage(evaluation.nextStageNumber ?? evaluation.nextStage.stageNumber);
+        const stageLabel = evaluation.nextStage.stageName
+          ? `: ${evaluation.nextStage.stageName}`
+          : "";
+        narratorText += `\n\nStage ${resolvedArcStageNumber} complete. Stage ${evaluation.nextStage.stageNumber} begins${stageLabel}.`;
       }
+
+      const narratorMessageId = `narrator-${Date.now()}`;
+      setConversations((prev) => ({
+        ...prev,
+        narrator: (prev.narrator || []).map((message) =>
+          message.id === pendingId
+            ? {
+                ...message,
+                id: narratorMessageId,
+                text: narratorText,
+                ttsVoice: DEFAULT_CHARACTER_TTS_VOICE,
+              }
+            : message,
+        ),
+      }));
+      lastSpokenBySlotRef.current.narrator = narratorMessageId;
 
       const protagonistLines = args.sceneLines
         .filter((line) => line.slot === "protagonist")
@@ -1435,6 +1440,14 @@ export default function GamePage() {
         history: storyHistory,
         currentTurnNpcKnewPlayer: npcKnowsPlayerEffective,
       });
+
+      if (voiceEnabled && narratorText.trim()) {
+        await speakWithCharacterTtsVoice(narratorText, DEFAULT_CHARACTER_TTS_VOICE, undefined, {
+          allowFallback: true,
+        });
+      } else if (narratorText.trim()) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+      }
 
       setConversations((prev) => ({
         ...prev,
@@ -1461,7 +1474,6 @@ export default function GamePage() {
       currentMoment?.name,
       currentMomentIndex,
       gameContextText,
-      narratorEnabled,
       npcKnowsPlayerEffective,
       persistStoryArcStage,
       refreshStorySummary,
@@ -1473,6 +1485,7 @@ export default function GamePage() {
       storyMoments,
       storySummary,
       title,
+      voiceEnabled,
     ],
   );
 
