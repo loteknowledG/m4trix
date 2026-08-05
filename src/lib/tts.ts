@@ -32,6 +32,37 @@ function sanitizeSpeechText(text: string) {
 let activeAudio: HTMLAudioElement | null = null;
 let activeObjectUrl: string | null = null;
 let speakQueueTail: Promise<TtsSpeakResult> = Promise.resolve({ ok: true });
+let audioPlaybackUnlocked = false;
+
+/** Call synchronously from a click handler before awaiting TTS fetches. */
+export function unlockAudioPlayback(): void {
+  if (audioPlaybackUnlocked || typeof window === 'undefined') return;
+  try {
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AudioContextCtor) {
+      const context = new AudioContextCtor();
+      void context.resume();
+      const buffer = context.createBuffer(1, 1, 22050);
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.start(0);
+    }
+    const probe = new Audio();
+    probe.muted = true;
+    probe.src =
+      'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjQ1LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV6urq6urq6urq6urq6urq6urq6urq6urq6v////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASDs90hvAAAAAAAAAAAAAAAAAAAA//MUZAAAAAGkAAAAAAAAA0gAAAAATEFN//MUZAMAAAGkAAAAAAAAA0gAAAAARTMu//MUZAYAAAGkAAAAAAAAA0gAAAAAOTku//MUZAkAAAGkAAAAAAAAA0gAAAAANVVV';
+    void probe.play().finally(() => {
+      probe.pause();
+      probe.removeAttribute('src');
+    });
+    audioPlaybackUnlocked = true;
+  } catch {
+    /* ignore — playback may still work without unlock */
+  }
+}
 
 function stopActiveAudio() {
   if (activeAudio) {
@@ -124,6 +155,8 @@ export async function speakWithCharacterTtsVoice(
   legacyProfile?: string | null,
   options: TtsSpeakOptions = {},
 ): Promise<TtsSpeakResult> {
+  unlockAudioPlayback();
+
   const run = async (): Promise<TtsSpeakResult> => {
     const allowFallback = options.allowFallback ?? false;
     const voice =

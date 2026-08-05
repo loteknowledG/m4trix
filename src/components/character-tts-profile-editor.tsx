@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import {
   CHARACTER_TTS_PROFILE_OPTIONS,
   CHARACTER_TTS_PROFILE_OPTIONS_ALPHABETICAL,
@@ -10,7 +9,8 @@ import {
   resolveCharacterTtsVoice,
   type CharacterTtsVoice,
 } from '@/lib/character-tts-profile';
-import { speakWithCharacterTtsVoice } from '@/lib/tts';
+import { speakWithCharacterTtsVoice, unlockAudioPlayback } from '@/lib/tts';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 type CharacterTtsProfileEditorProps = {
@@ -35,14 +35,20 @@ export function CharacterTtsProfileEditor({
   };
 
   const handlePreview = async () => {
-    if (previewing || !previewText.trim()) return;
+    const text = previewText.trim();
+    if (previewing) return;
+    if (!text) {
+      toast.error('Add a character name or description to preview voice.');
+      return;
+    }
+    unlockAudioPlayback();
     setPreviewing(true);
     try {
-      const result = await speakWithCharacterTtsVoice(previewText, settings, undefined, {
-        allowFallback: false,
+      const result = await speakWithCharacterTtsVoice(text, settings, undefined, {
+        allowFallback: true,
       });
       if (!result.ok) {
-        toast.error(result.error);
+        toast.error(result.error || 'Voice preview failed.');
       }
     } finally {
       setPreviewing(false);
@@ -80,18 +86,22 @@ export function CharacterTtsProfileEditor({
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] text-muted-foreground">{characterTtsVoiceLabel(settings)}</span>
-        <Button
+        <button
           type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 text-[11px]"
           disabled={previewing}
+          onPointerDown={() => {
+            unlockAudioPlayback();
+          }}
           onClick={() => {
             void handlePreview();
           }}
+          className={cn(
+            'pushable-effect pushable-wall-neutral pointer-events-auto inline-flex h-7 shrink-0 items-center justify-center rounded-md border-2 border-border bg-background px-2.5 text-[11px] font-medium text-foreground shadow-sm transition-transform transition-shadow duration-150 ease-out',
+            'hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50',
+          )}
         >
           {previewing ? 'Playing…' : 'Preview voice'}
-        </Button>
+        </button>
       </div>
     </div>
   );
