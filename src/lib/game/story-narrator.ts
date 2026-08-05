@@ -8,7 +8,7 @@ import { extractAgentResponseText } from '@/lib/game/agent-response-text';
 
 import { formatGameSpeakerLabel } from '@/lib/game/game-context';
 
-import { NARRATOR_AGENT } from '@/lib/game/narrator-agent';
+import { NARRATOR_AGENT, SCENE_NARRATOR_AGENT } from '@/lib/game/narrator-agent';
 
 import {
 
@@ -37,6 +37,24 @@ export type NarratorBeatResult = {
 };
 
 
+
+export type SceneDialogLine = {
+  speaker: string;
+  text: string;
+};
+
+export type RunSceneNarratorBeatArgs = {
+  connected: boolean;
+  connectionModel: string | null;
+  storyContext: string;
+  sceneSummary: string;
+  sceneLines: SceneDialogLine[];
+  nextMomentName?: string;
+  isLastMoment?: boolean;
+  history: OrchestratedMessage[];
+  arcStage?: StoryArcStage | null;
+  completedTodoIds?: string[];
+};
 
 export type RunNarratorBeatArgs = {
 
@@ -102,6 +120,32 @@ function summarizePlayerLine(
   return `${playerLabel} said: "${line.replace(/^["']|["']$/g, '')}".`;
 }
 
+export function buildSceneNarratorFallbackBeat(args: {
+  sceneLines: SceneDialogLine[];
+  nextMomentName?: string;
+  isLastMoment?: boolean;
+}): NarratorBeatResult {
+  const parts = args.sceneLines
+    .map((line) => {
+      const snippet = clipSnippet(line.text, 120);
+      return snippet ? `${line.speaker} said: "${snippet.replace(/^["']|["']$/g, '')}".` : '';
+    })
+    .filter(Boolean);
+
+  let text = normalizeNarratorSummary(parts.join(' ').trim() || 'The scene unfolded quietly.');
+  if (args.isLastMoment) {
+    text = normalizeNarratorSummary(`${text} The moment held there.`);
+  } else if (args.nextMomentName?.trim()) {
+    text = normalizeNarratorSummary(`${text} The story moved on toward ${args.nextMomentName.trim()}.`);
+  }
+
+  return {
+    text,
+    completedTodoIds: [],
+    stageComplete: false,
+  };
+}
+
 export function buildNarratorFallbackBeat(args: {
 
   userText: string;
@@ -140,6 +184,127 @@ export function buildNarratorFallbackBeat(args: {
 }
 
 
+
+export async function runSceneNarratorBeat({
+  connected,
+  connectionModel,
+  storyContext,
+  sceneSummary,
+  sceneLines,
+  nextMomentName,
+  isLastMoment = false,
+  history,
+  arcStage,
+  completedTodoIds = [],
+}: RunSceneNarratorBeatArgs): Promise<NarratorBeatResult> {
+  const fallback = () =>
+    buildSceneNarratorFallbackBeat({ sceneLines, nextMomentName, isLastMoment });
+
+  if (!connected || sceneLines.length === 0) {
+    return fallback();
+  }
+
+  const todoSection = formatOpenTodosForNarrator(arcStage, completedTodoIds);
+  const arcSection = !arcStage
+    ? ''
+    : [
+        `Current stage: ${arcStage.stageNumber}${arcStage.stageName ? ` — ${arcStage.stageName}` : ''}`,
+        arcStage.shortDescription ? `Stage note: ${arcStage.shortDescription}` : '',
+        todoSection ? `Stage todo goals:\n${todoSection}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+  const sceneLinesBlock = sceneLines
+    .map((line) => `${line.speaker}: ${line.text.trim()}`)
+    .join('\n');
+
+  const transitionInstruction = isLastMoment
+    ? 'This is the final scene. Conclude this beat without promising a sequel or inventing future events.'
+    : nextMomentName?.trim()
+      ? `End with one brief sentence that transitions the story toward the next scene: "${nextMomentName.trim()}".`
+      : 'End with one brief sentence that moves the story into the next scene.';
+
+  const prompt = [
+    'Review what happened in this scene using ONLY the character lines below.',
+    'Write two or three short sentences in third person past tense.',
+    'Summarize what each character contributed. Do not invent dialogue, actions, or plot beyond these lines.',
+    transitionInstruction,
+    todoSection
+      ? 'Review the stage todo goals. If this scene clearly completed any OPEN goals, append one line per goal: [DONE:todo-id]. If every goal for this stage is now done, also append [STAGE_COMPLETE] on its own line. Put these markers AFTER your summary.'
+      : '',
+    '',
+    storyContext ? `Story context:\n${storyContext}` : '',
+    sceneSummary ? `Scene:\n${sceneSummary}` : '',
+    arcSection ? `Arc:\n${arcSection}` : '',
+    '',
+    `Character lines this scene:\n${sceneLinesBlock}`,
+    '',
+    `Recent history:\n${history
+      .slice(-8)
+      .map((msg) => `${msg.from === 'user' ? 'Player' : 'NPC'}: ${msg.text}`)
+      .join('\n')}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
+  const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
+  const hfKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ?? undefined;
+  const nvidiaKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ?? undefined;
+  const activeProvider =
+    getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
+    getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
+    'zen';
+  const lmstudioUrl = normalizeLmstudioUrl(
+    getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
+  );
+
+  try {
+    const res = await fetchAgentsWithLmstudioBrowserProxy({
+      prompt,
+      model: connectionModel,
+      zenApiKey: zenKey,
+      googleApiKey: googleKey,
+      hfApiKey: hfKey,
+      nvidiaApiKey: nvidiaKey,
+      provider: activeProvider,
+      lmstudioUrl: activeProvider === 'lmstudio' ? lmstudioUrl : undefined,
+      agents: [SCENE_NARRATOR_AGENT],
+      stateless: true,
+      orchestration: 'parallel',
+      interactionMode: 'neutral',
+      story: storyContext || sceneSummary,
+      history: history.slice(-8),
+      stream: false,
+    });
+
+    const raw = await res.text().catch(() => '');
+    const rawText = res.ok ? extractAgentResponseText(raw) : '';
+
+    if (!rawText) {
+      console.warn('[game][narrator][scene] empty model response', {
+        ok: res.ok,
+        status: res.status,
+        provider: activeProvider,
+      });
+      return fallback();
+    }
+
+    const parsed = parseNarratorTodoMarkers(rawText);
+    if (!parsed.text) {
+      return fallback();
+    }
+
+    return {
+      ...parsed,
+      text: normalizeNarratorSummary(parsed.text),
+    };
+  } catch (err) {
+    console.warn('[game][narrator][scene] request failed', err);
+    return fallback();
+  }
+}
 
 export async function runNarratorBeat({
 

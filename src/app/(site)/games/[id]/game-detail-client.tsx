@@ -2,7 +2,7 @@
 
 import { del, get, keys, set } from "idb-keyval";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { FaBrain, FaBug, FaCog, FaDesktop, FaTags, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import { MdExitToApp } from "react-icons/md";
 import { ArrowDownIcon, Upload } from "@/components/icons";
@@ -98,7 +98,7 @@ import {
   resolveNpcKnowsPlayerForSession,
 } from "@/lib/game/player-identity";
 import { refreshStorySummary as refreshGameStorySummary } from "@/lib/game/story-memory";
-import { runNarratorBeat } from "@/lib/game/story-narrator";
+import { runNarratorBeat, runSceneNarratorBeat } from "@/lib/game/story-narrator";
 import {
   emptyStoryArcTodoProgress,
   evaluateStageProgressWithArc,
@@ -191,6 +191,33 @@ function isBlockedGameSpeechMessage(message: CustomChatMessage): boolean {
   if (/^Working on that request\b/i.test(text)) return true;
   if (/^Waiting for LM Studio\b/i.test(text)) return true;
   return false;
+}
+
+type SceneDialogSlot = "protagonist" | "antagonist";
+
+type SceneRoundLine = {
+  slot: SceneDialogSlot;
+  speaker: string;
+  text: string;
+};
+
+function markSceneRoundSpeaker(
+  sceneLinesRef: MutableRefObject<SceneRoundLine[]>,
+  sceneSpokeRef: MutableRefObject<Record<SceneDialogSlot, boolean>>,
+  slot: SceneDialogSlot,
+  speaker: string,
+  text: string,
+) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  sceneLinesRef.current.push({ slot, speaker, text: trimmed });
+  sceneSpokeRef.current[slot] = true;
+}
+
+function isSceneRoundComplete(
+  sceneSpokeRef: MutableRefObject<Record<SceneDialogSlot, boolean>>,
+): boolean {
+  return sceneSpokeRef.current.protagonist && sceneSpokeRef.current.antagonist;
 }
 
 function buildGameOverlayLines(params: {
@@ -313,6 +340,12 @@ export default function GamePage() {
   const [momentSelectionMode, setMomentSelectionMode] = useState<"auto" | "manual">("auto");
   const [steerInstruction, setSteerInstruction] = useState("");
   const momentStateReadyRef = useRef(false);
+  const sceneLinesRef = useRef<SceneRoundLine[]>([]);
+  const sceneSpokeRef = useRef<Record<SceneDialogSlot, boolean>>({
+    protagonist: false,
+    antagonist: false,
+  });
+  const sceneClosingRef = useRef(false);
 
   // Multi-character conversations
   type CharacterId = 'protagonist' | 'antagonist' | 'narrator';
@@ -797,6 +830,12 @@ export default function GamePage() {
   }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
 
   // Moment selection and saved story state
+  useEffect(() => {
+    sceneLinesRef.current = [];
+    sceneSpokeRef.current = { protagonist: false, antagonist: false };
+    sceneClosingRef.current = false;
+  }, [currentMomentIndex]);
+
   useEffect(() => {
     console.log('[DEBUG] currentMoment changed', { currentMomentIndex, momentName: currentMoment?.name, hasMoments });
     const src = currentMoment?.src || currentMoment?.url || currentMoment?.image || null;
@@ -1297,6 +1336,146 @@ export default function GamePage() {
     ],
   );
 
+  const appendSceneNarratorBeat = useCallback(
+    async (args: { sceneLines: SceneRoundLine[] }) => {
+      const sceneSummary = buildSceneSummary({
+        title,
+        currentMomentName: currentMoment?.name ?? "",
+        npc: assignedNpc,
+        player: assignedPlayer,
+        npcKnowsPlayer: npcKnowsPlayerEffective,
+      });
+      const storyContext = [gameContextText, storySummary].filter(Boolean).join("\n\n");
+      const nextIndex = currentMomentIndex + 1;
+      const canAdvance = nextIndex < storyMoments.length;
+      const nextMoment = canAdvance ? storyMoments[nextIndex] : null;
+      const sceneDialogLines = args.sceneLines.map((line) => ({
+        speaker: line.speaker,
+        text: line.text,
+      }));
+
+      if (narratorEnabled) {
+        const pendingId = `pending-narrator-${Date.now()}`;
+        setConversations((prev) => ({
+          ...prev,
+          narrator: [
+            ...(prev.narrator || []),
+            {
+              id: pendingId,
+              from: "agent",
+              text: "…",
+            },
+          ],
+        }));
+
+        const beat = await runSceneNarratorBeat({
+          connected,
+          connectionModel,
+          storyContext,
+          sceneSummary,
+          sceneLines: sceneDialogLines,
+          nextMomentName: nextMoment?.name ?? undefined,
+          isLastMoment: !canAdvance,
+          history: storyHistory,
+          arcStage: resolvedArcStage,
+          completedTodoIds:
+            resolvedArcStageNumber == null
+              ? []
+              : getCompletedTodoIds(storyArcTodoProgress, resolvedArcStageNumber),
+        });
+
+        const evaluation = evaluateStageProgressWithArc({
+          storyArc,
+          currentStageNumber: resolvedArcStageNumber,
+          progress: storyArcTodoProgress,
+          newlyCompleted: beat.completedTodoIds,
+          stageCompleteFlag: beat.stageComplete,
+        });
+
+        setStoryArcTodoProgress(evaluation.progress);
+
+        let narratorText = beat.text;
+        if (evaluation.stageWon && evaluation.nextStage) {
+          setStoryArcCurrentStage(evaluation.nextStageNumber);
+          await persistStoryArcStage(evaluation.nextStageNumber ?? evaluation.nextStage.stageNumber);
+          const stageLabel = evaluation.nextStage.stageName
+            ? `: ${evaluation.nextStage.stageName}`
+            : "";
+          narratorText += `\n\nStage ${resolvedArcStageNumber} complete. Stage ${evaluation.nextStage.stageNumber} begins${stageLabel}.`;
+        }
+
+        setConversations((prev) => ({
+          ...prev,
+          narrator: (prev.narrator || []).map((message) =>
+            message.id === pendingId
+              ? {
+                  ...message,
+                  id: `narrator-${Date.now()}`,
+                  text: narratorText,
+                  ttsVoice: DEFAULT_CHARACTER_TTS_VOICE,
+                }
+              : message,
+          ),
+        }));
+      }
+
+      const protagonistLines = args.sceneLines
+        .filter((line) => line.slot === "protagonist")
+        .map((line) => line.text)
+        .join(" ");
+      const antagonistLines = args.sceneLines
+        .filter((line) => line.slot === "antagonist")
+        .map((line) => line.text)
+        .join(" ");
+
+      void refreshStorySummary({
+        sceneSummary,
+        userText: protagonistLines,
+        assistantText: antagonistLines,
+        history: storyHistory,
+        currentTurnNpcKnewPlayer: npcKnowsPlayerEffective,
+      });
+
+      setConversations((prev) => ({
+        ...prev,
+        protagonist: [],
+        antagonist: [],
+      }));
+      delete lastSpokenBySlotRef.current.protagonist;
+      delete lastSpokenBySlotRef.current.antagonist;
+
+      sceneLinesRef.current = [];
+      sceneSpokeRef.current = { protagonist: false, antagonist: false };
+      sceneClosingRef.current = false;
+
+      if (canAdvance) {
+        setMomentSelectionMode("manual");
+        setCurrentMomentIndex(nextIndex);
+      }
+    },
+    [
+      assignedNpc,
+      assignedPlayer,
+      connected,
+      connectionModel,
+      currentMoment?.name,
+      currentMomentIndex,
+      gameContextText,
+      narratorEnabled,
+      npcKnowsPlayerEffective,
+      persistStoryArcStage,
+      refreshStorySummary,
+      resolvedArcStage,
+      resolvedArcStageNumber,
+      storyArc,
+      storyArcTodoProgress,
+      storyHistory,
+      storyMoments,
+      storySummary,
+      title,
+    ],
+  );
+
   const handleNpcTurnComplete = useCallback(
     async (
       turn: ConnectedChatTurnResult,
@@ -1535,6 +1714,12 @@ export default function GamePage() {
       characterId === "protagonist" ? normalizeProtagonistDialogue(trimmed) : trimmed;
     if (!spokenText) return;
 
+    const speakerName = characterId === 'protagonist'
+      ? (assignedPlayer?.name || 'Protagonist')
+      : characterId === 'antagonist'
+        ? (assignedNpc?.name || 'Antagonist')
+        : 'Narrator';
+
     // Add user message to character's conversation
     const userMessage: CustomChatMessage = {
       id: `user-${Date.now()}`,
@@ -1551,6 +1736,10 @@ export default function GamePage() {
     // Clear input for this character
     setCharacterInputs((prev) => ({ ...prev, [characterId]: '' }));
 
+    if (characterId === "protagonist" || characterId === "antagonist") {
+      markSceneRoundSpeaker(sceneLinesRef, sceneSpokeRef, characterId, speakerName, spokenText);
+    }
+
     // Determine who responds - the OTHER character responds
     // If narrator spoke, both protagonist and antagonist respond
     const responders: CharacterId[] = characterId === 'protagonist' ? ['antagonist'] :
@@ -1564,13 +1753,6 @@ export default function GamePage() {
       toast.error("Connect an AI provider in Connection settings before sending.");
       return;
     }
-
-    // Get character names
-    const speakerName = characterId === 'protagonist'
-      ? (assignedPlayer?.name || 'Protagonist')
-      : characterId === 'antagonist'
-        ? (assignedNpc?.name || 'Antagonist')
-        : 'Narrator';
 
     // Get active provider and API key from storage
     const activeProvider =
@@ -1600,10 +1782,10 @@ export default function GamePage() {
     const nvidiaApiKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) || undefined;
 
     try {
-      let lastReply = "";
       // Process each responder (one at a time so they can react to each other)
       for (let i = 0; i < responders.length; i++) {
         const currentResponder = responders[i];
+        if (currentResponder !== "protagonist" && currentResponder !== "antagonist") continue;
 
         // Get the current responder's character info - use defaults if not set
         const currentResponderCharacter = currentResponder === 'protagonist'
@@ -1671,7 +1853,13 @@ export default function GamePage() {
             }
 
             if (reply) {
-              lastReply = reply;
+              markSceneRoundSpeaker(
+                sceneLinesRef,
+                sceneSpokeRef,
+                currentResponder,
+                currentResponderName,
+                reply,
+              );
               const aiResponse: CustomChatMessage = {
                 id: `agent-${Date.now()}-${currentResponder}`,
                 from: 'agent',
@@ -1705,27 +1893,20 @@ export default function GamePage() {
         }
       }
 
-      const shouldRunNarratorAfterProtagonist =
-        characterId !== "narrator" && narratorEnabled && lastReply.trim();
-      if (shouldRunNarratorAfterProtagonist) {
-        const sceneSummary = buildSceneSummary({
-          title,
-          currentMomentName: currentMoment?.name ?? "",
-          npc: assignedNpc,
-          player: assignedPlayer,
-          npcKnowsPlayer: npcKnowsPlayerEffective,
-        });
-        const storyContext = [gameContextText, storySummary].filter(Boolean).join("\n\n");
-        const userText = characterId === "protagonist" ? spokenText : lastReply;
-        const npcText = characterId === "protagonist" ? lastReply : spokenText;
-        await appendNarratorBeat({
-          userText,
-          npcText,
-          history: storyHistory,
-          sceneSummary,
-          storyContext,
-          currentTurnNpcKnewPlayer: npcKnowsPlayerEffective,
-        });
+      const shouldCloseScene =
+        isSceneRoundComplete(sceneSpokeRef) &&
+        !sceneClosingRef.current &&
+        sceneLinesRef.current.length > 0;
+      if (shouldCloseScene) {
+        sceneClosingRef.current = true;
+        try {
+          await appendSceneNarratorBeat({
+            sceneLines: [...sceneLinesRef.current],
+          });
+        } catch (sceneErr) {
+          sceneClosingRef.current = false;
+          throw sceneErr;
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "AI response failed";
