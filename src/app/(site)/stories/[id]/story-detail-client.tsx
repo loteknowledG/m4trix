@@ -225,6 +225,7 @@ export default function StoryPage() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollDirectionRef = useRef<number | null>(null);
   const scrollAnimRef = useRef<number | null>(null);
+  const stageEditSkipSaveRef = useRef(true);
 
   const saveStoryItems = useCallback(
     async (nextItems: Moment[]) => {
@@ -665,12 +666,14 @@ export default function StoryPage() {
       return;
     }
 
-    const stage = stagePickerOptions.find((item) => item.stageNumber === stageEditTarget);
+    const stage = storyArcStages.find((item) => item.stageNumber === stageEditTarget);
     setStageEditForm({
       name: stage?.stageName ?? "",
       characterIds: Array.isArray(stage?.characterIds) ? [...stage.characterIds] : [],
     });
-  }, [stageEditTarget, stageOpen, stagePickerOptions]);
+    stageEditSkipSaveRef.current = true;
+    // Hydrate when the dialog opens or the edited stage changes — not on every arc save.
+  }, [stageEditTarget, stageOpen]);
 
   const addCharacterToStageEdit = useCallback((characterId: string) => {
     setStageEditForm((prev) => {
@@ -699,7 +702,7 @@ export default function StoryPage() {
   }, [id, storyArc, title]);
 
   const persistStageEdit = useCallback(
-    async (form: StageEditForm, stageNumber: number, closeAfter = true) => {
+    async (form: StageEditForm, stageNumber: number, closeAfter = false) => {
       const arc = buildStoryArcForEditing();
       const existingStage = arc.stages.find((stage) => stage.stageNumber === stageNumber);
       const nextStage: StoryArcStage = {
@@ -740,10 +743,21 @@ export default function StoryPage() {
     [buildStoryArcForEditing, saveStoryArcObject, saveStoryArcCurrentStage],
   );
 
-  const saveStageEdit = useCallback(async () => {
-    if (stageEditTarget == null) return;
-    await persistStageEdit(stageEditForm, stageEditTarget);
-  }, [persistStageEdit, stageEditForm, stageEditTarget]);
+  useEffect(() => {
+    if (!stageOpen || stageEditTarget == null) return;
+    if (stageEditSkipSaveRef.current) {
+      stageEditSkipSaveRef.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void persistStageEdit(stageEditForm, stageEditTarget, false);
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [persistStageEdit, stageEditForm, stageEditTarget, stageOpen]);
 
   const createCharacterForStage = useCallback(async () => {
     if (stageEditTarget == null) return;
@@ -766,7 +780,7 @@ export default function StoryPage() {
         characterIds: [...stageEditForm.characterIds, newCharacter.id],
       };
       setStageEditForm(nextForm);
-      await persistStageEdit(nextForm, stageEditTarget);
+      await persistStageEdit(nextForm, stageEditTarget, true);
       setAssignStageCharacterOpen(false);
       router.push(characterDetailHref(newCharacter.id));
     } catch (e) {
@@ -1956,28 +1970,6 @@ export default function StoryPage() {
                   >
                     <Plus size={16} />
                     Add character
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStageOpen(false);
-                      setStageEditTarget(null);
-                    }}
-                    className="inline-flex items-center justify-center rounded border px-3 py-1.5 text-sm hover:bg-accent/30"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void saveStageEdit();
-                    }}
-                    className="inline-flex items-center justify-center rounded border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
-                  >
-                    Save
                   </button>
                 </div>
               </div>
