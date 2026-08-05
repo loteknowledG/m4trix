@@ -14,9 +14,9 @@ import {
 import { cn } from '@/lib/utils';
 import {
   AVATAR_CROP_WORKSPACE,
-  avatarCropPreviewStyle,
   clampCropZoom,
 } from '@/app/(site)/characters/avatar-crop-math';
+import { AvatarCropWorkspaceView } from '@/components/avatar-crop-portrait';
 
 type Crop = { x: number; y: number; zoom: number };
 
@@ -171,13 +171,12 @@ export function AvatarCropDialog({
             }}
           >
             {croppingImage ? (
-              <img
+              <AvatarCropWorkspaceView
                 src={croppingImage}
-                alt=""
-                draggable={false}
-                aria-label="Crop preview"
-                className="pointer-events-none absolute inset-0 h-full w-full max-w-none object-contain"
-                style={avatarCropPreviewStyle(crop, workspacePx)}
+                crop={crop}
+                displayPx={workspacePx}
+                animated={isGif}
+                className="pointer-events-none absolute inset-0"
               />
             ) : null}
 
