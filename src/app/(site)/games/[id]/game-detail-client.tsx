@@ -221,6 +221,13 @@ function isSceneRoundComplete(
   return sceneSpokeRef.current.protagonist && sceneSpokeRef.current.antagonist;
 }
 
+function connectionModelLabel(model: string | null | undefined): string {
+  if (!model?.trim()) return "No model selected";
+  const trimmed = model.trim();
+  const parts = trimmed.split(/[/\\]/);
+  return parts[parts.length - 1] || trimmed;
+}
+
 function buildGameOverlayLines(params: {
   conversations: Record<GameCharacterSlot, CustomChatMessage[]>;
   layouts: GameDialogLayouts;
@@ -2687,7 +2694,7 @@ export default function GamePage() {
               <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-2 p-4 pl-64">
                 <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] min-w-0 items-center rounded-full border border-white/20 bg-black/45 px-3 py-1 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
                   <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.85)]" />
-                  <span className="truncate">{title}</span>
+                  <span className="truncate">{connectionModelLabel(connectionModel)}</span>
                 </div>
                 <div className="pointer-events-auto">
                   <ConnectionSheet
