@@ -6,17 +6,6 @@ export const LMSTUDIO_HEALTH_API_PATH = '/api/lmstudio/health/';
 export const LMSTUDIO_HEALTH_TIMEOUT_MS = 12000;
 export const LMSTUDIO_CHAT_TIMEOUT_MS = 180000;
 
-export function getLmstudioHttpsPageHint(pageOrigin?: string): string {
-  const origin = pageOrigin || (typeof window !== 'undefined' ? window.location.origin : 'this HTTPS page');
-    return (
-    `Browsers block ${origin} from calling http:// LM Studio on your LAN (mixed content). ` +
-    `Use pnpm dev at http://localhost:3000 on the same network, or an https:// tunnel to LM Studio.`
-  );
-}
-
-/** @deprecated use getLmstudioHttpsPageHint() — kept for older call sites */
-export const LMSTUDIO_SECURE_CONTEXT_HINT = getLmstudioHttpsPageHint('https://m4trix.vercel.app');
-
 export function normalizeLmstudioUrl(input: string | null | undefined): string {
   const value = (input ?? '').trim();
   if (!value) return DEFAULT_LMSTUDIO_URL;
@@ -81,25 +70,6 @@ export function getLmstudioModelsUrl(input: string | null | undefined): string {
 
 export function getLmstudioHealthApiUrl(input: string | null | undefined): string {
   return `${LMSTUDIO_HEALTH_API_PATH}?lmstudio_url=${encodeURIComponent(normalizeLmstudioUrl(input))}`;
-}
-
-/**
- * HTTPS pages cannot call http:// LM Studio (mixed content).
- * http://localhost is a "secure context" but is NOT https — LAN HTTP works there.
- */
-export function getLmstudioBrowserReachabilityError(
-  input: string | null | undefined,
-): string | null {
-  if (typeof window === 'undefined') return null;
-  if (window.location.protocol !== 'https:') return null;
-
-  try {
-    const url = new URL(normalizeLmstudioUrl(input));
-    if (url.protocol !== 'http:') return null;
-    return getLmstudioHttpsPageHint(window.location.origin);
-  } catch {
-    return null;
-  }
 }
 
 export type LmstudioModelOption = { id: string; label: string };
@@ -255,49 +225,30 @@ function formatLmstudioHealthFailure(
   baseUrl: string,
   browserError: string | undefined,
   proxyError: string | undefined,
-  mixedContentHint: string | null,
 ): string {
-  if (mixedContentHint && !proxyError) return mixedContentHint;
-
   const parts: string[] = [];
-  if (proxyError) parts.push(`Proxy: ${proxyError}`);
   if (browserError) parts.push(`Browser: ${browserError}`);
-  if (mixedContentHint) parts.push(mixedContentHint);
+  if (proxyError) parts.push(`Proxy: ${proxyError}`);
 
   const detail = parts.length ? parts.join('. ') : `Cannot reach LM Studio at ${baseUrl}`;
   return `${detail}. Use the base URL only (e.g. http://192.168.12.48:1234), not /v1/models.`;
 }
 
 /**
- * Probe LM Studio health. Local dev / Electron prefers the Next.js proxy first
- * (Node can reach LAN; browser fetch often fails Private Network Access).
- * HTTPS deploys try browser first for tunnel URLs; Vercel cannot reach LAN.
+ * Probe LM Studio health. Browser calls LM Studio directly (LM Studio CORS).
+ * Local dev may also use the Next.js proxy when Node can reach the host.
  */
 export async function probeLmstudioHealth(
   input: string | null | undefined,
 ): Promise<LmstudioHealthResult> {
   const baseUrl = normalizeLmstudioUrl(input);
   const modelsUrl = getLmstudioModelsUrl(baseUrl);
-  const mixedContentHint = getLmstudioBrowserReachabilityError(baseUrl);
   const preferProxy = shouldPreferLmstudioProxy(baseUrl);
-
-  if (mixedContentHint && !canUseLmstudioServerProxy()) {
-    return {
-      ok: false,
-      baseUrl,
-      modelsUrl,
-      modelCount: 0,
-      models: [],
-      via: 'browser',
-      error: mixedContentHint,
-    };
-  }
 
   let browserResult: LmstudioHealthResult | undefined;
   let proxyResult: LmstudioHealthResult | undefined;
 
   const tryBrowser = async () => {
-    if (mixedContentHint) return;
     browserResult = await probeLmstudioViaBrowser(baseUrl, modelsUrl);
     if (browserResult.ok) return browserResult;
     return undefined;
@@ -333,7 +284,6 @@ export async function probeLmstudioHealth(
       baseUrl,
       browserResult?.error,
       proxyResult?.error,
-      mixedContentHint,
     ),
   };
 }
@@ -463,14 +413,6 @@ export async function fetchAgentsWithLmstudioBrowserProxy(
   if (!data?.clientProxy || typeof data.url !== 'string') {
     return new Response(JSON.stringify(data), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const blocked = getLmstudioBrowserReachabilityError(data.url);
-  if (blocked) {
-    return new Response(JSON.stringify({ error: blocked }), {
-      status: 502,
       headers: { 'Content-Type': 'application/json' },
     });
   }

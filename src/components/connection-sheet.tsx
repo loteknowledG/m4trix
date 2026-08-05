@@ -25,7 +25,6 @@ import {
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_LMSTUDIO_URL,
-  getLmstudioBrowserReachabilityError,
   normalizeLmstudioUrl,
   probeLmstudioHealth,
   type LmstudioModelOption,
@@ -347,10 +346,6 @@ export function ConnectionSheet({ side = 'top', triggerClassName }: ConnectionSh
       setIsConnecting(true);
       try {
         const normalizedLmstudioUrl = normalizeLmstudioUrl(lmstudioUrl || DEFAULT_LMSTUDIO_URL);
-        const blocked = getLmstudioBrowserReachabilityError(normalizedLmstudioUrl);
-        if (blocked) {
-          throw new Error(blocked);
-        }
         const options = await fetchLmstudioModels(normalizedLmstudioUrl);
         if (!options.length) {
           throw new Error('LM Studio returned no models');
