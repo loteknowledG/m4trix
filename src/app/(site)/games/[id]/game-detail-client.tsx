@@ -64,8 +64,8 @@ import {
 } from "@/lib/character-tts-profile";
 import {
   buildCharacterReplyPrompt,
+  normalizeCharacterDialogue,
   normalizeProtagonistDialogue,
-  PROTAGONIST_DIALOGUE_MAX_CHARS,
 } from "@/lib/game/dialogue-limits";
 import {
   buildSceneSummary,
@@ -398,11 +398,7 @@ export default function GamePage() {
 
   const chatInput = characterInputs[activeCharacter] || '';
   const setChatInput = (value: string) => {
-    const trimmedValue =
-      activeCharacter === 'protagonist'
-        ? value.slice(0, PROTAGONIST_DIALOGUE_MAX_CHARS)
-        : value;
-    setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: trimmedValue }));
+    setCharacterInputs((prev) => ({ ...prev, [activeCharacter]: value }));
   };
 
   const [connected, setConnected] = useState(false);
@@ -1848,7 +1844,7 @@ export default function GamePage() {
               name: currentResponderName,
               description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
             },
-            maxTokens: 100,
+            maxTokens: 150,
           };
           if (lmstudioSelected) {
             requestBody.lmstudioUrl = lmstudioUrl;
@@ -1879,17 +1875,22 @@ export default function GamePage() {
             }
 
             if (reply) {
+              const spokenReply =
+                currentResponder === "protagonist"
+                  ? normalizeProtagonistDialogue(reply)
+                  : normalizeCharacterDialogue(reply);
+              if (!spokenReply) continue;
               markSceneRoundSpeaker(
                 sceneLinesRef,
                 sceneSpokeRef,
                 currentResponder,
                 currentResponderName,
-                reply,
+                spokenReply,
               );
               const aiResponse: CustomChatMessage = {
                 id: `agent-${Date.now()}-${currentResponder}`,
                 from: 'agent',
-                text: reply,
+                text: spokenReply,
                 ttsVoice: ttsVoiceForGameSlot(currentResponder, assignedPlayer, assignedNpc),
               };
 
@@ -2717,9 +2718,6 @@ export default function GamePage() {
                 onInputChange={setChatInput}
                 onSend={sendChatMessage}
                 disabled={chatInFlight || nextMomentReady}
-                inputMaxLength={
-                  activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
-                }
               />
 
               {nextMomentReady ? (
@@ -2751,9 +2749,6 @@ export default function GamePage() {
                 dialogStyle={activeDialogStyle}
                 onDialogStyleChange={handleGameDialogStyleChange}
                 disabled={chatInFlight}
-                inputMaxLength={
-                  activeCharacter === "protagonist" ? PROTAGONIST_DIALOGUE_MAX_CHARS : undefined
-                }
                 playerMode={playerMode}
                 npcKnowsPlayer={npcKnowsPlayerEffective}
               />
