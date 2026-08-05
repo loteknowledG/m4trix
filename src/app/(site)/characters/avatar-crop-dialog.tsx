@@ -162,7 +162,7 @@ export function AvatarCropDialog({
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto bg-zinc-950 p-4">
           <div
             ref={workspaceRef}
-            className="relative aspect-square w-[min(92vmin,720px)] max-w-full shrink-0 cursor-move touch-none select-none overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900"
+            className="relative aspect-square w-[min(92vmin,720px)] max-w-full shrink-0 cursor-move touch-none select-none border border-zinc-800 bg-zinc-900"
             onPointerDown={startPan}
             onWheel={e => {
               e.preventDefault();
@@ -187,17 +187,26 @@ export function AvatarCropDialog({
               </div>
             </div>
 
-            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-              <div className="relative aspect-square w-[80%]">
-                <div className="absolute inset-0 rounded-full border-2 border-white/50 shadow-[0_0_0_100vmax_rgba(0,0,0,0.35)]" />
-                <button
-                  type="button"
-                  data-resize-handle
-                  aria-label="Drag to resize portrait"
-                  title="Drag to resize"
-                  className="pointer-events-auto absolute right-0 top-1/2 z-30 h-6 w-6 -translate-y-1/2 translate-x-1/2 cursor-ew-resize rounded-full border-2 border-white bg-cyan-500 shadow-lg touch-none hover:bg-cyan-400 active:scale-110"
-                  onPointerDown={startResize}
-                />
+            <div className="pointer-events-none absolute inset-0 z-20">
+              <div
+                className="absolute inset-0 bg-black/35"
+                style={{
+                  maskImage: 'radial-gradient(circle at center, transparent 40%, black 40%)',
+                  WebkitMaskImage: 'radial-gradient(circle at center, transparent 40%, black 40%)',
+                }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="relative aspect-square w-[80%]">
+                  <div className="absolute inset-0 rounded-full border-2 border-white/50" />
+                  <button
+                    type="button"
+                    data-resize-handle
+                    aria-label="Drag to resize portrait"
+                    title="Drag to resize"
+                    className="pointer-events-auto absolute right-0 top-1/2 z-30 h-6 w-6 -translate-y-1/2 translate-x-1/2 cursor-ew-resize rounded-full border-2 border-white bg-cyan-500 shadow-lg touch-none hover:bg-cyan-400 active:scale-110"
+                    onPointerDown={startResize}
+                  />
+                </div>
               </div>
             </div>
           </div>
