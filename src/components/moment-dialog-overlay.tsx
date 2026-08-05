@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { FaCog } from 'react-icons/fa';
 import { VideoCueTextEffectView } from '@/components/text/video-cue-text-effect-view';
 import {
   resolveMomentDialogLineStyle,
@@ -38,6 +39,7 @@ type MomentDialogOverlayProps = {
   onLayoutChange?: (lineId: string, patch: MomentDialogLayoutPatch) => void;
   /** Game dialog bubbles: half the min height of a square at the same width; height grows with content. */
   gameDialog?: boolean;
+  onOpenEditor?: () => void;
 };
 
 type LineLayout = {
@@ -69,6 +71,7 @@ function MomentDialogBubble({
   stageRef,
   onLayoutChange,
   onSelect,
+  onOpenEditor,
   gameDialog = false,
 }: {
   line: MomentDialogOverlayLine;
@@ -80,6 +83,7 @@ function MomentDialogBubble({
   stageRef?: RefObject<HTMLElement | null>;
   onLayoutChange?: (patch: MomentDialogLayoutPatch) => void;
   onSelect?: () => void;
+  onOpenEditor?: () => void;
   gameDialog?: boolean;
 }) {
   const style = resolveMomentDialogLineStyle(line);
@@ -198,6 +202,17 @@ function MomentDialogBubble({
         ? '#7dd3fc'
         : '#a3e635');
   const showSpeakerLabel = !isNarratorDialogLine(line, speakerName);
+  const hasDialogText = line.text.trim().length > 0;
+  const showEditorGear = editable && gameDialog && !hasDialogText && onOpenEditor != null;
+
+  const onOpenEditorClick = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenEditor?.();
+    },
+    [onOpenEditor],
+  );
 
   const onSelectBubble = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -272,17 +287,31 @@ function MomentDialogBubble({
               textShadow: buildCueTextShadow(style.shadowColor),
             }}
           >
-            <VideoCueTextEffectView
-              text={line.text}
-              effects={style.textEffects}
-              color={style.color}
-              shadowColor={style.shadowColor}
-              lineKey={line.id}
-              replayKey={
-                momentId ? `${momentId}-${line.id}-${loopEpoch}` : `${line.id}-${loopEpoch}`
-              }
-              className="text-inherit"
-            />
+            {showEditorGear ? (
+              <button
+                type="button"
+                onPointerDown={onOpenEditorClick}
+                onClick={onOpenEditorClick}
+                className="pointer-events-auto inline-flex items-center justify-center rounded-md p-1 opacity-80 transition-opacity hover:bg-black/20 hover:opacity-100"
+                aria-label="Open dialog editor"
+                title="Open dialog editor"
+                style={{ color: style.color }}
+              >
+                <FaCog className="h-[1.1em] w-[1.1em]" aria-hidden />
+              </button>
+            ) : (
+              <VideoCueTextEffectView
+                text={line.text}
+                effects={style.textEffects}
+                color={style.color}
+                shadowColor={style.shadowColor}
+                lineKey={line.id}
+                replayKey={
+                  momentId ? `${momentId}-${line.id}-${loopEpoch}` : `${line.id}-${loopEpoch}`
+                }
+                className="text-inherit"
+              />
+            )}
           </div>
         </div>
         {editable ? (
@@ -309,6 +338,7 @@ export function MomentDialogOverlay({
   stageRef: externalStageRef,
   onLayoutChange,
   gameDialog = false,
+  onOpenEditor,
 }: MomentDialogOverlayProps) {
   const internalStageRef = useRef<HTMLDivElement>(null);
   const layoutStageRef = externalStageRef ?? internalStageRef;
@@ -317,6 +347,8 @@ export function MomentDialogOverlay({
   onLayoutChangeRef.current = onLayoutChange;
   const onEditLineIdChangeRef = useRef(onEditLineIdChange);
   onEditLineIdChangeRef.current = onEditLineIdChange;
+  const onOpenEditorRef = useRef(onOpenEditor);
+  onOpenEditorRef.current = onOpenEditor;
   const gameDialogSelectable = gameDialog && onEditLineIdChange != null;
 
   const handleLayoutChange = useCallback((lineId: string, patch: MomentDialogLayoutPatch) => {
@@ -387,6 +419,7 @@ export function MomentDialogOverlay({
           editable
           stageRef={layoutStageRef}
           onLayoutChange={(patch) => handleLayoutChange(editingLine.id, patch)}
+          onOpenEditor={() => onOpenEditorRef.current?.()}
           gameDialog={gameDialog}
         />
       ) : null}

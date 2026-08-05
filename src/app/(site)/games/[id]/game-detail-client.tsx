@@ -2367,6 +2367,7 @@ export default function GamePage() {
                 onEditLineIdChange={handleGameDialogFocusChange}
                 stageRef={stageRef}
                 onLayoutChange={handleGameDialogLayoutChange}
+                onOpenEditor={() => handleDialogComposerOpenChange(true)}
                 gameDialog
               />
 
