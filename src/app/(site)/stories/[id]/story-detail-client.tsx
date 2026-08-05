@@ -53,6 +53,9 @@ import {
 } from "@/lib/game/story-arc";
 import { getStagePalette } from "@/lib/game/story-arc-palettes";
 import {
+  autoBackupStoryMomentsBeforeNormalization,
+} from "@/lib/story-moment-backup";
+import {
   dedupeStoryMomentsBySrc,
   filterStoryMomentItems,
   loadStoryMomentsFromStorage,
@@ -283,9 +286,17 @@ export default function StoryPage() {
         const stored = (await get<any>(`story:${id}`)) || null;
         if (!mounted) return;
 
-        const { moments: loadedMoments, rawItems, usedRecovery } =
+        const { moments: loadedMoments, rawItems, usedRecovery, needsAutoBackup } =
           loadStoryMomentsFromStorage(stored);
         setMoments(loadedMoments);
+
+        if (needsAutoBackup) {
+          await autoBackupStoryMomentsBeforeNormalization(
+            id,
+            stored,
+            usedRecovery ? "recovery" : "normalization",
+          );
+        }
 
         const shouldPersistLoadedMoments =
           loadedMoments.length > 0 &&

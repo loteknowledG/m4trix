@@ -13,6 +13,10 @@ import {
   readStoryMomentItems,
   type StoryMomentRecord,
 } from '@/lib/story-moments';
+import {
+  autoBackupStoryMomentsBeforeNormalization,
+  shouldAutoBackupStoryMoments,
+} from '@/lib/story-moment-backup';
 import { getVideoThumbnail, VIDEO_PLACEHOLDER } from '@/lib/video-utils';
 
 import type { SqlValue } from './sqlite-kv';
@@ -634,6 +638,17 @@ export async function relationalSet(
 
   if (key.startsWith('story:')) {
     const storyId = key.slice('story:'.length);
+    const rawItems = readStoryMomentItems(value);
+    const normalizedCount = normalizeStoryMomentList(rawItems).length;
+    if (
+      shouldAutoBackupStoryMoments(
+        rawItems,
+        normalizedCount,
+        normalizedCount === 0 && rawItems.length > 0,
+      )
+    ) {
+      await autoBackupStoryMomentsBeforeNormalization(storyId, value, 'relational-set');
+    }
     const { moments, extras } = parseStoryPayload(value);
     const externalizedMoments = await externalizeStoryMoments(moments);
     const externalizedExtras = await externalizeMediaInValue(extras);

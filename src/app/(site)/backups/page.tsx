@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { get, set, clear, keys } from 'idb-keyval';
 import {
   Breadcrumb,
@@ -10,6 +10,11 @@ import {
 import JsonTree from '@/components/ui/json-tree';
 import { logger } from '@/lib/logger';
 import { materializeMomentList } from '@/lib/moments';
+import {
+  listAllStoryMomentAutoBackups,
+  restoreStoryMomentAutoBackup,
+  type StoryMomentAutoBackupEntry,
+} from '@/lib/story-moment-backup';
 
 type StoryBackupRecord = {
   id: string;
@@ -96,7 +101,61 @@ export default function BackupsPage() {
   const [exportedText, setExportedText] = useState<string | null>(null);
   const [exportedObj, setExportedObj] = useState<any | null>(null);
   const [importedText, setImportedText] = useState<string | null>(null);
+  const [autoBackups, setAutoBackups] = useState<
+    Array<{ storyId: string; storyTitle: string; backups: StoryMomentAutoBackupEntry[] }>
+  >([]);
   const MAX_EXPORT_BYTES = 5 * 1024 * 1024; // 5 MB
+
+  const refreshAutoBackups = useCallback(async () => {
+    try {
+      const [entries, stories] = await Promise.all([
+        listAllStoryMomentAutoBackups(),
+        get<Array<{ id: string; title?: string }>>('stories'),
+      ]);
+      const titleById = new Map(
+        (Array.isArray(stories) ? stories : []).map((story) => [story.id, story.title ?? story.id]),
+      );
+      setAutoBackups(
+        entries.map((entry) => ({
+          storyId: entry.storyId,
+          storyTitle: titleById.get(entry.storyId) ?? entry.storyId,
+          backups: entry.backups,
+        })),
+      );
+    } catch (error) {
+      logger.warn('Failed to load auto-backups', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshAutoBackups();
+  }, [refreshAutoBackups]);
+
+  const handleRestoreAutoBackup = useCallback(
+    async (storyId: string, backupId: string, rawItemCount: number) => {
+      const ok = window.confirm(
+        `Restore this auto-backup (${rawItemCount} moments) to the story?\n\nCurrent story data will be replaced.`,
+      );
+      if (!ok) return;
+
+      try {
+        const restored = await restoreStoryMomentAutoBackup(storyId, backupId);
+        if (!restored) {
+          setMessage('Auto-backup restore failed');
+          setTimeout(() => setMessage(null), 4000);
+          return;
+        }
+        await refreshAutoBackups();
+        setMessage('Story restored from auto-backup');
+        setTimeout(() => setMessage(null), 4000);
+      } catch (error) {
+        logger.error(error);
+        setMessage('Auto-backup restore failed');
+        setTimeout(() => setMessage(null), 4000);
+      }
+    },
+    [refreshAutoBackups],
+  );
 
   const handleExport = useCallback(async () => {
     let previewSummary: any = null;
@@ -644,6 +703,46 @@ export default function BackupsPage() {
             {renderPreview(importedText, 'No import yet')}
           </div>
         </div>
+      </div>
+      <div className="mt-8 rounded border border-slate-700 p-4">
+        <h3 className="font-semibold mb-2">Auto-backups</h3>
+        <p className="text-sm text-slate-500 mb-3">
+          m4trix saves a snapshot of story moment data before normalization when it might drop
+          items. Up to 10 snapshots are kept per story.
+        </p>
+        {autoBackups.length === 0 ? (
+          <p className="text-sm text-slate-400">No auto-backups yet.</p>
+        ) : (
+          <ul className="space-y-4">
+            {autoBackups.map((entry) => (
+              <li key={entry.storyId} className="rounded border border-slate-800 p-3">
+                <div className="font-medium mb-2">{entry.storyTitle}</div>
+                <ul className="space-y-2">
+                  {entry.backups.map((backup) => (
+                    <li
+                      key={backup.id}
+                      className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                    >
+                      <span className="text-slate-400">
+                        {new Date(backup.createdAt).toLocaleString()} · {backup.rawItemCount}{' '}
+                        moments · {backup.reason}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRestoreAutoBackup(entry.storyId, backup.id, backup.rawItemCount)
+                        }
+                        className="px-3 py-1 rounded border border-slate-600 hover:bg-slate-800"
+                      >
+                        Restore
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="mt-8 rounded border border-amber-500/40 bg-amber-500/5 p-4">
         <h3 className="font-semibold mb-2">Repair corrupted local data</h3>

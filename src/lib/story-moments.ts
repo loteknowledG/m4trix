@@ -165,15 +165,28 @@ export function loadStoryMomentsFromStorage(stored: unknown): {
   moments: StoryMomentRecord[];
   rawItems: unknown[];
   usedRecovery: boolean;
+  needsAutoBackup: boolean;
 } {
   const rawItems = readStoryMomentItems(stored);
   const normalized = normalizeStoryMomentList(rawItems);
   if (normalized.length > 0 || rawItems.length === 0) {
-    return { moments: normalized, rawItems, usedRecovery: false };
+    return {
+      moments: normalized,
+      rawItems,
+      usedRecovery: false,
+      needsAutoBackup:
+        rawItems.length > 0 &&
+        (normalized.length === 0 || normalized.length < rawItems.length),
+    };
   }
 
   const recovered = recoverStoryMomentList(rawItems);
-  return { moments: recovered, rawItems, usedRecovery: recovered.length > 0 };
+  return {
+    moments: recovered,
+    rawItems,
+    usedRecovery: recovered.length > 0,
+    needsAutoBackup: rawItems.length > 0,
+  };
 }
 
 /** Stable key for deduping moments that reference the same underlying media. */
