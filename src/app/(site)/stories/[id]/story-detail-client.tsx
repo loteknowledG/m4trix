@@ -72,6 +72,29 @@ import { cn } from "@/lib/utils";
 import { characterDetailHref } from "@/lib/character-routes";
 
 const MOMENT_REORDER_MIME = "application/x-m4trix-moment-reorder";
+const MOMENT_ID_MIME = "application/x-m4trix-moment-id";
+
+type ExternalDropTarget = {
+  stageNumber?: number;
+  localInsertIdx?: number;
+};
+
+function reorderStageMomentIds(ids: string[], from: number, to: number): string[] {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= ids.length ||
+    to >= ids.length
+  ) {
+    return [...ids];
+  }
+  const result = [...ids];
+  const [moved] = result.splice(from, 1);
+  const insertAt = from < to ? to - 1 : to;
+  result.splice(insertAt, 0, moved);
+  return result;
+}
 
 type StageEditForm = {
   name: string;
@@ -397,12 +420,18 @@ export default function StoryPage() {
     return () => window.removeEventListener("story-action", handler as EventListener);
   }, [selectedIds, moments, id, clearSelection, scope, saveStoryItems]);
 
-  const onDragStart = useCallback((e: React.DragEvent, idx: number) => {
+  const onMomentDragStart = useCallback((gridMoments: Moment[], e: React.DragEvent, localIdx: number) => {
     reorderDropHandledRef.current = false;
-    dragIndexRef.current = idx;
+    dragIndexRef.current = localIdx;
+    const moment = gridMoments[localIdx];
     try {
-      e.dataTransfer.setData(MOMENT_REORDER_MIME, String(idx));
-      e.dataTransfer.setData("text/plain", String(idx));
+      e.dataTransfer.setData(MOMENT_REORDER_MIME, String(localIdx));
+      if (moment?.id) {
+        e.dataTransfer.setData(MOMENT_ID_MIME, moment.id);
+        e.dataTransfer.setData("text/plain", moment.id);
+      } else {
+        e.dataTransfer.setData("text/plain", String(localIdx));
+      }
       e.dataTransfer.effectAllowed = "move";
     } catch (err) {
       /* ignore */
@@ -434,16 +463,14 @@ export default function StoryPage() {
     e.preventDefault();
     setDragOverIndex(idx);
     try {
-      e.dataTransfer.dropEffect = "move";
+      e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
     } catch (err) {
       /* ignore */
     }
 
-    // Only auto-scroll when a drag is active (dragIndexRef is set).
     if (dragIndexRef.current === null) return;
 
-    // auto-scroll when pointer nears top/bottom of viewport
-    const margin = 80; // px from edge to start scrolling
+    const margin = 80;
     const y = e.clientY;
     const vh = window.innerHeight;
     if (y < margin) {
@@ -457,112 +484,6 @@ export default function StoryPage() {
       stopAutoScroll();
     }
   }, []);
-
-  const onDrop = useCallback(
-    async (e: React.DragEvent, idx: number) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (reorderDropHandledRef.current) return;
-
-      const fromStr = (() => {
-        try {
-          return (
-            e.dataTransfer.getData(MOMENT_REORDER_MIME) ||
-            e.dataTransfer.getData("text/plain")
-          );
-        } catch (err) {
-          return String(dragIndexRef.current ?? "");
-        }
-      })();
-      const from = fromStr ? Number(fromStr) : null;
-      const to = idx;
-      setDragOverIndex(null);
-      stopAutoScroll();
-      if (from === null || Number.isNaN(from) || from === to) {
-        dragIndexRef.current = null;
-        return;
-      }
-
-      reorderDropHandledRef.current = true;
-      dragIndexRef.current = null;
-
-      let next: Moment[] = [];
-      setMoments((prev) => {
-        next = dedupeStoryMomentsBySrc(reorderStoryMoments(prev, from, to));
-        return next;
-      });
-
-      try {
-        await saveStoryItems(next);
-        try {
-          window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
-        } catch (e) {
-          /* ignore */
-        }
-      } catch (err) {
-        logger.error("Failed to persist reordered story", err);
-      }
-    },
-    [id, saveStoryItems],
-  );
-
-  const handleExternalDrop = useCallback(
-    async (e: React.DragEvent, insertAtIdx?: number) => {
-      e.preventDefault();
-
-      const transferTypes = Array.from(e.dataTransfer.types);
-      const isInternalReorder =
-        reorderDropHandledRef.current ||
-        dragIndexRef.current !== null ||
-        transferTypes.includes(MOMENT_REORDER_MIME);
-      if (isInternalReorder) return;
-
-      const addSrc = async (src: string, fingerprint?: string, insertAt?: number) => {
-        setMoments((ms) => {
-          if (storyMomentSrcExists(ms, src, fingerprint)) {
-            setStoryCount(ms.length).catch(() => {});
-            return ms;
-          }
-
-          const newMoment: Moment = { id: crypto.randomUUID(), src, fingerprint };
-          let updated: Moment[];
-          if (insertAt !== undefined && insertAt >= 0 && insertAt <= ms.length) {
-            updated = [...ms.slice(0, insertAt), newMoment, ...ms.slice(insertAt)];
-          } else {
-            updated = dedupeStoryMomentsBySrc([...ms, newMoment]);
-          }
-          saveStoryItems(updated).catch(() => {});
-          setStoryCount(updated.length).catch(() => {});
-          return updated;
-        });
-      };
-
-      if (e.dataTransfer.files && e.dataTransfer.files.length) {
-        for (const file of Array.from(e.dataTransfer.files)) {
-          if (isMomentMediaFile(file)) {
-            const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
-            const dataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(reader.error);
-              reader.readAsDataURL(file);
-            });
-            await addSrc(dataUrl, fingerprint, insertAtIdx);
-          }
-        }
-        return;
-      }
-      const text = e.dataTransfer.getData("text/plain");
-      if (text) {
-        if (/^\d+$/.test(text.trim())) return;
-        const durable = isEphemeralMomentSrc(text) ? await materializeMomentSrc(text) : text;
-        const finalSrc = durable || text;
-        const normalized = momentSrcDedupeKey(finalSrc);
-        await addSrc(finalSrc, normalized || undefined, insertAtIdx);
-      }
-    },
-    [id, saveStoryItems],
-  );
 
   function startAutoScroll() {
     if (scrollAnimRef.current) return;
@@ -915,6 +836,251 @@ export default function StoryPage() {
       }
     },
     [id, saveStoryMetadata],
+  );
+
+  const insertMomentIntoStage = useCallback(
+    async (momentId: string, stageNumber: number, localInsertIdx?: number) => {
+      const next: StagedMomentsByStage = { ...stagedMomentsByStage };
+      for (const rawKey of Object.keys(next)) {
+        const key = Number(rawKey);
+        const filtered = next[key].filter((id) => id !== momentId);
+        if (filtered.length > 0) next[key] = filtered;
+        else delete next[key];
+      }
+      const stageIds = [...(next[stageNumber] || [])];
+      const insertAt =
+        localInsertIdx == null
+          ? stageIds.length
+          : Math.max(0, Math.min(localInsertIdx, stageIds.length));
+      stageIds.splice(insertAt, 0, momentId);
+      next[stageNumber] = stageIds;
+      await saveStagedMoments(next);
+    },
+    [saveStagedMoments, stagedMomentsByStage],
+  );
+
+  const removeMomentFromAllStages = useCallback(
+    async (momentId: string) => {
+      const next: StagedMomentsByStage = { ...stagedMomentsByStage };
+      let changed = false;
+      for (const rawKey of Object.keys(next)) {
+        const key = Number(rawKey);
+        const filtered = next[key].filter((id) => id !== momentId);
+        if (filtered.length !== next[key].length) changed = true;
+        if (filtered.length > 0) next[key] = filtered;
+        else delete next[key];
+      }
+      if (changed) await saveStagedMoments(next);
+    },
+    [saveStagedMoments, stagedMomentsByStage],
+  );
+
+  const parseExternalDropTarget = (target?: number | ExternalDropTarget): ExternalDropTarget => {
+    if (typeof target === "number") return { localInsertIdx: target };
+    return target ?? {};
+  };
+
+  const handleExternalDrop = useCallback(
+    async (e: React.DragEvent, target?: number | ExternalDropTarget) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const options = parseExternalDropTarget(target);
+      const hasFiles = Boolean(e.dataTransfer.files?.length);
+
+      if (!hasFiles) {
+        const transferTypes = Array.from(e.dataTransfer.types);
+        if (
+          reorderDropHandledRef.current ||
+          transferTypes.includes(MOMENT_REORDER_MIME) ||
+          transferTypes.includes(MOMENT_ID_MIME)
+        ) {
+          return;
+        }
+      }
+
+      const addMoment = async (src: string, fingerprint?: string): Promise<string | null> => {
+        let addedId: string | null = null;
+        setMoments((ms) => {
+          if (storyMomentSrcExists(ms, src, fingerprint)) {
+            const existing = ms.find(
+              (moment) =>
+                (fingerprint && moment.fingerprint === fingerprint) ||
+                momentSrcDedupeKey(moment.src) === momentSrcDedupeKey(src),
+            );
+            addedId = existing?.id ?? null;
+            setStoryCount(ms.length).catch(() => {});
+            return ms;
+          }
+
+          const newMoment: Moment = { id: crypto.randomUUID(), src, fingerprint };
+          addedId = newMoment.id;
+          const updated = dedupeStoryMomentsBySrc([...ms, newMoment]);
+          saveStoryItems(updated).catch(() => {});
+          setStoryCount(updated.length).catch(() => {});
+          return updated;
+        });
+
+        if (addedId && options.stageNumber != null) {
+          await insertMomentIntoStage(addedId, options.stageNumber, options.localInsertIdx);
+        }
+        return addedId;
+      };
+
+      if (hasFiles) {
+        reorderDropHandledRef.current = false;
+        dragIndexRef.current = null;
+        for (const file of Array.from(e.dataTransfer.files)) {
+          if (!isMomentMediaFile(file)) continue;
+          const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+          await addMoment(dataUrl, fingerprint);
+        }
+        setDragOverIndex(null);
+        stopAutoScroll();
+        return;
+      }
+
+      const text = e.dataTransfer.getData("text/plain");
+      if (text && !/^\d+$/.test(text.trim())) {
+        const durable = isEphemeralMomentSrc(text) ? await materializeMomentSrc(text) : text;
+        const finalSrc = durable || text;
+        const normalized = momentSrcDedupeKey(finalSrc);
+        await addMoment(finalSrc, normalized || undefined);
+      }
+    },
+    [insertMomentIntoStage, saveStoryItems],
+  );
+
+  const onStageDrop = useCallback(
+    async (stageNumber: number, stageMoments: Moment[], e: React.DragEvent, localIdx: number) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (reorderDropHandledRef.current) return;
+
+      if (e.dataTransfer.files?.length) {
+        await handleExternalDrop(e, { stageNumber, localInsertIdx: localIdx });
+        return;
+      }
+
+      let momentId = "";
+      try {
+        momentId =
+          e.dataTransfer.getData(MOMENT_ID_MIME) || e.dataTransfer.getData("text/plain");
+      } catch (err) {
+        momentId = "";
+      }
+
+      if (momentId && !/^\d+$/.test(momentId.trim())) {
+        reorderDropHandledRef.current = true;
+        dragIndexRef.current = null;
+        setDragOverIndex(null);
+        stopAutoScroll();
+        await insertMomentIntoStage(momentId, stageNumber, localIdx);
+        return;
+      }
+
+      let fromStr = "";
+      try {
+        fromStr = e.dataTransfer.getData(MOMENT_REORDER_MIME);
+      } catch (err) {
+        fromStr = String(dragIndexRef.current ?? "");
+      }
+      const from = fromStr ? Number(fromStr) : null;
+      setDragOverIndex(null);
+      stopAutoScroll();
+      if (from === null || Number.isNaN(from) || from === localIdx) {
+        dragIndexRef.current = null;
+        return;
+      }
+
+      reorderDropHandledRef.current = true;
+      dragIndexRef.current = null;
+
+      const ids = stagedMomentsByStage[stageNumber] || [];
+      const reordered = reorderStageMomentIds(ids, from, localIdx);
+      await saveStagedMoments({ ...stagedMomentsByStage, [stageNumber]: reordered });
+    },
+    [handleExternalDrop, insertMomentIntoStage, saveStagedMoments, stagedMomentsByStage],
+  );
+
+  const onUnstagedDrop = useCallback(
+    async (unstaged: Moment[], e: React.DragEvent, localIdx: number) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (reorderDropHandledRef.current) return;
+
+      if (e.dataTransfer.files?.length) {
+        await handleExternalDrop(e, { localInsertIdx: localIdx });
+        return;
+      }
+
+      let momentId = "";
+      try {
+        momentId =
+          e.dataTransfer.getData(MOMENT_ID_MIME) || e.dataTransfer.getData("text/plain");
+      } catch (err) {
+        momentId = "";
+      }
+
+      if (momentId && !/^\d+$/.test(momentId.trim())) {
+        reorderDropHandledRef.current = true;
+        dragIndexRef.current = null;
+        setDragOverIndex(null);
+        stopAutoScroll();
+        await removeMomentFromAllStages(momentId);
+        return;
+      }
+
+      let fromStr = "";
+      try {
+        fromStr = e.dataTransfer.getData(MOMENT_REORDER_MIME);
+      } catch (err) {
+        fromStr = String(dragIndexRef.current ?? "");
+      }
+      const from = fromStr ? Number(fromStr) : null;
+      setDragOverIndex(null);
+      stopAutoScroll();
+      if (from === null || Number.isNaN(from) || from === localIdx) {
+        dragIndexRef.current = null;
+        return;
+      }
+
+      reorderDropHandledRef.current = true;
+      dragIndexRef.current = null;
+
+      const fromMoment = unstaged[from];
+      const toMoment = unstaged[localIdx];
+      if (!fromMoment) return;
+      const globalFrom = moments.findIndex((moment) => moment.id === fromMoment.id);
+      const globalTo = toMoment
+        ? moments.findIndex((moment) => moment.id === toMoment.id)
+        : moments.length - 1;
+      if (globalFrom < 0 || globalTo < 0) return;
+
+      let next: Moment[] = [];
+      setMoments((prev) => {
+        next = dedupeStoryMomentsBySrc(reorderStoryMoments(prev, globalFrom, globalTo));
+        return next;
+      });
+
+      try {
+        await saveStoryItems(next);
+        try {
+          window.dispatchEvent(new CustomEvent("stories-updated", { detail: { id } }));
+        } catch (err) {
+          /* ignore */
+        }
+      } catch (err) {
+        logger.error("Failed to persist reordered story", err);
+      }
+    },
+    [handleExternalDrop, id, moments, removeMomentFromAllStages, saveStoryItems],
   );
 
   const assignSelectedToStage = useCallback(
@@ -1486,7 +1652,7 @@ export default function StoryPage() {
                               moments={stageMoments}
                               selectedIds={selectedIds}
                               toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                              onDragStart={onDragStart}
+                              onDragStart={(e, idx) => onMomentDragStart(stageMoments, e, idx)}
                               onDragEnd={(_idx: number) => {
                                 dragIndexRef.current = null;
                                 reorderDropHandledRef.current = false;
@@ -1494,8 +1660,12 @@ export default function StoryPage() {
                                 stopAutoScroll();
                               }}
                               onDragOver={onDragOver}
-                              onDrop={onDrop}
-                              onExternalDrop={handleExternalDrop}
+                              onDrop={(e, idx) => {
+                                void onStageDrop(stageNumber, stageMoments, e, idx);
+                              }}
+                              onExternalDrop={(e, idx) => {
+                                void handleExternalDrop(e, { stageNumber, localInsertIdx: idx });
+                              }}
                               dragOverIndex={dragOverIndex}
                             />
                           </div>
@@ -1505,7 +1675,7 @@ export default function StoryPage() {
                         moments={unstagedMoments}
                         selectedIds={selectedIds}
                         toggleSelect={(tid: string) => toggleSelect(scope, tid)}
-                        onDragStart={onDragStart}
+                        onDragStart={(e, idx) => onMomentDragStart(unstagedMoments, e, idx)}
                         onDragEnd={(_idx: number) => {
                           dragIndexRef.current = null;
                           reorderDropHandledRef.current = false;
@@ -1513,8 +1683,12 @@ export default function StoryPage() {
                           stopAutoScroll();
                         }}
                         onDragOver={onDragOver}
-                        onDrop={onDrop}
-                        onExternalDrop={handleExternalDrop}
+                        onDrop={(e, idx) => {
+                          void onUnstagedDrop(unstagedMoments, e, idx);
+                        }}
+                        onExternalDrop={(e, idx) => {
+                          void handleExternalDrop(e, { localInsertIdx: idx });
+                        }}
                         dragOverIndex={dragOverIndex}
                       />
                     </>

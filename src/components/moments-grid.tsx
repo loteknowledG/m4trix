@@ -75,17 +75,32 @@ export default function MomentsGrid({
     };
   }, []);
 
-  const handleExternalDrop = (e: React.DragEvent) => {
+  const handleItemDrop = (e: React.DragEvent, idx: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingExternal(false);
+
+    const hasFiles = Boolean(e.dataTransfer.files && e.dataTransfer.files.length > 0);
+    if (hasFiles && onExternalDrop) {
+      onExternalDrop(e, idx);
+      return;
+    }
+    if (onDrop) {
+      onDrop(e, idx);
+    }
+  };
+
+  const handleGridDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsDraggingExternal(false);
     if (!onExternalDrop) return;
-    e.stopPropagation();
 
     const target = e.target as HTMLElement;
     const itemEl = target.closest("[data-moment-idx]");
     if (itemEl) {
       const idx = parseInt(itemEl.getAttribute("data-moment-idx") || "0", 10);
-      if (!isNaN(idx)) {
+      if (!Number.isNaN(idx)) {
         onExternalDrop(e, idx);
         return;
       }
@@ -93,21 +108,57 @@ export default function MomentsGrid({
     onExternalDrop(e, undefined);
   };
 
-  if (!moments || moments.length === 0) return null;
+  const handleItemDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes("Files")) {
+      try {
+        e.dataTransfer.dropEffect = "copy";
+      } catch {
+        /* ignore */
+      }
+    }
+    onDragOver?.(e, idx);
+  };
+
+  const handleGridDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes("Files")) {
+      try {
+        e.dataTransfer.dropEffect = "copy";
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  if (!moments || moments.length === 0) {
+    if (!onExternalDrop) return null;
+    return (
+      <div
+        className="flex min-h-[160px] w-full items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 text-sm text-muted-foreground"
+        onDragOver={handleGridDragOver}
+        onDrop={handleGridDrop}
+      >
+        Drop moments here
+      </div>
+    );
+  }
 
   return (
     <>
       {isDraggingExternal && (
-        <div
-          className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center bg-cyan-950/70"
-          onDrop={handleExternalDrop}
-        >
+        <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center bg-cyan-950/70">
           <div className="rounded-xl bg-cyan-500 px-8 py-6 text-2xl font-bold text-white shadow-2xl ring-4 ring-cyan-400">
             Drop anywhere to add moment
           </div>
         </div>
       )}
-      <div className="relative w-full">
+      <div
+        className="relative w-full min-h-[120px]"
+        onDragOver={handleGridDragOver}
+        onDrop={handleGridDrop}
+      >
         <JustifiedMasonry
           items={moments}
           targetRowHeight={220}
@@ -123,24 +174,11 @@ export default function MomentsGrid({
                 data-moment-idx={idx}
                 onDragStart={onDragStart ? (e) => onDragStart(e, idx) : undefined}
                 onDragEnd={onDragEnd ? () => onDragEnd(idx) : undefined}
-                onDragOver={
-                  onDragOver
-                    ? (e) => {
-                        e.stopPropagation();
-                        onDragOver(e, idx);
-                      }
-                    : undefined
-                }
-                onDrop={
-                  onDrop
-                    ? (e) => {
-                        e.stopPropagation();
-                        onDrop(e, idx);
-                      }
-                    : undefined
-                }
+                onDragOver={onDragOver || onExternalDrop ? (e) => handleItemDragOver(e, idx) : undefined}
+                onDrop={onDrop || onExternalDrop ? (e) => handleItemDrop(e, idx) : undefined}
                 className={
-                  "relative h-full rounded" + (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
+                  "relative h-full rounded [&_img]:pointer-events-none [&_video]:pointer-events-none" +
+                  (dragOverIndex === idx ? " ring-2 ring-primary/50" : "")
                 }
               >
                 <MomentCard
