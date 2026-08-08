@@ -20,7 +20,7 @@ import {
 
 import type { StoryArcStage } from '@/lib/game/story-arc';
 
-import { getNextStoryArcStage } from '@/lib/game/story-arc';
+import { getNextStoryArcStage, getStageTodos } from '@/lib/game/story-arc';
 
 import { normalizeNarratorSummary } from '@/lib/game/dialogue-limits';
 
@@ -93,19 +93,40 @@ export type RunNarratorBeatArgs = {
 
 
 
-function clipSnippet(value: string, max = 140): string {
-
-  const compact = value.trim().replace(/\s+/g, ' ');
-
-  if (!compact) return '';
-
-  if (compact.length <= max) return compact;
-
-  return `${compact.slice(0, max - 1).trim()}…`;
-
+function hasOpenArcTodos(
+  stage: StoryArcStage | null | undefined,
+  completedIds: string[],
+): boolean {
+  if (!stage) return false;
+  const completed = new Set(completedIds);
+  return getStageTodos(stage).some((todo) => !completed.has(todo.id));
 }
 
+function buildSceneSummarySentence(
+  sceneLines: SceneDialogLine[],
+  options?: { nextMomentName?: string; isLastMoment?: boolean },
+): string {
+  const beats = sceneLines
+    .map((line) => {
+      const text = line.text.trim().replace(/^["']|["']$/g, '');
+      if (!text) return '';
+      return `${line.speaker} said "${text}"`;
+    })
+    .filter(Boolean);
 
+  if (!beats.length) {
+    return 'The scene unfolded quietly.';
+  }
+
+  let sentence = `In this scene, ${beats.join(', and ')}.`;
+
+  if (!options?.isLastMoment && options?.nextMomentName?.trim()) {
+    sentence = sentence.replace(/\.$/, '');
+    sentence += `, and the story moved toward ${options.nextMomentName.trim()}.`;
+  }
+
+  return sentence;
+}
 
 function summarizePlayerLine(
   playerLine: string,
@@ -125,19 +146,12 @@ export function buildSceneNarratorFallbackBeat(args: {
   nextMomentName?: string;
   isLastMoment?: boolean;
 }): NarratorBeatResult {
-  const parts = args.sceneLines
-    .map((line) => {
-      const snippet = clipSnippet(line.text, 120);
-      return snippet ? `${line.speaker} said: "${snippet.replace(/^["']|["']$/g, '')}".` : '';
-    })
-    .filter(Boolean);
-
-  let text = normalizeNarratorSummary(parts.join(' ').trim() || 'The scene unfolded quietly.');
-  if (args.isLastMoment) {
-    text = normalizeNarratorSummary(`${text} The moment held there.`);
-  } else if (args.nextMomentName?.trim()) {
-    text = normalizeNarratorSummary(`${text} The story moved on toward ${args.nextMomentName.trim()}.`);
-  }
+  const text = normalizeNarratorSummary(
+    buildSceneSummarySentence(args.sceneLines, {
+      nextMomentName: args.nextMomentName,
+      isLastMoment: args.isLastMoment,
+    }),
+  );
 
   return {
     text,
@@ -160,21 +174,16 @@ export function buildNarratorFallbackBeat(args: {
 
 }): NarratorBeatResult {
 
-  const playerLine = clipSnippet(args.userText, 200);
-
-  const npcLine = clipSnippet(args.npcText, 200);
-
+  const playerLine = args.userText.trim();
+  const npcLine = args.npcText.trim();
   const playerLabel = args.playerName?.trim() || 'The player';
 
   const parts = [
-
     playerLine ? summarizePlayerLine(playerLine, playerLabel, args.playerMode) : '',
-
     npcLine ? `${args.npcName} said: "${npcLine.replace(/^["']|["']$/g, '')}".` : '',
-
   ].filter(Boolean);
 
-  const text = normalizeNarratorSummary(parts.join(' ').trim(), !npcLine);
+  const text = normalizeNarratorSummary(parts.join(' ').trim() || 'The scene unfolded quietly.');
   return {
     text,
     completedTodoIds: [],
@@ -200,50 +209,40 @@ export async function runSceneNarratorBeat({
   const fallback = () =>
     buildSceneNarratorFallbackBeat({ sceneLines, nextMomentName, isLastMoment });
 
-  if (!connected || sceneLines.length === 0) {
+  if (sceneLines.length === 0) {
     return fallback();
   }
 
+  const summaryText = normalizeNarratorSummary(
+    buildSceneSummarySentence(sceneLines, { nextMomentName, isLastMoment }),
+  );
+
   const todoSection = formatOpenTodosForNarrator(arcStage, completedTodoIds);
-  const arcSection = !arcStage
-    ? ''
-    : [
-        `Current stage: ${arcStage.stageNumber}${arcStage.stageName ? ` — ${arcStage.stageName}` : ''}`,
-        arcStage.shortDescription ? `Stage note: ${arcStage.shortDescription}` : '',
-        todoSection ? `Stage todo goals:\n${todoSection}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
+  const needsTodoScoring = connected && hasOpenArcTodos(arcStage, completedTodoIds);
+
+  if (!needsTodoScoring) {
+    return {
+      text: summaryText,
+      completedTodoIds: [],
+      stageComplete: false,
+    };
+  }
 
   const sceneLinesBlock = sceneLines
     .map((line) => `${line.speaker}: ${line.text.trim()}`)
     .join('\n');
 
-  const transitionInstruction = isLastMoment
-    ? 'This is the final scene. Conclude this beat without promising a sequel or inventing future events.'
-    : nextMomentName?.trim()
-      ? `End with one brief sentence that transitions the story toward the next scene: "${nextMomentName.trim()}".`
-      : 'End with one brief sentence that moves the story into the next scene.';
-
   const prompt = [
-    'Review what happened in this scene using ONLY the character lines below.',
-    'Write two or three short sentences in third person past tense.',
-    'Summarize what each character contributed. Do not invent dialogue, actions, or plot beyond these lines.',
-    transitionInstruction,
-    todoSection
-      ? 'Review the stage todo goals. If this scene clearly completed any OPEN goals, append one line per goal: [DONE:todo-id]. If every goal for this stage is now done, also append [STAGE_COMPLETE] on its own line. Put these markers AFTER your summary.'
-      : '',
+    'Review the character lines and stage goals below.',
+    'If any OPEN goal was clearly completed in this scene, output one line per goal: [DONE:todo-id]',
+    'If every goal for this stage is now complete, also output [STAGE_COMPLETE] on its own line.',
+    'Output ONLY those marker lines. If no goals were completed, output exactly: NONE',
     '',
-    storyContext ? `Story context:\n${storyContext}` : '',
     sceneSummary ? `Scene:\n${sceneSummary}` : '',
-    arcSection ? `Arc:\n${arcSection}` : '',
     '',
     `Character lines this scene:\n${sceneLinesBlock}`,
     '',
-    `Recent history:\n${history
-      .slice(-8)
-      .map((msg) => `${msg.from === 'user' ? 'Player' : 'NPC'}: ${msg.text}`)
-      .join('\n')}`,
+    `Stage goals:\n${todoSection}`,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -274,35 +273,34 @@ export async function runSceneNarratorBeat({
       stateless: true,
       orchestration: 'parallel',
       interactionMode: 'neutral',
-      story: storyContext || sceneSummary,
-      history: history.slice(-8),
+      story: sceneSummary,
       stream: false,
     });
 
     const raw = await res.text().catch(() => '');
-    const rawText = res.ok ? extractAgentResponseText(raw) : '';
+    const rawText = res.ok ? extractAgentResponseText(raw).trim() : '';
 
-    if (!rawText) {
-      console.warn('[game][narrator][scene] empty model response', {
-        ok: res.ok,
-        status: res.status,
-        provider: activeProvider,
-      });
-      return fallback();
+    if (!rawText || /^none$/i.test(rawText)) {
+      return {
+        text: summaryText,
+        completedTodoIds: [],
+        stageComplete: false,
+      };
     }
 
     const parsed = parseNarratorTodoMarkers(rawText);
-    if (!parsed.text) {
-      return fallback();
-    }
-
     return {
-      ...parsed,
-      text: normalizeNarratorSummary(parsed.text),
+      text: summaryText,
+      completedTodoIds: parsed.completedTodoIds,
+      stageComplete: parsed.stageComplete,
     };
   } catch (err) {
     console.warn('[game][narrator][scene] request failed', err);
-    return fallback();
+    return {
+      text: summaryText,
+      completedTodoIds: [],
+      stageComplete: false,
+    };
   }
 }
 
@@ -339,167 +337,59 @@ export async function runNarratorBeat({
   summarizeOnly = false,
 
 }: RunNarratorBeatArgs): Promise<NarratorBeatResult> {
-
-  const fallback = () =>
-
-    buildNarratorFallbackBeat({ userText, npcText, npcName, playerName, playerMode });
-
-
+  const fallbackBeat = buildNarratorFallbackBeat({
+    userText,
+    npcText,
+    npcName,
+    playerName,
+    playerMode,
+  });
 
   if (!connected) {
-
-    return fallback();
-
+    return fallbackBeat;
   }
 
+  const todoSection = summarizeOnly ? '' : formatOpenTodosForNarrator(arcStage, completedTodoIds);
+  const needsTodoScoring = !summarizeOnly && hasOpenArcTodos(arcStage, completedTodoIds);
 
+  if (summarizeOnly || !needsTodoScoring) {
+    return fallbackBeat;
+  }
 
   const npc = { name: npcName };
-
   const player = playerName ? { name: playerName } : null;
-
   const knowsPlayer = npcKnowsPlayer !== false;
-
   const formatSpeaker = (
-
     from: 'user' | 'agent',
-
     mode?: OrchestratedMessage['playerMode'],
-
     npcKnewPlayer?: boolean,
-
   ) =>
-
     formatGameSpeakerLabel(
-
       from,
-
       npc,
-
       player,
-
       from === 'user' ? (npcKnewPlayer ?? knowsPlayer) : true,
-
       mode,
-
     );
 
-
-
-  const todoSection = summarizeOnly ? '' : formatOpenTodosForNarrator(arcStage, completedTodoIds);
-
-  const arcSection =
-    summarizeOnly || !arcStage
-      ? ''
-      : [
-
-          `Current stage: ${arcStage.stageNumber}${arcStage.stageName ? ` — ${arcStage.stageName}` : ''}`,
-
-          arcStage.shortDescription ? `Stage note: ${arcStage.shortDescription}` : '',
-
-          todoSection ? `Stage todo goals:\n${todoSection}` : '',
-
-        ]
-
-          .filter(Boolean)
-
-          .join('\n');
-
   const playerOnlyBeat = !npcText.trim();
-
-  const prompt = summarizeOnly
-
-    ? [
-
-        'Summarize ONLY what happened on this turn.',
-
-        'Write one sentence when possible; never more than two short sentences.',
-
-        'Use third person past tense.',
-
-        'Restate the player line (and NPC line if present). Do not add new actions, dialogue, reactions, consequences, mood, or setting details that are not in the lines below.',
-
-        'Do not advance the plot, invent events, or say what happens next.',
-
-        'Do not assign points, stats, or rewards (that system is not active yet).',
-
-        '',
-
-        sceneSummary ? `Scene label:\n${sceneSummary}` : '',
-
-        '',
-
-        `Player turn (${formatSpeaker('user', playerMode, currentTurnNpcKnewPlayer)}):\n${userText}`,
-
-        playerOnlyBeat
-
-          ? ''
-
-          : `\nNPC turn (${npcName}):\n${npcText}`,
-
-      ]
-
-        .filter(Boolean)
-
-        .join('\n\n')
-
-    : [
-
-        'Summarize ONLY what happened on this turn.',
-
-        'Write one sentence when possible; never more than two short sentences.',
-
-        'Use third person past tense.',
-
-        'Restate what the player and NPC did or said. Do not invent new events, dialogue, or plot.',
-
-        'Do not advance the story or say what happens next.',
-
-        todoSection
-
-          ? 'Review the stage todo goals. If this exchange clearly completed any OPEN goals, append one line per goal: [DONE:todo-id]. If every goal for this stage is now done, also append [STAGE_COMPLETE] on its own line. Put these markers AFTER your summary.'
-
-          : '',
-
-        '',
-
-        storyContext ? `Story context:\n${storyContext}` : '',
-
-        sceneSummary ? `Scene:\n${sceneSummary}` : '',
-
-        arcSection ? `Arc:\n${arcSection}` : '',
-
-        '',
-
-        `Latest ${formatSpeaker('user', playerMode, currentTurnNpcKnewPlayer)}:\n${userText}`,
-
-        '',
-
-        playerOnlyBeat
-
-          ? 'No NPC line this beat — summarize only the player turn above.'
-
-          : `Latest ${formatSpeaker('agent')} (${npcName}):\n${npcText}`,
-
-        '',
-
-        `Recent history:\n${history
-
-          .slice(-8)
-
-          .map((msg) =>
-
-            `${formatSpeaker(msg.from, msg.from === 'user' ? msg.playerMode : undefined, msg.npcKnewPlayer)}: ${msg.text}`,
-
-          )
-
-          .join('\n')}`,
-
-      ]
-
-        .filter(Boolean)
-
-        .join('\n\n');
+  const prompt = [
+    'Review the latest exchange and stage goals below.',
+    'If any OPEN goal was clearly completed in this exchange, output one line per goal: [DONE:todo-id]',
+    'If every goal for this stage is now complete, also output [STAGE_COMPLETE] on its own line.',
+    'Output ONLY those marker lines. If no goals were completed, output exactly: NONE',
+    '',
+    sceneSummary ? `Scene:\n${sceneSummary}` : '',
+    '',
+    `Latest ${formatSpeaker('user', playerMode, currentTurnNpcKnewPlayer)}:\n${userText}`,
+    playerOnlyBeat
+      ? ''
+      : `\nLatest ${formatSpeaker('agent')} (${npcName}):\n${npcText}`,
+    '',
+    `Stage goals:\n${todoSection}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
 
 
@@ -548,68 +438,30 @@ export async function runNarratorBeat({
       lmstudioUrl: activeProvider === 'lmstudio' ? lmstudioUrl : undefined,
 
       agents: [NARRATOR_AGENT],
-
       stateless: true,
-
       orchestration: 'parallel',
-
       interactionMode: 'neutral',
-
-      story: storyContext || sceneSummary,
-
-      history: history.slice(-8),
-
+      story: sceneSummary,
       stream: false,
-
     });
 
-
-
     const raw = await res.text().catch(() => '');
+    const rawText = res.ok ? extractAgentResponseText(raw).trim() : '';
 
-    const rawText = res.ok ? extractAgentResponseText(raw) : '';
-
-
-
-    if (!rawText) {
-
-      console.warn('[game][narrator] empty model response', {
-
-        ok: res.ok,
-
-        status: res.status,
-
-        provider: activeProvider,
-
-      });
-
-      return fallback();
-
+    if (!rawText || /^none$/i.test(rawText)) {
+      return fallbackBeat;
     }
-
-
 
     const parsed = parseNarratorTodoMarkers(rawText);
-
-    if (!parsed.text) {
-
-      return fallback();
-
-    }
-
     return {
-      ...parsed,
-      text: normalizeNarratorSummary(parsed.text, summarizeOnly && playerOnlyBeat),
+      text: fallbackBeat.text,
+      completedTodoIds: parsed.completedTodoIds,
+      stageComplete: parsed.stageComplete,
     };
-
   } catch (err) {
-
     console.warn('[game][narrator] request failed', err);
-
-    return fallback();
-
+    return fallbackBeat;
   }
-
 }
 
 

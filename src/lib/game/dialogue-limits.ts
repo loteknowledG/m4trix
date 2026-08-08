@@ -25,10 +25,8 @@ export function normalizeCharacterDialogue(text: string): string {
   return clampDialogueSentences(trimmed, DIALOGUE_MAX_SENTENCES);
 }
 
-export function normalizeNarratorSummary(text: string, playerOnlyBeat = false): string {
-  const trimmed = text.trim();
-  if (!trimmed) return '';
-  return clampDialogueSentences(trimmed, playerOnlyBeat ? 1 : DIALOGUE_MAX_SENTENCES);
+export function normalizeNarratorSummary(text: string): string {
+  return text.trim().replace(/\s+/g, ' ');
 }
 
 export const PROTAGONIST_REPLY_INSTRUCTION =
