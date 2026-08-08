@@ -1164,11 +1164,6 @@ export default function GamePage() {
     for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
       const latest = latestSpeakableMessage(conversations[slot] || []);
       if (!latest || isBlockedGameSpeechMessage(latest)) continue;
-
-      if (lastSpokenBySlotRef.current[slot] === undefined) {
-        lastSpokenBySlotRef.current[slot] = latest.id;
-        continue;
-      }
       if (lastSpokenBySlotRef.current[slot] === latest.id) continue;
 
       lastSpokenBySlotRef.current[slot] = latest.id;
@@ -1186,6 +1181,13 @@ export default function GamePage() {
       }
     }
   }, [conversations]);
+
+  const voiceSpeechBootstrappedRef = useRef(false);
+  useEffect(() => {
+    if (!gameShellReady || voiceSpeechBootstrappedRef.current) return;
+    seedVoiceSpeechRefs();
+    voiceSpeechBootstrappedRef.current = true;
+  }, [gameShellReady, seedVoiceSpeechRefs]);
 
   const handleVoiceToggle = useCallback(() => {
     const next = !voiceEnabled;
@@ -1823,6 +1825,8 @@ export default function GamePage() {
       ttsVoice: ttsVoiceForGameSlot(characterId, assignedPlayer, assignedNpc),
     };
 
+    lastSpokenBySlotRef.current[characterId] = userMessage.id;
+
     setConversations((prev) => ({
       ...prev,
       [characterId]: [...(prev[characterId] || []), userMessage],
@@ -1830,6 +1834,13 @@ export default function GamePage() {
 
     // Clear input for this character
     setCharacterInputs((prev) => ({ ...prev, [characterId]: '' }));
+
+    if (voiceEnabled) {
+      unlockAudioPlayback();
+      await speakWithCharacterTtsVoice(spokenText, userMessage.ttsVoice, undefined, {
+        allowFallback: true,
+      });
+    }
 
     if (characterId === "protagonist" || characterId === "antagonist") {
       markSceneRoundSpeaker(sceneLinesRef, sceneSpokeRef, characterId, speakerName, spokenText);
