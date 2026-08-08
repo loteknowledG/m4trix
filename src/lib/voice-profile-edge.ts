@@ -78,6 +78,12 @@ export const VOICE_PROFILE_EDGE_CONFIG: Record<CharacterTtsProfileId, VoiceProfi
     pitch: '+4Hz',
     volume: '+0%',
   },
+  'uk-hazel': {
+    voice: 'en-GB-SoniaNeural',
+    rate: '-6%',
+    pitch: '-2Hz',
+    volume: '+0%',
+  },
   'au-twenties': {
     voice: 'en-AU-NatashaNeural',
     rate: '+8%',

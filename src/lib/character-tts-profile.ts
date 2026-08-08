@@ -10,6 +10,11 @@ export const CHARACTER_TTS_PROFILE_OPTIONS = [
   { id: 'seductive-secretary', label: 'Seductive Secretary', description: 'Slow, smooth, low office femme fatale tone.' },
   { id: 'southern-belle', label: 'Southern Belle', description: 'Warm, slow, gracious Southern female voice.' },
   { id: 'uk-twenties', label: 'UK Twenties', description: 'British woman in her 20s, casual modern accent.' },
+  {
+    id: 'uk-hazel',
+    label: 'Hazel (UK)',
+    description: 'Classic Microsoft British English female voice, clear and measured.',
+  },
   { id: 'au-twenties', label: 'AU Twenties', description: 'Australian woman in her 20s, upbeat casual accent.' },
   {
     id: 'au-catherine',
@@ -114,6 +119,16 @@ function normalizeProfileId(value: unknown): CharacterTtsProfileId | undefined {
     normalized === 'british-girl-20s'
   ) {
     return 'uk-twenties';
+  }
+  if (
+    normalized === 'uk-hazel' ||
+    normalized === 'hazel' ||
+    normalized === 'hazel-uk' ||
+    normalized === 'hazel-british' ||
+    normalized === 'microsoft-hazel' ||
+    normalized === 'en-gb-hazel'
+  ) {
+    return 'uk-hazel';
   }
   if (
     normalized === 'au-twenties' ||
