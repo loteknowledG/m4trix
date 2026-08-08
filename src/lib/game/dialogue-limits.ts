@@ -1,41 +1,7 @@
-/** Twitter-style cap for protagonist player/AI lines. */
-export const PROTAGONIST_DIALOGUE_MAX_CHARS = 280;
-
 /** Plain-text cap for story description (logline / opening). */
 export const STORY_DESCRIPTION_MAX_CHARS = 280;
 
-/** Short narrator turn summary (1–2 sentences). */
-export const NARRATOR_SUMMARY_MAX_CHARS = 200;
-
 export const DIALOGUE_MAX_SENTENCES = 2;
-
-export function clampDialogueCharacters(
-  text: string,
-  maxChars: number,
-  options?: { finishSentence?: boolean },
-): string {
-  if (maxChars <= 0) return '';
-  const trimmed = text.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-
-  const finishSentence = options?.finishSentence !== false;
-  if (!finishSentence) {
-    return trimmed.slice(0, maxChars);
-  }
-
-  const prefix = trimmed.slice(0, maxChars);
-  const suffix = trimmed.slice(maxChars);
-  if (/[.!?]["']?\s*$/.test(prefix)) {
-    return prefix.trim();
-  }
-
-  const restOfSentence = suffix.match(/^[^.!?]*[.!?]+["']?/);
-  if (restOfSentence) {
-    return (prefix + restOfSentence[0]).trim();
-  }
-
-  return trimmed;
-}
 
 export function clampDialogueSentences(text: string, maxSentences = DIALOGUE_MAX_SENTENCES): string {
   const trimmed = text.trim().replace(/\s+/g, ' ');
@@ -49,37 +15,24 @@ export function clampDialogueSentences(text: string, maxSentences = DIALOGUE_MAX
 export function normalizeProtagonistDialogue(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return '';
-  return clampDialogueCharacters(
-    clampDialogueSentences(trimmed, DIALOGUE_MAX_SENTENCES),
-    PROTAGONIST_DIALOGUE_MAX_CHARS,
-    { finishSentence: true },
-  );
+  return clampDialogueSentences(trimmed, DIALOGUE_MAX_SENTENCES);
 }
 
-/** Keep NPC/AI replies short but never cut mid-sentence. */
+/** Keep NPC/AI replies short: at most two sentences. */
 export function normalizeCharacterDialogue(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return '';
-  const sentences = clampDialogueSentences(trimmed, DIALOGUE_MAX_SENTENCES);
-  if (sentences.length <= PROTAGONIST_DIALOGUE_MAX_CHARS) {
-    return sentences;
-  }
-  return clampDialogueCharacters(sentences, PROTAGONIST_DIALOGUE_MAX_CHARS, {
-    finishSentence: true,
-  });
+  return clampDialogueSentences(trimmed, DIALOGUE_MAX_SENTENCES);
 }
 
 export function normalizeNarratorSummary(text: string, playerOnlyBeat = false): string {
   const trimmed = text.trim();
   if (!trimmed) return '';
-  return clampDialogueCharacters(
-    clampDialogueSentences(trimmed, playerOnlyBeat ? 1 : DIALOGUE_MAX_SENTENCES),
-    NARRATOR_SUMMARY_MAX_CHARS,
-  );
+  return clampDialogueSentences(trimmed, playerOnlyBeat ? 1 : DIALOGUE_MAX_SENTENCES);
 }
 
 export const PROTAGONIST_REPLY_INSTRUCTION =
-  'Reply with one short sentence when possible, at most two. Prefer staying under 280 characters, but always finish your sentence.';
+  'Reply with one short sentence when possible, at most two. Always finish your sentence.';
 
 export function buildCharacterReplyPrompt(args: {
   speakerName: string;

@@ -65,6 +65,7 @@ import {
 import {
   buildCharacterReplyPrompt,
   normalizeCharacterDialogue,
+  normalizeNarratorSummary,
   normalizeProtagonistDialogue,
 } from "@/lib/game/dialogue-limits";
 import {
@@ -1943,7 +1944,11 @@ export default function GamePage() {
     if (!trimmed) return;
 
     const spokenText =
-      characterId === "protagonist" ? normalizeProtagonistDialogue(trimmed) : trimmed;
+      characterId === "protagonist"
+        ? normalizeProtagonistDialogue(trimmed)
+        : characterId === "narrator"
+          ? normalizeNarratorSummary(trimmed)
+          : normalizeCharacterDialogue(trimmed);
     if (!spokenText) return;
 
     const speakerName = characterId === 'protagonist'
