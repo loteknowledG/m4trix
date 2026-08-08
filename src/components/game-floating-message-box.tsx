@@ -36,8 +36,8 @@ type GameFloatingMessageBoxProps = {
 };
 
 const DEFAULT_LAYOUT: BoxLayout = {
-  x: 0.35,
-  y: 0.68,
+  x: 0.02,
+  y: 0.78,
   width: 0.3,
   height: 0.2,
 };
