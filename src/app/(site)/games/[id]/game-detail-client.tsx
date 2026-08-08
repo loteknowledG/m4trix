@@ -92,7 +92,13 @@ import {
   saveGameSummary,
   saveGameSession,
 } from "@/lib/game/game-storage";
-import { saveGameMomentReplay } from "@/lib/game/game-moment-replay";
+import {
+  isBlockedReplayMessage,
+  loadGameMomentReplay,
+  saveGameMomentReplay,
+  type GameMomentReplayMessage,
+  type GameMomentReplaySnapshot,
+} from "@/lib/game/game-moment-replay";
 import {
   backfillNpcKnewPlayerOnHistory,
   historyRevealedPlayerIdentity,
@@ -186,6 +192,24 @@ function dialogStyleForGameSlot(
     return resolveCharacterDialogStyle(assignedNpc?.dialogStyle);
   }
   return resolveCharacterDialogStyle(narratorDialogStyle);
+}
+
+function replayMessageToChatMessage(
+  slot: GameCharacterSlot,
+  message: GameMomentReplayMessage,
+  assignedPlayer: GameCharacterContext,
+  assignedNpc: GameCharacterContext,
+): CustomChatMessage {
+  return {
+    id: message.id,
+    from: message.from,
+    text: message.text,
+    ttsVoice: ttsVoiceForGameSlot(slot, assignedPlayer, assignedNpc),
+  };
+}
+
+function filterReplayMessages(messages: GameMomentReplayMessage[]): GameMomentReplayMessage[] {
+  return (messages || []).filter((message) => !isBlockedReplayMessage(message));
 }
 
 function ttsVoiceForGameSlot(
@@ -1516,6 +1540,78 @@ export default function GamePage() {
     delete lastSpokenBySlotRef.current.antagonist;
   }, []);
 
+  const seedVoiceSpeechRefsFromConversations = useCallback(
+    (nextConversations: Record<CharacterId, CustomChatMessage[]>) => {
+      for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
+        const latest = latestSpeakableMessage(nextConversations[slot] || []);
+        if (latest && !isBlockedGameSpeechMessage(latest)) {
+          lastSpokenBySlotRef.current[slot] = latest.id;
+        } else {
+          delete lastSpokenBySlotRef.current[slot];
+        }
+      }
+    },
+    [],
+  );
+
+  const applyGameMomentReplaySnapshot = useCallback(
+    (replay: GameMomentReplaySnapshot) => {
+      const slots: CharacterId[] = ["protagonist", "antagonist", "narrator"];
+      const nextConversations = Object.fromEntries(
+        slots.map((slot) => [
+          slot,
+          filterReplayMessages(replay.conversations[slot] || []).map((message) =>
+            replayMessageToChatMessage(slot, message, assignedPlayer, assignedNpc),
+          ),
+        ]),
+      ) as Record<CharacterId, CustomChatMessage[]>;
+
+      setConversations(nextConversations);
+      setGameDialogLayouts(replay.layouts);
+      seedVoiceSpeechRefsFromConversations(nextConversations);
+      sceneLinesRef.current = [];
+      sceneSpokeRef.current = { protagonist: false, antagonist: false };
+      sceneClosingRef.current = false;
+    },
+    [assignedNpc, assignedPlayer, seedVoiceSpeechRefsFromConversations],
+  );
+
+  const loadReplayForMomentIndex = useCallback(
+    async (momentIndex: number): Promise<boolean> => {
+      const moment = storyMoments[momentIndex];
+      if (!id || !moment?.id) return false;
+      try {
+        const replay = await loadGameMomentReplay(
+          id,
+          moment.id,
+          resolvedArcStageNumber ?? 0,
+        );
+        if (!replay) return false;
+        applyGameMomentReplaySnapshot(replay);
+        return true;
+      } catch (err) {
+        console.warn("[game] failed to load moment replay dialog", err);
+        return false;
+      }
+    },
+    [applyGameMomentReplaySnapshot, id, resolvedArcStageNumber, storyMoments],
+  );
+
+  const mapConversationSlotForReplaySave = useCallback(
+    (slot: CharacterId, messages: CustomChatMessage[]): GameMomentReplayMessage[] =>
+      (messages || [])
+        .filter((message) => !message.id.startsWith("pending-"))
+        .filter((message) => message.text.trim() && message.text.trim() !== "…")
+        .map((message) => ({
+          id: message.id,
+          from: message.from,
+          text: message.text,
+          playerMode:
+            slot === "protagonist" && message.from === "user" ? playerMode : undefined,
+        })),
+    [playerMode],
+  );
+
   const handleAdvanceToNextMoment = useCallback(async () => {
     if (!nextMomentReady) return;
     const nextIndex = currentMomentIndex + 1;
@@ -1532,22 +1628,15 @@ export default function GamePage() {
           momentIndex: currentMomentIndex,
           stageNumber: resolvedArcStageNumber ?? 0,
           conversations: {
-            protagonist: (conversations.protagonist || []).map((message) => ({
-              id: message.id,
-              from: message.from,
-              text: message.text,
-              playerMode: message.from === "user" ? playerMode : undefined,
-            })),
-            antagonist: (conversations.antagonist || []).map((message) => ({
-              id: message.id,
-              from: message.from,
-              text: message.text,
-            })),
-            narrator: (conversations.narrator || []).map((message) => ({
-              id: message.id,
-              from: message.from,
-              text: message.text,
-            })),
+            protagonist: mapConversationSlotForReplaySave(
+              "protagonist",
+              conversations.protagonist || [],
+            ),
+            antagonist: mapConversationSlotForReplaySave(
+              "antagonist",
+              conversations.antagonist || [],
+            ),
+            narrator: mapConversationSlotForReplaySave("narrator", conversations.narrator || []),
           },
           layouts: gameDialogLayouts,
           labels: characterTabLabels,
@@ -1564,7 +1653,16 @@ export default function GamePage() {
     clearCharacterSceneDialogs();
     setMomentSelectionMode("manual");
     setCurrentMomentIndex(nextIndex);
-    setNextMomentReady(false);
+
+    const restored = await loadReplayForMomentIndex(nextIndex);
+    if (!restored) {
+      setConversations((prev) => ({
+        ...prev,
+        narrator: [],
+      }));
+      delete lastSpokenBySlotRef.current.narrator;
+    }
+    setNextMomentReady(restored);
   }, [
     assignedNpc,
     assignedPlayer,
@@ -1577,6 +1675,8 @@ export default function GamePage() {
     currentMomentIndex,
     gameDialogLayouts,
     id,
+    loadReplayForMomentIndex,
+    mapConversationSlotForReplaySave,
     narratorDialogStyle,
     nextMomentReady,
     playerMode,
@@ -1584,12 +1684,29 @@ export default function GamePage() {
     storyMoments.length,
   ]);
 
-  const handleGoToPreviousMoment = useCallback(() => {
+  const handleGoToPreviousMoment = useCallback(async () => {
     if (!nextMomentReady || currentMomentIndex <= 0) return;
+    const prevIndex = currentMomentIndex - 1;
+
     setMomentSelectionMode("manual");
-    setCurrentMomentIndex(currentMomentIndex - 1);
-    setNextMomentReady(false);
-  }, [currentMomentIndex, nextMomentReady]);
+    setCurrentMomentIndex(prevIndex);
+
+    const restored = await loadReplayForMomentIndex(prevIndex);
+    if (!restored) {
+      clearCharacterSceneDialogs();
+      setConversations((prev) => ({
+        ...prev,
+        narrator: [],
+      }));
+      delete lastSpokenBySlotRef.current.narrator;
+    }
+    setNextMomentReady(true);
+  }, [
+    clearCharacterSceneDialogs,
+    currentMomentIndex,
+    loadReplayForMomentIndex,
+    nextMomentReady,
+  ]);
 
   const handleNpcTurnComplete = useCallback(
     async (

@@ -52,7 +52,7 @@ function parseGameMessageTimestamp(messageId: string): number {
   return match ? Number(match[1]) : 0;
 }
 
-function isBlockedReplayMessage(message: GameMomentReplayMessage): boolean {
+export function isBlockedReplayMessage(message: GameMomentReplayMessage): boolean {
   const text = message.text.trim();
   if (!text || text === "…") return true;
   if (message.id === "story-opening") return true;
