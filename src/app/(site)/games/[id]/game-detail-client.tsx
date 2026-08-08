@@ -624,6 +624,22 @@ export default function GamePage() {
     if (slot) setActiveCharacter(slot);
   }, []);
 
+  const loadEditInputForSlot = useCallback(
+    (slot: CharacterId) => {
+      const latest = latestSpeakableMessage(conversations[slot] || []);
+      setCharacterInputs((prev) => ({
+        ...prev,
+        [slot]: latest?.text?.trim() ?? "",
+      }));
+    },
+    [conversations],
+  );
+
+  useEffect(() => {
+    if (!nextMomentReady) return;
+    loadEditInputForSlot(activeCharacter);
+  }, [activeCharacter, loadEditInputForSlot, nextMomentReady]);
+
   const handleGameDialogLayoutChange = useCallback(
     (lineId: string, patch: MomentDialogLayoutPatch) => {
       const slot = lineId as GameCharacterSlot;
@@ -1988,6 +2004,41 @@ export default function GamePage() {
           : normalizeCharacterDialogue(trimmed);
     if (!spokenText) return;
 
+    if (nextMomentReady) {
+      const latest = latestSpeakableMessage(conversations[characterId] || []);
+      if (latest && latest.text.trim() === spokenText) {
+        setCharacterInputs((prev) => ({ ...prev, [characterId]: "" }));
+        return;
+      }
+
+      if (latest) {
+        handleEditChatMessage(latest.id, spokenText);
+        handleMessageEdited(latest.id, spokenText);
+        lastSpokenBySlotRef.current[characterId] = latest.id;
+      } else {
+        const userMessage: CustomChatMessage = {
+          id: `user-${Date.now()}`,
+          from: "user",
+          text: spokenText,
+          ttsVoice: ttsVoiceForGameSlot(characterId, assignedPlayer, assignedNpc),
+        };
+        lastSpokenBySlotRef.current[characterId] = userMessage.id;
+        setConversations((prev) => ({
+          ...prev,
+          [characterId]: [...(prev[characterId] || []), userMessage],
+        }));
+        if (voiceEnabled) {
+          unlockAudioPlayback();
+          await speakWithCharacterTtsVoice(spokenText, userMessage.ttsVoice, undefined, {
+            allowFallback: true,
+          });
+        }
+      }
+
+      setCharacterInputs((prev) => ({ ...prev, [characterId]: "" }));
+      return;
+    }
+
     const speakerName = characterId === 'protagonist'
       ? (assignedPlayer?.name || 'Protagonist')
       : characterId === 'antagonist'
@@ -3008,7 +3059,7 @@ export default function GamePage() {
                 input={chatInput}
                 onInputChange={setChatInput}
                 onSend={sendChatMessage}
-                disabled={chatInFlight || nextMomentReady}
+                disabled={chatInFlight}
               />
 
               {nextMomentReady ? (
