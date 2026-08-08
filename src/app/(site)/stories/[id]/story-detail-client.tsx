@@ -193,6 +193,7 @@ export default function StoryPage() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const scrollDirectionRef = useRef<number | null>(null);
   const scrollAnimRef = useRef<number | null>(null);
+  const editScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const stageEditSkipSaveRef = useRef(true);
 
   const saveStoryItems = useCallback(
@@ -426,33 +427,14 @@ export default function StoryPage() {
     [id],
   );
 
-  const onDragOver = useCallback((e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    setDragOverIndex(idx);
-    try {
-      e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
-    } catch (err) {
-      /* ignore */
-    }
-
-    if (dragIndexRef.current === null) return;
-
-    const margin = 80;
-    const y = e.clientY;
-    const vh = window.innerHeight;
-    if (y < margin) {
-      scrollDirectionRef.current = -1;
-      startAutoScroll();
-    } else if (y > vh - margin) {
-      scrollDirectionRef.current = 1;
-      startAutoScroll();
-    } else {
-      scrollDirectionRef.current = 0;
-      stopAutoScroll();
+  const stopAutoScroll = useCallback(() => {
+    if (scrollAnimRef.current) {
+      cancelAnimationFrame(scrollAnimRef.current);
+      scrollAnimRef.current = null;
     }
   }, []);
 
-  function startAutoScroll() {
+  const startAutoScroll = useCallback(() => {
     if (scrollAnimRef.current) return;
     const step = () => {
       const dir = scrollDirectionRef.current;
@@ -460,22 +442,53 @@ export default function StoryPage() {
         scrollAnimRef.current = null;
         return;
       }
-      try {
-        window.scrollBy({ top: dir * 12 });
-      } catch (e) {
-        /* ignore */
+      const container = editScrollContainerRef.current;
+      if (container) {
+        container.scrollTop += dir * 14;
       }
       scrollAnimRef.current = requestAnimationFrame(step);
     };
     scrollAnimRef.current = requestAnimationFrame(step);
-  }
+  }, []);
 
-  function stopAutoScroll() {
-    if (scrollAnimRef.current) {
-      cancelAnimationFrame(scrollAnimRef.current);
-      scrollAnimRef.current = null;
-    }
-  }
+  const updateDragAutoScroll = useCallback(
+    (clientY: number) => {
+      if (dragIndexRef.current === null) return;
+
+      const container = editScrollContainerRef.current;
+      if (!container) return;
+
+      const margin = 96;
+      const rect = container.getBoundingClientRect();
+
+      if (clientY < rect.top + margin) {
+        scrollDirectionRef.current = -1;
+        startAutoScroll();
+      } else if (clientY > rect.bottom - margin) {
+        scrollDirectionRef.current = 1;
+        startAutoScroll();
+      } else {
+        scrollDirectionRef.current = 0;
+        stopAutoScroll();
+      }
+    },
+    [startAutoScroll, stopAutoScroll],
+  );
+
+  const onDragOver = useCallback(
+    (e: React.DragEvent, idx: number) => {
+      e.preventDefault();
+      setDragOverIndex(idx);
+      try {
+        e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
+      } catch (err) {
+        /* ignore */
+      }
+
+      updateDragAutoScroll(e.clientY);
+    },
+    [updateDragAutoScroll],
+  );
 
   useEffect(() => {
     const onDragEndWin = () => {
@@ -1485,11 +1498,19 @@ export default function StoryPage() {
       >
         <ErrorBoundary>
           <div
+            ref={editScrollContainerRef}
             className={cn(
               "h-[calc(100vh_-_var(--app-header-height,56px))]",
               isEditMode ? "overflow-auto" : "overflow-hidden bg-black",
             )}
-            onDragOver={isEditMode ? (e) => e.preventDefault() : undefined}
+            onDragOver={
+              isEditMode
+                ? (e) => {
+                    e.preventDefault();
+                    updateDragAutoScroll(e.clientY);
+                  }
+                : undefined
+            }
             onDrop={isEditMode ? handleExternalDrop : undefined}
           >
             {isEditMode ? (
