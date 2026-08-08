@@ -4,6 +4,11 @@ export const CHARACTER_TTS_PROFILE_OPTIONS = [
   { id: 'muthur', label: 'MUTHUR', description: 'Calm system voice with reverb.' },
   { id: 'asian-elder', label: 'Asian Elder', description: 'Slow older male voice with East Asian accent.' },
   { id: 'vietnamese-male', label: 'Vietnamese Male', description: 'Natural Vietnamese male voice for English dialogue.' },
+  {
+    id: 'old-fat-vietnamese-man',
+    label: 'Old Fat Vietnamese Man',
+    description: 'Slow, deep older Vietnamese male voice — heavy and unhurried.',
+  },
   { id: 'midwest-teen', label: 'Midwest Teen', description: '16-year-old Midwestern female, bright and casual.' },
   { id: 'narrator', label: 'Narrator', description: 'Slow, clear audiobook and documentary narration.' },
   { id: 'narrator-female', label: 'Female Narrator', description: 'Warm measured female narration for stories.' },
@@ -69,6 +74,15 @@ function normalizeProfileId(value: unknown): CharacterTtsProfileId | undefined {
     normalized === 'namminh'
   ) {
     return 'vietnamese-male';
+  }
+  if (
+    normalized === 'old-fat-vietnamese-man' ||
+    normalized === 'old-vietnamese-man' ||
+    normalized === 'fat-vietnamese-man' ||
+    normalized === 'vietnamese-elder' ||
+    normalized === 'vietnamese-old-man'
+  ) {
+    return 'old-fat-vietnamese-man';
   }
   if (
     normalized === 'midwest-teen' ||

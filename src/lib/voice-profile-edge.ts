@@ -42,6 +42,12 @@ export const VOICE_PROFILE_EDGE_CONFIG: Record<CharacterTtsProfileId, VoiceProfi
     pitch: '-4Hz',
     volume: '+0%',
   },
+  'old-fat-vietnamese-man': {
+    voice: 'vi-VN-NamMinhNeural',
+    rate: '-26%',
+    pitch: '-18Hz',
+    volume: '-3%',
+  },
   'midwest-teen': {
     voice: 'en-US-EmmaNeural',
     rate: '+12%',
