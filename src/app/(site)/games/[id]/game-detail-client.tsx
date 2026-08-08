@@ -156,6 +156,23 @@ function latestSpeakableMessage(messages: CustomChatMessage[]): CustomChatMessag
   return null;
 }
 
+function slotDialogState(messages: CustomChatMessage[]): {
+  latest: CustomChatMessage | null;
+  isProcessing: boolean;
+} {
+  if (messages.length === 0) {
+    return { latest: null, isProcessing: false };
+  }
+  const last = messages[messages.length - 1];
+  if (last.id.startsWith("pending-")) {
+    return {
+      latest: latestSpeakableMessage(messages.slice(0, -1)),
+      isProcessing: true,
+    };
+  }
+  return { latest: latestSpeakableMessage(messages), isProcessing: false };
+}
+
 function dialogStyleForGameSlot(
   slot: GameCharacterSlot,
   assignedPlayer: GameCharacterContext,
@@ -239,12 +256,12 @@ function buildGameOverlayLines(params: {
   narratorDialogStyle: CharacterDialogStyle;
   npcKnowsPlayer: boolean;
   playerMode: PlayerMode;
-}): Array<MomentDialogLine & { speakerName: string; dialogHeader?: string; contentKey?: string }> {
+}): Array<MomentDialogLine & { speakerName: string; dialogHeader?: string; contentKey?: string; isProcessing?: boolean }> {
   const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
-  const lines: Array<MomentDialogLine & { speakerName: string; dialogHeader?: string; contentKey?: string }> = [];
+  const lines: Array<MomentDialogLine & { speakerName: string; dialogHeader?: string; contentKey?: string; isProcessing?: boolean }> = [];
 
   for (const slot of slots) {
-    const latest = latestSpeakableMessage(params.conversations[slot] || []);
+    const { latest, isProcessing } = slotDialogState(params.conversations[slot] || []);
     const isActive = slot === params.activeCharacter;
     const text = latest?.text?.trim() ?? "";
     const label = params.labels[slot];
@@ -274,8 +291,9 @@ function buildGameOverlayLines(params: {
       speakerColor: style.speakerColor,
       textEffects: style.textEffects,
       speakerName: label,
-      contentKey: latest?.id,
-      dialogHeader: text
+      contentKey: isProcessing ? `processing-${slot}` : latest?.id,
+      isProcessing,
+      dialogHeader: text || isProcessing
         ? formatGameDialogSpeakerHeader(slot, label, {
             playerMode: mode,
             npcKnowsPlayer: params.npcKnowsPlayer,
@@ -1913,6 +1931,15 @@ export default function GamePage() {
         });
 
         // Call AI for this responder
+        const pendingId = `pending-${currentResponder}-${Date.now()}`;
+        setConversations((prev) => ({
+          ...prev,
+          [currentResponder]: [
+            ...(prev[currentResponder] || []),
+            { id: pendingId, from: "agent", text: "" },
+          ],
+        }));
+
         try {
           const requestBody: Record<string, unknown> = {
             prompt: promptText,
@@ -1980,11 +2007,20 @@ export default function GamePage() {
 
               setConversations((prev) => ({
                 ...prev,
-                [currentResponder]: [...(prev[currentResponder] || []), aiResponse],
+                [currentResponder]: [
+                  ...(prev[currentResponder] || []).filter((message) => message.id !== pendingId),
+                  aiResponse,
+                ],
               }));
             } else {
               // No content - log the raw response for debugging
               console.warn('AI returned empty content for', currentResponder, JSON.stringify(data).slice(0, 500));
+              setConversations((prev) => ({
+                ...prev,
+                [currentResponder]: (prev[currentResponder] || []).filter(
+                  (message) => message.id !== pendingId,
+                ),
+              }));
               // Continue without adding a message
             }
             // Set debug data
@@ -1995,12 +2031,24 @@ export default function GamePage() {
           } else {
             const errorText = await response.text().catch(() => "");
             toast.error(errorText || `AI request failed (${response.status})`);
+            setConversations((prev) => ({
+              ...prev,
+              [currentResponder]: (prev[currentResponder] || []).filter(
+                (message) => message.id !== pendingId,
+              ),
+            }));
           }
         } catch (loopErr) {
           const message =
             loopErr instanceof Error ? loopErr.message : "AI response failed";
           console.error('AI response error for', currentResponder, loopErr);
           toast.error(message);
+          setConversations((prev) => ({
+            ...prev,
+            [currentResponder]: (prev[currentResponder] || []).filter(
+              (message) => message.id !== pendingId,
+            ),
+          }));
         }
       }
 

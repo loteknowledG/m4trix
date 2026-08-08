@@ -27,6 +27,7 @@ type MomentDialogOverlayLine = MomentDialogLine & {
   dialogHeader?: string;
   contentKey?: string;
   isPlayerLine?: boolean;
+  isProcessing?: boolean;
 };
 
 type MomentDialogOverlayProps = {
@@ -61,6 +62,27 @@ function lineFontSize(fontScale: number) {
 
 function gameDialogFontSize(fontScale: number) {
   return `${Math.max(0.65, fontScale * 18)}rem`;
+}
+
+function DialogProcessingIndicator({ color }: { color: string }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 py-0.5"
+      aria-label="Processing response"
+      role="status"
+    >
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          className="inline-block h-[0.45em] w-[0.45em] animate-pulse rounded-full"
+          style={{
+            backgroundColor: color,
+            animationDelay: `${index * 180}ms`,
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 function MomentDialogBubble({
@@ -206,11 +228,12 @@ function MomentDialogBubble({
         ? '#7dd3fc'
         : '#a3e635');
   const hasDialogText = line.text.trim().length > 0;
+  const isProcessing = line.isProcessing === true;
   const showSpeakerLabel = gameDialog
-    ? hasDialogText
+    ? hasDialogText || isProcessing
     : hasDialogText && !isNarratorDialogLine(line, speakerName);
-  const showEditorGear = editable && gameDialog && !hasDialogText && onOpenEditor != null;
-  const showVisibleContent = !gameDialog || editable || hasDialogText;
+  const showEditorGear = editable && gameDialog && !hasDialogText && !isProcessing && onOpenEditor != null;
+  const showVisibleContent = !gameDialog || editable || hasDialogText || isProcessing;
 
   const onOpenEditorClick = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -310,19 +333,24 @@ function MomentDialogBubble({
                     <FaCog className="h-[1.1em] w-[1.1em]" aria-hidden />
                   </button>
                 ) : (
-                  <VideoCueTextEffectView
-                    text={line.text}
-                    effects={style.textEffects}
-                    color={style.color}
-                    shadowColor={style.shadowColor}
-                    lineKey={line.id}
-                    replayKey={
-                      momentId
-                        ? `${momentId}-${line.id}-${line.contentKey ?? ""}-${loopEpoch}`
-                        : `${line.id}-${line.contentKey ?? ""}-${loopEpoch}`
-                    }
-                    className="text-inherit"
-                  />
+                  <>
+                    {hasDialogText ? (
+                      <VideoCueTextEffectView
+                        text={line.text}
+                        effects={style.textEffects}
+                        color={style.color}
+                        shadowColor={style.shadowColor}
+                        lineKey={line.id}
+                        replayKey={
+                          momentId
+                            ? `${momentId}-${line.id}-${line.contentKey ?? ""}-${loopEpoch}`
+                            : `${line.id}-${line.contentKey ?? ""}-${loopEpoch}`
+                        }
+                        className="text-inherit"
+                      />
+                    ) : null}
+                    {isProcessing ? <DialogProcessingIndicator color={style.color} /> : null}
+                  </>
                 )}
               </div>
             </>
