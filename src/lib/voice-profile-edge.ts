@@ -84,6 +84,12 @@ export const VOICE_PROFILE_EDGE_CONFIG: Record<CharacterTtsProfileId, VoiceProfi
     pitch: '+5Hz',
     volume: '+1%',
   },
+  'au-catherine': {
+    voice: 'en-AU-NatashaNeural',
+    rate: '-8%',
+    pitch: '-3Hz',
+    volume: '+0%',
+  },
   'atlanta-thirties': {
     voice: 'en-US-JennyNeural',
     rate: '-11%',

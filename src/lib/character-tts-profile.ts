@@ -11,6 +11,11 @@ export const CHARACTER_TTS_PROFILE_OPTIONS = [
   { id: 'southern-belle', label: 'Southern Belle', description: 'Warm, slow, gracious Southern female voice.' },
   { id: 'uk-twenties', label: 'UK Twenties', description: 'British woman in her 20s, casual modern accent.' },
   { id: 'au-twenties', label: 'AU Twenties', description: 'Australian woman in her 20s, upbeat casual accent.' },
+  {
+    id: 'au-catherine',
+    label: 'Catherine (AU)',
+    description: 'Classic Microsoft Australian English female voice, clear and measured.',
+  },
   { id: 'atlanta-thirties', label: 'Atlanta 30s', description: 'Atlanta woman in her 30s, warm urban Southern tone.' },
   { id: 'california-girl', label: 'California Girl', description: 'Bright relaxed SoCal female, casual West Coast vibe.' },
   { id: 'nyc-girl', label: 'NYC Girl', description: 'Fast direct New York City female, urban and confident.' },
@@ -119,6 +124,16 @@ function normalizeProfileId(value: unknown): CharacterTtsProfileId | undefined {
     normalized === 'australian-girl-20s'
   ) {
     return 'au-twenties';
+  }
+  if (
+    normalized === 'au-catherine' ||
+    normalized === 'catherine' ||
+    normalized === 'catherine-au' ||
+    normalized === 'catherine-australian' ||
+    normalized === 'microsoft-catherine' ||
+    normalized === 'en-au-catherine'
+  ) {
+    return 'au-catherine';
   }
   if (
     normalized === 'atlanta-thirties' ||
