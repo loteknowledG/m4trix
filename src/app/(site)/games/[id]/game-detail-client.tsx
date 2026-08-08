@@ -213,6 +213,12 @@ function filterReplayMessages(messages: GameMomentReplayMessage[]): GameMomentRe
   return (messages || []).filter((message) => !isBlockedReplayMessage(message));
 }
 
+function replaySnapshotHasDialog(replay: GameMomentReplaySnapshot): boolean {
+  return (["protagonist", "antagonist", "narrator"] as const).some(
+    (slot) => filterReplayMessages(replay.conversations[slot] || []).length > 0,
+  );
+}
+
 function ttsVoiceForGameSlot(
   slot: GameCharacterSlot,
   assignedPlayer: GameCharacterContext,
@@ -878,12 +884,11 @@ export default function GamePage() {
     return chunks.join("\n\n");
   }, [assignedNpc, assignedPlayer, characterMemoryKey, npcKnowsPlayerEffective]);
 
-  // Moment selection and saved story state
+  // Moment selection — scene round refs reset when the moment changes.
   useEffect(() => {
     sceneLinesRef.current = [];
     sceneSpokeRef.current = { protagonist: false, antagonist: false };
     sceneClosingRef.current = false;
-    setNextMomentReady(false);
   }, [currentMomentIndex]);
 
   useEffect(() => {
@@ -1588,6 +1593,7 @@ export default function GamePage() {
           resolvedArcStageNumber ?? 0,
         );
         if (!replay) return false;
+        if (!replaySnapshotHasDialog(replay)) return false;
         applyGameMomentReplaySnapshot(replay);
         return true;
       } catch (err) {
@@ -1597,6 +1603,37 @@ export default function GamePage() {
     },
     [applyGameMomentReplaySnapshot, id, resolvedArcStageNumber, storyMoments],
   );
+
+  useEffect(() => {
+    if (!gameShellReady || !id) {
+      setNextMomentReady(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const restored = await loadReplayForMomentIndex(currentMomentIndex);
+      if (cancelled) return;
+
+      if (restored) {
+        setNextMomentReady(currentMomentIndex + 1 < storyMoments.length);
+        return;
+      }
+
+      setNextMomentReady(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentMomentIndex,
+    gameShellReady,
+    id,
+    loadReplayForMomentIndex,
+    storyMoments.length,
+  ]);
 
   const mapConversationSlotForReplaySave = useCallback(
     (slot: CharacterId, messages: CustomChatMessage[]): GameMomentReplayMessage[] =>
