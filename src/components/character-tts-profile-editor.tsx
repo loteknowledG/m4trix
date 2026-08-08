@@ -9,6 +9,7 @@ import {
   resolveCharacterTtsVoice,
   type CharacterTtsVoice,
 } from '@/lib/character-tts-profile';
+import { resolveVoiceProfileEdgeConfig } from '@/lib/voice-profile-edge';
 import { speakWithCharacterTtsVoice, unlockAudioPlayback } from '@/lib/tts';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -81,6 +82,11 @@ export function CharacterTtsProfileEditor({
 
       {selectedProfile?.description ? (
         <p className="text-[10px] leading-relaxed text-muted-foreground">{selectedProfile.description}</p>
+      ) : null}
+      {resolveVoiceProfileEdgeConfig(settings.profileId).reverb ? (
+        <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+          Convolution reverb applied in the browser during playback.
+        </p>
       ) : null}
 
       <div className="flex items-center justify-between gap-2 overflow-visible pb-1">

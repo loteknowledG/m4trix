@@ -46,6 +46,9 @@ PROFILES = {
         "bootup_tts_rate": "-12%",
         "bootup_tts_pitch": "-5Hz",
         "bootup_tts_volume": "+0%",
+        "bootup_reverb_impulse": "r1-nuclear-reactor-hall",
+        "bootup_reverb_dry": "0.82",
+        "bootup_reverb_wet": "0.38",
         "description": "Calm, lower, system-like voice for MUTHUR.",
     },
     "asian-elder": {

@@ -2,12 +2,14 @@ import {
   normalizeCharacterTtsProfile,
   type CharacterTtsProfileId,
 } from '@/lib/character-tts-profile';
+import type { VoiceProfileReverbConfig } from '@/lib/voice-profile-reverb';
 
 export type VoiceProfileEdgeConfig = {
   voice: string;
   rate: string;
   pitch: string;
   volume: string;
+  reverb?: VoiceProfileReverbConfig;
 };
 
 /** Edge TTS synthesis settings — kept in sync with tools/voice_profile.py PROFILES. */
@@ -29,6 +31,11 @@ export const VOICE_PROFILE_EDGE_CONFIG: Record<CharacterTtsProfileId, VoiceProfi
     rate: '-12%',
     pitch: '-5Hz',
     volume: '+0%',
+    reverb: {
+      impulseId: 'r1-nuclear-reactor-hall',
+      dry: 0.82,
+      wet: 0.38,
+    },
   },
   'asian-elder': {
     voice: 'zh-CN-YunjianNeural',

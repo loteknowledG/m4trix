@@ -7,6 +7,11 @@ import {
   type CharacterTtsVoice,
 } from '@/lib/character-tts-profile';
 import { storyTextForPrompt } from '@/lib/game/story-moments';
+import { resolveVoiceProfileEdgeConfig } from '@/lib/voice-profile-edge';
+import {
+  resolveVoiceReverbImpulsePath,
+  type VoiceProfileReverbConfig,
+} from '@/lib/voice-profile-reverb';
 
 const INTRO_TTS_CACHE_PREFIX = 'tts:intro:';
 
@@ -61,6 +66,33 @@ let audioContext: AudioContext | null = null;
 let activeAudio: HTMLAudioElement | null = null;
 let activeObjectUrl: string | null = null;
 let primedAudio: HTMLAudioElement | null = null;
+const impulseBufferCache = new Map<string, AudioBuffer>();
+
+async function loadImpulseBuffer(context: AudioContext, path: string): Promise<AudioBuffer | null> {
+  const cached = impulseBufferCache.get(path);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(path);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = await context.decodeAudioData(arrayBuffer.slice(0));
+    impulseBufferCache.set(path, buffer);
+    return buffer;
+  } catch (error) {
+    console.warn('[tts] failed to load reverb impulse', path, error);
+    return null;
+  }
+}
+
+function decodeAudioBase64(audioBase64: string): Uint8Array {
+  const binary = atob(audioBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -117,22 +149,41 @@ function stopActiveAudio() {
   }
 }
 
-async function speakAudioBase64WebAudio(audioBase64: string): Promise<boolean> {
+async function speakAudioBase64WebAudio(
+  audioBase64: string,
+  reverb?: VoiceProfileReverbConfig,
+): Promise<boolean> {
   const context = getAudioContext();
   if (!context) return false;
 
   try {
     await context.resume();
-    const binary = atob(audioBase64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-
-    const buffer = await context.decodeAudioData(bytes.buffer.slice(0));
+    const bytes = decodeAudioBase64(audioBase64);
+    const buffer = await context.decodeAudioData(bytes.buffer.slice(0) as ArrayBuffer);
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(context.destination);
+
+    if (reverb) {
+      const impulsePath = resolveVoiceReverbImpulsePath(reverb.impulseId);
+      const impulse = await loadImpulseBuffer(context, impulsePath);
+      if (impulse) {
+        const dryGain = context.createGain();
+        const wetGain = context.createGain();
+        const convolver = context.createConvolver();
+        convolver.buffer = impulse;
+        dryGain.gain.value = reverb.dry;
+        wetGain.gain.value = reverb.wet;
+        source.connect(dryGain);
+        source.connect(convolver);
+        convolver.connect(wetGain);
+        dryGain.connect(context.destination);
+        wetGain.connect(context.destination);
+      } else {
+        source.connect(context.destination);
+      }
+    } else {
+      source.connect(context.destination);
+    }
 
     await new Promise<void>((resolve, reject) => {
       source.onended = () => resolve();
@@ -149,18 +200,23 @@ async function speakAudioBase64WebAudio(audioBase64: string): Promise<boolean> {
   }
 }
 
-async function speakAudioBase64(audioBase64: string, contentType = 'audio/mpeg'): Promise<boolean> {
+async function speakAudioBase64(
+  audioBase64: string,
+  contentType = 'audio/mpeg',
+  reverb?: VoiceProfileReverbConfig,
+): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
+  if (reverb) {
+    stopActiveAudio();
+    return speakAudioBase64WebAudio(audioBase64, reverb);
+  }
+
   try {
-    const binary = atob(audioBase64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
+    const bytes = decodeAudioBase64(audioBase64);
 
     stopActiveAudio();
-    const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
+    const url = URL.createObjectURL(new Blob([bytes.slice()], { type: contentType }));
     activeObjectUrl = url;
     const audio = new Audio(url);
     activeAudio = audio;
@@ -212,7 +268,14 @@ async function speakViaVoiceProfile(text: string, profile: string): Promise<TtsS
     if (!response.ok || !data?.ok) {
       return { ok: false, error: errorMessage };
     }
-    if (data.audioBase64 && (await speakAudioBase64(data.audioBase64, data.contentType || 'audio/mpeg'))) {
+    if (
+      data.audioBase64 &&
+      (await speakAudioBase64(
+        data.audioBase64,
+        data.contentType || 'audio/mpeg',
+        resolveVoiceProfileEdgeConfig(profile).reverb,
+      ))
+    ) {
       return { ok: true };
     }
     return { ok: false, error: 'TTS returned no playable audio. Check browser sound permissions and try again.' };
