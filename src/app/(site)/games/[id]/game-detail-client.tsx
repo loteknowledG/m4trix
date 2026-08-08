@@ -96,6 +96,7 @@ import {
 import {
   isBlockedReplayMessage,
   loadGameMomentReplay,
+  orderedGameMomentMessages,
   saveGameMomentReplay,
   type GameMomentReplayMessage,
   type GameMomentReplaySnapshot,
@@ -373,6 +374,8 @@ export default function GamePage() {
   const [fabOpen, setFabOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(() => readVoiceEnabled());
   const lastSpokenBySlotRef = useRef<Partial<Record<CharacterId, string>>>({});
+  const momentDialogPlaybackGenRef = useRef(0);
+  const momentReplayPlaybackActiveRef = useRef(false);
   const [title, setTitle] = useState("Game");
   const [storyMoments, setStoryMoments] = useState<any[]>([]);
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
@@ -1224,6 +1227,7 @@ export default function GamePage() {
       stopActiveTts();
       return;
     }
+    if (momentReplayPlaybackActiveRef.current) return;
 
     for (const slot of ["protagonist", "antagonist", "narrator"] as CharacterId[]) {
       const latest = latestSpeakableMessage(conversations[slot] || []);
@@ -1576,8 +1580,47 @@ export default function GamePage() {
     [],
   );
 
+  const playMomentDialogSequence = useCallback(
+    async (nextConversations: Record<CharacterId, CustomChatMessage[]>) => {
+      const ordered = orderedGameMomentMessages(nextConversations, isBlockedGameSpeechMessage);
+      if (ordered.length === 0) {
+        momentReplayPlaybackActiveRef.current = false;
+        seedVoiceSpeechRefsFromConversations(nextConversations);
+        return;
+      }
+
+      const generation = ++momentDialogPlaybackGenRef.current;
+      momentReplayPlaybackActiveRef.current = true;
+      lastSpokenBySlotRef.current = {};
+      stopActiveTts();
+
+      if (!voiceEnabled) {
+        momentReplayPlaybackActiveRef.current = false;
+        seedVoiceSpeechRefsFromConversations(nextConversations);
+        return;
+      }
+
+      unlockAudioPlayback();
+
+      for (const { slot, message } of ordered) {
+        if (generation !== momentDialogPlaybackGenRef.current) return;
+        const voice =
+          message.ttsVoice ?? ttsVoiceForGameSlot(slot, assignedPlayer, assignedNpc);
+        await speakWithCharacterTtsVoice(message.text, voice, undefined, {
+          allowFallback: true,
+        });
+      }
+
+      if (generation === momentDialogPlaybackGenRef.current) {
+        momentReplayPlaybackActiveRef.current = false;
+        seedVoiceSpeechRefsFromConversations(nextConversations);
+      }
+    },
+    [assignedNpc, assignedPlayer, seedVoiceSpeechRefsFromConversations, voiceEnabled],
+  );
+
   const applyGameMomentReplaySnapshot = useCallback(
-    (replay: GameMomentReplaySnapshot) => {
+    (replay: GameMomentReplaySnapshot): Record<CharacterId, CustomChatMessage[]> => {
       const slots: CharacterId[] = ["protagonist", "antagonist", "narrator"];
       const nextConversations = Object.fromEntries(
         slots.map((slot) => [
@@ -1588,37 +1631,46 @@ export default function GamePage() {
         ]),
       ) as Record<CharacterId, CustomChatMessage[]>;
 
+      momentReplayPlaybackActiveRef.current = true;
+      lastSpokenBySlotRef.current = {};
       setConversations(nextConversations);
       setGameDialogLayouts(replay.layouts);
-      seedVoiceSpeechRefsFromConversations(nextConversations);
       sceneLinesRef.current = [];
       sceneSpokeRef.current = { protagonist: false, antagonist: false };
       sceneClosingRef.current = false;
+      return nextConversations;
     },
-    [assignedNpc, assignedPlayer, seedVoiceSpeechRefsFromConversations],
+    [assignedNpc, assignedPlayer],
   );
 
   const loadReplayForMomentIndex = useCallback(
-    async (momentIndex: number): Promise<boolean> => {
+    async (
+      momentIndex: number,
+    ): Promise<Record<CharacterId, CustomChatMessage[]> | null> => {
       const moment = storyMoments[momentIndex];
-      if (!id || !moment?.id) return false;
+      if (!id || !moment?.id) return null;
       try {
         const replay = await loadGameMomentReplay(
           id,
           moment.id,
           resolvedArcStageNumber ?? 0,
         );
-        if (!replay) return false;
-        if (!replaySnapshotHasDialog(replay)) return false;
-        applyGameMomentReplaySnapshot(replay);
-        return true;
+        if (!replay) return null;
+        if (!replaySnapshotHasDialog(replay)) return null;
+        return applyGameMomentReplaySnapshot(replay);
       } catch (err) {
         console.warn("[game] failed to load moment replay dialog", err);
-        return false;
+        return null;
       }
     },
     [applyGameMomentReplaySnapshot, id, resolvedArcStageNumber, storyMoments],
   );
+
+  useEffect(() => {
+    momentDialogPlaybackGenRef.current += 1;
+    momentReplayPlaybackActiveRef.current = false;
+    stopActiveTts();
+  }, [currentMomentIndex]);
 
   useEffect(() => {
     if (!gameShellReady || !id) {
@@ -1629,15 +1681,21 @@ export default function GamePage() {
     let cancelled = false;
 
     void (async () => {
-      const restored = await loadReplayForMomentIndex(currentMomentIndex);
+      const restoredConversations = await loadReplayForMomentIndex(currentMomentIndex);
       if (cancelled) return;
 
-      if (restored) {
+      if (restoredConversations) {
         setNextMomentReady(currentMomentIndex + 1 < storyMoments.length);
+        void playMomentDialogSequence(restoredConversations);
         return;
       }
 
       setNextMomentReady(false);
+      setConversations((prev) => ({
+        ...prev,
+        narrator: [],
+      }));
+      delete lastSpokenBySlotRef.current.narrator;
     })();
 
     return () => {
@@ -1648,6 +1706,7 @@ export default function GamePage() {
     gameShellReady,
     id,
     loadReplayForMomentIndex,
+    playMomentDialogSequence,
     storyMoments.length,
   ]);
 
@@ -1707,16 +1766,6 @@ export default function GamePage() {
     clearCharacterSceneDialogs();
     setMomentSelectionMode("manual");
     setCurrentMomentIndex(nextIndex);
-
-    const restored = await loadReplayForMomentIndex(nextIndex);
-    if (!restored) {
-      setConversations((prev) => ({
-        ...prev,
-        narrator: [],
-      }));
-      delete lastSpokenBySlotRef.current.narrator;
-    }
-    setNextMomentReady(restored);
   }, [
     assignedNpc,
     assignedPlayer,
@@ -1729,7 +1778,6 @@ export default function GamePage() {
     currentMomentIndex,
     gameDialogLayouts,
     id,
-    loadReplayForMomentIndex,
     mapConversationSlotForReplaySave,
     narratorDialogStyle,
     nextMomentReady,
@@ -1744,21 +1792,8 @@ export default function GamePage() {
 
     setMomentSelectionMode("manual");
     setCurrentMomentIndex(prevIndex);
-
-    const restored = await loadReplayForMomentIndex(prevIndex);
-    if (!restored) {
-      clearCharacterSceneDialogs();
-      setConversations((prev) => ({
-        ...prev,
-        narrator: [],
-      }));
-      delete lastSpokenBySlotRef.current.narrator;
-    }
-    setNextMomentReady(true);
   }, [
-    clearCharacterSceneDialogs,
     currentMomentIndex,
-    loadReplayForMomentIndex,
     nextMomentReady,
   ]);
 

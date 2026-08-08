@@ -77,6 +77,23 @@ function dialogStyleForReplaySlot(
   return resolveCharacterDialogStyle(narratorDialogStyle);
 }
 
+export function orderedGameMomentMessages<T extends { id: string; text: string }>(
+  conversations: Record<GameCharacterSlot, T[]>,
+  isBlocked: (message: T) => boolean,
+): Array<{ slot: GameCharacterSlot; message: T }> {
+  const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
+  return slots
+    .flatMap((slot) =>
+      (conversations[slot] || [])
+        .filter((message) => !isBlocked(message))
+        .map((message) => ({ slot, message })),
+    )
+    .sort(
+      (a, b) =>
+        parseGameMessageTimestamp(a.message.id) - parseGameMessageTimestamp(b.message.id),
+    );
+}
+
 export function buildGameMomentReplayScript(args: {
   conversations: Record<GameCharacterSlot, GameMomentReplayMessage[]>;
   layouts: GameDialogLayouts;
@@ -86,17 +103,7 @@ export function buildGameMomentReplayScript(args: {
   narratorDialogStyle: CharacterDialogStyle;
   defaultPlayerMode?: PlayerMode;
 }): MomentDialogScript {
-  const slots: GameCharacterSlot[] = ["protagonist", "antagonist", "narrator"];
-  const ordered = slots
-    .flatMap((slot) =>
-      (args.conversations[slot] || [])
-        .filter((message) => !isBlockedReplayMessage(message))
-        .map((message) => ({ slot, message })),
-    )
-    .sort(
-      (a, b) =>
-        parseGameMessageTimestamp(a.message.id) - parseGameMessageTimestamp(b.message.id),
-    );
+  const ordered = orderedGameMomentMessages(args.conversations, isBlockedReplayMessage);
 
   let timeCursor = 0;
   const lines = ordered.map(({ slot, message }, index) => {
@@ -135,7 +142,7 @@ export function buildGameMomentReplayScript(args: {
   });
 
   return normalizeMomentDialogScript({
-    characterOrder: [...slots],
+    characterOrder: ["protagonist", "antagonist", "narrator"],
     lines,
     duration: Math.max(timeCursor + 0.35, DEFAULT_MOMENT_LINE_DURATION),
   });
