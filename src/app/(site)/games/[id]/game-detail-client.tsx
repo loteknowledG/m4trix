@@ -94,6 +94,10 @@ import {
   saveGameSession,
 } from "@/lib/game/game-storage";
 import {
+  readRerunOtherDialogsOnEdit,
+  writeRerunOtherDialogsOnEdit,
+} from "@/lib/game/game-message-box-preferences";
+import {
   isBlockedReplayMessage,
   loadGameMomentReplay,
   orderedGameMomentMessages,
@@ -162,6 +166,12 @@ function latestSpeakableMessage(messages: CustomChatMessage[]): CustomChatMessag
     return msg;
   }
   return null;
+}
+
+function withoutLatestSpeakableMessage(messages: CustomChatMessage[]): CustomChatMessage[] {
+  const latest = latestSpeakableMessage(messages);
+  if (!latest) return messages;
+  return messages.filter((message) => message.id !== latest.id);
 }
 
 function slotDialogState(messages: CustomChatMessage[]): {
@@ -373,9 +383,13 @@ export default function GamePage() {
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(() => readVoiceEnabled());
+  const [rerunOtherDialogsOnEdit, setRerunOtherDialogsOnEdit] = useState(() =>
+    readRerunOtherDialogsOnEdit(),
+  );
   const lastSpokenBySlotRef = useRef<Partial<Record<CharacterId, string>>>({});
   const momentDialogPlaybackGenRef = useRef(0);
   const momentReplayPlaybackActiveRef = useRef(false);
+  const editRerunInProgressRef = useRef(false);
   const [title, setTitle] = useState("Game");
   const [storyMoments, setStoryMoments] = useState<any[]>([]);
   const [currentMomentIndex, setCurrentMomentIndex] = useState(0);
@@ -1269,6 +1283,11 @@ export default function GamePage() {
     }
   }, [seedVoiceSpeechRefs, voiceEnabled]);
 
+  const handleRerunOtherDialogsOnEditChange = useCallback((value: boolean) => {
+    setRerunOtherDialogsOnEdit(value);
+    writeRerunOtherDialogsOnEdit(value);
+  }, []);
+
   const refreshStorySummary = async (options: {
     sceneSummary: string;
     userText: string;
@@ -1436,17 +1455,24 @@ export default function GamePage() {
       }));
 
       const pendingId = `pending-narrator-${Date.now()}`;
-      setConversations((prev) => ({
-        ...prev,
-        narrator: [
-          ...(prev.narrator || []),
-          {
-            id: pendingId,
-            from: "agent",
-            text: "…",
-          },
-        ],
-      }));
+      const replaceExistingNarrator = editRerunInProgressRef.current;
+      setConversations((prev) => {
+        const narratorMessages = prev.narrator || [];
+        const base = replaceExistingNarrator
+          ? withoutLatestSpeakableMessage(narratorMessages)
+          : narratorMessages;
+        return {
+          ...prev,
+          narrator: [
+            ...base,
+            {
+              id: pendingId,
+              from: "agent",
+              text: "…",
+            },
+          ],
+        };
+      });
 
       const beat = await runSceneNarratorBeat({
         connected,
@@ -2039,7 +2065,7 @@ export default function GamePage() {
           : normalizeCharacterDialogue(trimmed);
     if (!spokenText) return;
 
-    if (nextMomentReady) {
+    if (nextMomentReady && !rerunOtherDialogsOnEdit) {
       const latest = latestSpeakableMessage(conversations[characterId] || []);
       if (latest && latest.text.trim() === spokenText) {
         setCharacterInputs((prev) => ({ ...prev, [characterId]: "" }));
@@ -2074,26 +2100,59 @@ export default function GamePage() {
       return;
     }
 
+    const editingCompletedMoment = nextMomentReady && rerunOtherDialogsOnEdit;
+    const existingLatest = editingCompletedMoment
+      ? latestSpeakableMessage(conversations[characterId] || [])
+      : null;
+
+    if (editingCompletedMoment && existingLatest && existingLatest.text.trim() === spokenText) {
+      setCharacterInputs((prev) => ({ ...prev, [characterId]: "" }));
+      return;
+    }
+
     const speakerName = characterId === 'protagonist'
       ? (assignedPlayer?.name || 'Protagonist')
       : characterId === 'antagonist'
         ? (assignedNpc?.name || 'Antagonist')
         : 'Narrator';
 
-    // Add user message to character's conversation
-    const userMessage: CustomChatMessage = {
-      id: `user-${Date.now()}`,
-      from: 'user',
-      text: spokenText,
-      ttsVoice: ttsVoiceForGameSlot(characterId, assignedPlayer, assignedNpc),
-    };
+    if (editingCompletedMoment) {
+      editRerunInProgressRef.current = true;
+      setNextMomentReady(false);
+      sceneLinesRef.current = [];
+      sceneSpokeRef.current = { protagonist: false, antagonist: false };
+      sceneClosingRef.current = false;
+    }
 
-    lastSpokenBySlotRef.current[characterId] = userMessage.id;
+    let userMessage: CustomChatMessage;
+    if (editingCompletedMoment && existingLatest) {
+      userMessage = {
+        ...existingLatest,
+        text: spokenText,
+        ttsVoice: ttsVoiceForGameSlot(characterId, assignedPlayer, assignedNpc),
+      };
+      lastSpokenBySlotRef.current[characterId] = userMessage.id;
+      setConversations((prev) => ({
+        ...prev,
+        [characterId]: (prev[characterId] || []).map((message) =>
+          message.id === existingLatest.id ? userMessage : message,
+        ),
+      }));
+    } else {
+      userMessage = {
+        id: `user-${Date.now()}`,
+        from: 'user',
+        text: spokenText,
+        ttsVoice: ttsVoiceForGameSlot(characterId, assignedPlayer, assignedNpc),
+      };
 
-    setConversations((prev) => ({
-      ...prev,
-      [characterId]: [...(prev[characterId] || []), userMessage],
-    }));
+      lastSpokenBySlotRef.current[characterId] = userMessage.id;
+
+      setConversations((prev) => ({
+        ...prev,
+        [characterId]: [...(prev[characterId] || []), userMessage],
+      }));
+    }
 
     // Clear input for this character
     setCharacterInputs((prev) => ({ ...prev, [characterId]: '' }));
@@ -2116,10 +2175,20 @@ export default function GamePage() {
                                      characterId === 'narrator' ? ['protagonist', 'antagonist'] :
                                      [];
 
-    if (responders.length === 0) return;
+    if (responders.length === 0) {
+      if (editingCompletedMoment) {
+        editRerunInProgressRef.current = false;
+        setNextMomentReady(true);
+      }
+      return;
+    }
 
     if (!connected) {
       toast.error("Connect an AI provider in Connection settings before sending.");
+      if (editingCompletedMoment) {
+        editRerunInProgressRef.current = false;
+        setNextMomentReady(true);
+      }
       return;
     }
 
@@ -2142,6 +2211,10 @@ export default function GamePage() {
 
     if (lmstudioSelected && !resolvedModel) {
       toast.error("Select an LM Studio model in Connection settings before sending.");
+      if (editingCompletedMoment) {
+        editRerunInProgressRef.current = false;
+        setNextMomentReady(true);
+      }
       return;
     }
 
@@ -2177,13 +2250,20 @@ export default function GamePage() {
 
         // Call AI for this responder
         const pendingId = `pending-${currentResponder}-${Date.now()}`;
-        setConversations((prev) => ({
-          ...prev,
-          [currentResponder]: [
-            ...(prev[currentResponder] || []),
-            { id: pendingId, from: "agent", text: "" },
-          ],
-        }));
+        const replaceResponderLine = editRerunInProgressRef.current;
+        setConversations((prev) => {
+          const slotMessages = prev[currentResponder] || [];
+          const base = replaceResponderLine
+            ? withoutLatestSpeakableMessage(slotMessages)
+            : slotMessages;
+          return {
+            ...prev,
+            [currentResponder]: [
+              ...base,
+              { id: pendingId, from: "agent", text: "" },
+            ],
+          };
+        });
 
         try {
           const requestBody: Record<string, unknown> = {
@@ -2316,6 +2396,13 @@ export default function GamePage() {
       const message = err instanceof Error ? err.message : "AI response failed";
       console.error('AI response error:', err);
       toast.error(message);
+      if (editingCompletedMoment) {
+        setNextMomentReady(true);
+      }
+    } finally {
+      if (editingCompletedMoment) {
+        editRerunInProgressRef.current = false;
+      }
     }
   };
 
@@ -3095,6 +3182,9 @@ export default function GamePage() {
                 onInputChange={setChatInput}
                 onSend={sendChatMessage}
                 disabled={chatInFlight}
+                rerunOtherDialogsOnEdit={rerunOtherDialogsOnEdit}
+                onRerunOtherDialogsOnEditChange={handleRerunOtherDialogsOnEditChange}
+                showRerunOnEditToggle={nextMomentReady}
               />
 
               {nextMomentReady ? (

@@ -33,6 +33,9 @@ type GameFloatingMessageBoxProps = {
   stageRef?: RefObject<HTMLElement | null>;
   disabled?: boolean;
   inputMaxLength?: number;
+  rerunOtherDialogsOnEdit?: boolean;
+  onRerunOtherDialogsOnEditChange?: (value: boolean) => void;
+  showRerunOnEditToggle?: boolean;
 };
 
 const DEFAULT_LAYOUT: BoxLayout = {
@@ -56,6 +59,9 @@ export function GameFloatingMessageBox({
   stageRef,
   disabled = false,
   inputMaxLength,
+  rerunOtherDialogsOnEdit = false,
+  onRerunOtherDialogsOnEditChange,
+  showRerunOnEditToggle = false,
 }: GameFloatingMessageBoxProps) {
   const layoutRef = useRef<BoxLayout>(DEFAULT_LAYOUT);
   const interactingRef = useRef(false);
@@ -208,6 +214,22 @@ export function GameFloatingMessageBox({
           }}
           className="min-h-0 flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
+
+        {showRerunOnEditToggle && onRerunOtherDialogsOnEditChange ? (
+          <label
+            className="flex shrink-0 cursor-pointer items-center gap-2 border-t border-dashed border-white/25 px-2 py-1 text-[10px] text-white/75"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={rerunOtherDialogsOnEdit}
+              disabled={disabled}
+              onChange={(event) => onRerunOtherDialogsOnEditChange(event.target.checked)}
+              className="h-3 w-3 accent-white"
+            />
+            <span>Rerun other dialogs upon edit</span>
+          </label>
+        ) : null}
 
         <button
           type="button"
