@@ -6,6 +6,7 @@ import { MomentMedia } from '@/components/moment-media';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { useMomentsContext } from '@/context/moments-collection';
+import { SelectedShineBorder } from '@/components/ui/selected-shine-border';
 
 type Moment = {
   id: string;
@@ -103,12 +104,12 @@ export default function MomentCard({
         }
       }}
       className={[
-        'm4-paper-card group overflow-hidden cursor-pointer rounded-xl',
-        item.selected ? 'ring-2 ring-primary/60' : '',
+        'm4-paper-card group relative overflow-hidden cursor-pointer rounded-xl',
         fullHeight ? 'h-full' : '',
       ].join(' ')}
       tabIndex={0}
     >
+      <SelectedShineBorder selected={item.selected} />
       <div className="relative block rounded-xl w-full h-full min-h-[120px] bg-zinc-100 dark:bg-zinc-800 select-none overflow-hidden">
         <button
           onClick={e => {

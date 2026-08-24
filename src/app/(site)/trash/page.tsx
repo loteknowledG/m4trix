@@ -10,6 +10,7 @@ import { MomentsProvider } from '@/context/moments-collection';
 import MomentsGrid from '@/components/moments-grid';
 import { Trash2, RotateCcw } from '@/components/icons';
 import { Card } from '@/components/ui/card';
+import { SelectedShineBorder } from '@/components/ui/selected-shine-border';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -219,10 +220,10 @@ export default function TrashPage() {
                     <Card
                       key={story.id}
                       className={cn(
-                        'm4-paper-card group overflow-hidden',
-                        selected[storyKey(story.id)] && 'ring-2 ring-primary',
+                        'm4-paper-card group relative overflow-hidden',
                       )}
                     >
+                      <SelectedShineBorder selected={selected[storyKey(story.id)]} />
                       <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-800">
                         <label
                           className={`absolute left-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-white/70 bg-black/45 transition-opacity ${

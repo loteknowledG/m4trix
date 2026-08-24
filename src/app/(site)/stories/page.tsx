@@ -9,6 +9,7 @@ import { ContentLayout } from '@/components/admin-panel/content-layout';
 import { SquarePen, Trash2 } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { SelectedShineBorder } from '@/components/ui/selected-shine-border';
 import { Marquee } from '@/components/ui/marquee';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { MomentMedia } from '@/components/moment-media';
@@ -181,9 +182,9 @@ export default function StoriesPage() {
                     key={s.id}
                     className={cn(
                       'm4-paper-card group relative overflow-hidden',
-                      selectedStories[s.id] && 'ring-2 ring-primary',
                     )}
                   >
+                    <SelectedShineBorder selected={selectedStories[s.id]} />
                     <div className="relative aspect-square">
                       <label
                         className={`absolute left-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-white/70 bg-black/45 transition-opacity ${

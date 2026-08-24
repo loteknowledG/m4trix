@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { SelectedShineBorder } from '@/components/ui/selected-shine-border';
 
 export type GameCardProps = {
   id: string;
@@ -51,11 +52,12 @@ export function GameCard({
       onClick={handleClick}
       className={cn(
         'relative group w-full overflow-hidden rounded-lg border bg-zinc-900/30 shadow-sm transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary',
-        selected ? 'ring-2 ring-primary/70' : 'ring-1 ring-white/10',
+        selected ? '' : 'ring-1 ring-white/10',
         cardHeightClass,
         className
       )}
     >
+      <SelectedShineBorder selected={selected} />
       <div className={cn('relative w-full bg-black/30', previewHeightClass)}>
         {previewSrc ? (
           <img
