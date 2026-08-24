@@ -38,10 +38,15 @@ export function buildCharacterReplyPrompt(args: {
   responderName: string;
   protagonistReply?: boolean;
   narratorScene?: boolean;
+  stageObjective?: string;
 }): string {
   const limit = args.protagonistReply ? PROTAGONIST_REPLY_INSTRUCTION : 'Reply with one short sentence in character.';
+  const objective = args.stageObjective?.trim();
+  const steer = objective
+    ? ` Keep the scene moving one step toward this stage objective: ${objective}.`
+    : '';
   if (args.narratorScene) {
-    return `The narrator describes: "${args.line}". ${args.responderName}, what would you say in response? ${limit}`;
+    return `The narrator describes: "${args.line}". ${args.responderName}, what would you say in response? ${limit}${steer}`;
   }
-  return `${args.speakerName} said: "${args.line}". ${args.responderName}, ${limit}`;
+  return `${args.speakerName} said: "${args.line}". ${args.responderName}, ${limit}${steer}`;
 }

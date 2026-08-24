@@ -770,7 +770,11 @@ export default function GamePage() {
       storySummary.trim() ? `Story summary:\n${storySummary.trim()}` : "",
       resolvedArcStage
         ? `Story arc stage: ${resolvedArcStage.stageNumber} - ${resolvedArcStage.stageName}${
-            resolvedArcStage.shortDescription ? `\n${resolvedArcStage.shortDescription}` : ""
+            resolvedArcStage.objective?.trim()
+              ? `\nStage objective:\n${resolvedArcStage.objective.trim()}`
+              : resolvedArcStage.shortDescription
+                ? `\n${resolvedArcStage.shortDescription}`
+                : ""
           }`
         : resolvedArcStageNumber != null
           ? `Story arc stage: ${resolvedArcStageNumber}`
@@ -1452,6 +1456,7 @@ export default function GamePage() {
       const sceneDialogLines = args.sceneLines.map((line) => ({
         speaker: line.speaker,
         text: line.text,
+        slot: line.slot,
       }));
 
       const pendingId = `pending-narrator-${Date.now()}`;
@@ -1488,6 +1493,8 @@ export default function GamePage() {
           resolvedArcStageNumber == null
             ? []
             : getCompletedTodoIds(storyArcTodoProgress, resolvedArcStageNumber),
+        playerName: assignedPlayer?.name,
+        npcName: assignedNpc?.name?.trim() || "NPC",
       });
 
       const evaluation = evaluateStageProgressWithArc({
@@ -2246,6 +2253,7 @@ export default function GamePage() {
           responderName: currentResponderName,
           protagonistReply: currentResponder === 'protagonist',
           narratorScene: isNarratorSpeaking,
+          stageObjective: resolvedArcStage?.objective,
         });
 
         // Call AI for this responder
@@ -2266,6 +2274,7 @@ export default function GamePage() {
         });
 
         try {
+          const stageObjective = resolvedArcStage?.objective?.trim();
           const requestBody: Record<string, unknown> = {
             prompt: promptText,
             model: resolvedModel,
@@ -2278,7 +2287,16 @@ export default function GamePage() {
             character: {
               id: currentResponderCharacter.id,
               name: currentResponderName,
-              description: `You are ${currentResponderName}. ${currentResponderCharacter.description || ''} Stay in character. Reply with ONE short sentence of dialogue.`,
+              description: [
+                `You are ${currentResponderName}.`,
+                currentResponderCharacter.description || "",
+                "Stay in character. Reply with ONE short sentence of dialogue.",
+                stageObjective
+                  ? `Move the scene one step toward this stage objective: ${stageObjective}.`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" "),
             },
             maxTokens: 150,
           };

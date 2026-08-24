@@ -210,6 +210,23 @@ export function StoryArcEditor({
                         placeholder="Optional stage summary for the narrator"
                         className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                       />
+                      <textarea
+                        value={stage.objective ?? ''}
+                        onChange={(e) =>
+                          setDraft((prev) =>
+                            updateStoryArcStage(prev, {
+                              ...stage,
+                              objective: e.target.value,
+                            }),
+                          )
+                        }
+                        onBlur={() =>
+                          updateStage(stage.stageNumber, { objective: stage.objective ?? '' })
+                        }
+                        rows={3}
+                        placeholder="Stage objective — narrator moves each exchange toward this"
+                        className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                      />
 
                       <div className="space-y-2">
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

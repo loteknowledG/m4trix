@@ -24,6 +24,8 @@ export interface StoryArcStage {
   powerDynamic: string;
   /** Characters present in this stage (excludes narrator). */
   characterIds?: string[];
+  /** What this stage must move toward during play. The narrator fleshes dialogue toward this. */
+  objective?: string;
   objectives?: CheckpointObjective[];
   sceneObjects?: SceneObject[];
 }
@@ -131,6 +133,10 @@ function normalizeTodoItems(raw: RawStoryArcStage): StoryArcTodoItem[] {
   return [];
 }
 
+export function getStageObjective(stage: StoryArcStage | null | undefined): string {
+  return typeof stage?.objective === 'string' ? stage.objective.trim() : '';
+}
+
 export function getStageTodos(stage: StoryArcStage | null | undefined): StoryArcTodoItem[] {
   if (!stage) return [];
   if (Array.isArray(stage.todos) && stage.todos.length > 0) return stage.todos;
@@ -188,6 +194,7 @@ export function addStoryArcStage(arc: StoryArc): StoryArc {
         exampleDialogTone: '',
         powerDynamic: '',
         characterIds: [],
+        objective: '',
       },
     ],
   };
@@ -257,6 +264,7 @@ export function normalizeStoryArcStage(
     characterIds: Array.isArray(raw.characterIds)
       ? raw.characterIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
       : [],
+    objective: typeof raw.objective === "string" ? raw.objective : "",
     objectives: Array.isArray(raw.objectives) ? raw.objectives.filter(Boolean) : undefined,
     sceneObjects: Array.isArray(raw.sceneObjects) ? raw.sceneObjects.filter(Boolean) : undefined,
   };

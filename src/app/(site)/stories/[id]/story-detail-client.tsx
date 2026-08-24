@@ -97,11 +97,12 @@ function reorderStageMomentIds(ids: string[], from: number, to: number): string[
 
 type StageEditForm = {
   name: string;
+  objective: string;
   characterIds: string[];
 };
 
 function createEmptyStageEditForm(): StageEditForm {
-  return { name: "", characterIds: [] };
+  return { name: "", objective: "", characterIds: [] };
 }
 
 type Moment = StoryMomentRecord;
@@ -628,6 +629,7 @@ export default function StoryPage() {
       powerDynamic: "",
       todos: [] as StoryArcTodoItem[],
       characterIds: [] as string[],
+      objective: "",
     }));
   }, [storyArcStages]);
 
@@ -640,6 +642,7 @@ export default function StoryPage() {
     const stage = storyArcStages.find((item) => item.stageNumber === stageEditTarget);
     setStageEditForm({
       name: stage?.stageName ?? "",
+      objective: stage?.objective ?? "",
       characterIds: Array.isArray(stage?.characterIds) ? [...stage.characterIds] : [],
     });
     stageEditSkipSaveRef.current = true;
@@ -680,6 +683,7 @@ export default function StoryPage() {
         stageNumber,
         stageName: form.name.trim(),
         shortDescription: existingStage?.shortDescription ?? "",
+        objective: form.objective.trim(),
         emotionalState: existingStage?.emotionalState ?? [],
         powerDynamic: existingStage?.powerDynamic ?? "",
         keyTags: existingStage?.keyTags ?? [],
@@ -795,6 +799,7 @@ export default function StoryPage() {
           exampleDialogTone: "",
           powerDynamic: "",
           todos: [],
+          objective: "",
         });
       }
     }
@@ -1597,7 +1602,9 @@ export default function StoryPage() {
                                   Stage {stageNumber}
                                   {stageMeta?.stageName ? `: ${stageMeta.stageName}` : ""}
                                 </h3>
-                                {stageMeta?.shortDescription ? (
+                                {stageMeta?.objective ? (
+                                  <p className="mt-1 text-xs opacity-80">{stageMeta.objective}</p>
+                                ) : stageMeta?.shortDescription ? (
                                   <p className="mt-1 text-xs opacity-80">{stageMeta.shortDescription}</p>
                                 ) : null}
                               </div>
@@ -1845,7 +1852,7 @@ export default function StoryPage() {
             <DialogTitle>{stageEditTarget != null ? "Scene description" : "Add to stage"}</DialogTitle>
             <DialogDescription id="story-stage-description">
               {stageEditTarget != null
-                ? "Name this stage and assign characters."
+                ? "Name this stage, set its objective, and assign characters."
                 : "Choose a stage for the selected moments."}
             </DialogDescription>
           </DialogHeader>
@@ -1880,6 +1887,22 @@ export default function StoryPage() {
                       setStageEditForm((prev) => ({ ...prev, name: e.target.value }))
                     }
                     placeholder={`Stage ${stageEditTarget}`}
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="stage-edit-objective" className="text-xs uppercase text-muted-foreground">
+                    Objective
+                  </label>
+                  <textarea
+                    id="stage-edit-objective"
+                    value={stageEditForm.objective}
+                    onChange={(e) =>
+                      setStageEditForm((prev) => ({ ...prev, objective: e.target.value }))
+                    }
+                    rows={4}
+                    placeholder="What this stage must move toward. In game mode the narrator fleshes each exchange toward this."
                     className="w-full rounded border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
                   />
                 </div>

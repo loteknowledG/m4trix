@@ -8,7 +8,7 @@ import { extractAgentResponseText } from '@/lib/game/agent-response-text';
 
 import { formatGameSpeakerLabel } from '@/lib/game/game-context';
 
-import { NARRATOR_AGENT, SCENE_NARRATOR_AGENT } from '@/lib/game/narrator-agent';
+import { NARRATOR_AGENT, OBJECTIVE_NARRATOR_AGENT, SCENE_NARRATOR_AGENT } from '@/lib/game/narrator-agent';
 
 import {
 
@@ -20,7 +20,14 @@ import {
 
 import type { StoryArcStage } from '@/lib/game/story-arc';
 
-import { getNextStoryArcStage, getStageTodos } from '@/lib/game/story-arc';
+import { getNextStoryArcStage, getStageObjective, getStageTodos } from '@/lib/game/story-arc';
+
+import {
+  buildObjectiveFleshOutPrompt,
+  formatObjectiveNarratorBeat,
+  parseObjectiveFleshOut,
+  type ObjectiveExchange,
+} from '@/lib/game/objective-narrator';
 
 import { normalizeNarratorSummary } from '@/lib/game/dialogue-limits';
 
@@ -41,6 +48,7 @@ export type NarratorBeatResult = {
 export type SceneDialogLine = {
   speaker: string;
   text: string;
+  slot?: 'protagonist' | 'antagonist';
 };
 
 export type RunSceneNarratorBeatArgs = {
@@ -54,6 +62,8 @@ export type RunSceneNarratorBeatArgs = {
   history: OrchestratedMessage[];
   arcStage?: StoryArcStage | null;
   completedTodoIds?: string[];
+  playerName?: string;
+  npcName?: string;
 };
 
 export type RunNarratorBeatArgs = {
@@ -100,6 +110,121 @@ function hasOpenArcTodos(
   if (!stage) return false;
   const completed = new Set(completedIds);
   return getStageTodos(stage).some((todo) => !completed.has(todo.id));
+}
+
+function resolveObjectiveExchange(args: {
+  sceneLines?: SceneDialogLine[];
+  userText?: string;
+  npcText?: string;
+  playerName?: string;
+  npcName?: string;
+}): ObjectiveExchange | null {
+  const playerName = args.playerName?.trim() || '';
+  const npcName = args.npcName?.trim() || '';
+  const playerLine =
+    args.sceneLines?.find((line) => line.slot === 'protagonist') ??
+    (playerName
+      ? args.sceneLines?.find((line) => line.speaker.trim() === playerName)
+      : undefined);
+  const npcLine =
+    args.sceneLines?.find((line) => line.slot === 'antagonist') ??
+    (npcName
+      ? args.sceneLines?.find((line) => line.speaker.trim() === npcName)
+      : undefined);
+
+  const playerText = (playerLine?.text || args.userText || '').trim();
+  const npcText = (npcLine?.text || args.npcText || '').trim();
+  if (!playerText || !npcText) return null;
+
+  return {
+    playerName: playerLine?.speaker?.trim() || playerName || 'The player',
+    npcName: npcLine?.speaker?.trim() || npcName || 'The other character',
+    playerText,
+    npcText,
+  };
+}
+
+async function requestObjectiveFleshOut(args: {
+  connected: boolean;
+  connectionModel: string | null;
+  objective: string;
+  exchange: ObjectiveExchange;
+  storyContext: string;
+}): Promise<string | null> {
+  if (!args.connected || !args.objective.trim()) return null;
+
+  const prompt = buildObjectiveFleshOutPrompt({
+    objective: args.objective,
+    exchange: args.exchange,
+    storyContext: args.storyContext,
+  });
+
+  const zenKey = getConnectionItem(CONNECTION_STORAGE_KEYS.zenKey) ?? undefined;
+  const googleKey = getConnectionItem(CONNECTION_STORAGE_KEYS.googleKey) ?? undefined;
+  const hfKey = getConnectionItem(CONNECTION_STORAGE_KEYS.hfKey) ?? undefined;
+  const nvidiaKey = getConnectionItem(CONNECTION_STORAGE_KEYS.nvidiaKey) ?? undefined;
+  const activeProvider =
+    getConnectionItem(CONNECTION_STORAGE_KEYS.activeModelProvider) ||
+    getConnectionItem(CONNECTION_STORAGE_KEYS.activeProvider) ||
+    'zen';
+  const lmstudioUrl = normalizeLmstudioUrl(
+    getConnectionItem(CONNECTION_STORAGE_KEYS.lmstudioUrl) || DEFAULT_LMSTUDIO_URL,
+  );
+
+  try {
+    const res = await fetchAgentsWithLmstudioBrowserProxy({
+      prompt,
+      model: args.connectionModel,
+      zenApiKey: zenKey,
+      googleApiKey: googleKey,
+      hfApiKey: hfKey,
+      nvidiaApiKey: nvidiaKey,
+      provider: activeProvider,
+      lmstudioUrl: activeProvider === 'lmstudio' ? lmstudioUrl : undefined,
+      agents: [OBJECTIVE_NARRATOR_AGENT],
+      stateless: true,
+      orchestration: 'parallel',
+      interactionMode: 'neutral',
+      story: args.objective,
+      stream: false,
+    });
+
+    const raw = await res.text().catch(() => '');
+    const rawText = res.ok ? extractAgentResponseText(raw).trim() : '';
+    const extra = parseObjectiveFleshOut(rawText);
+    if (!extra) return null;
+    return formatObjectiveNarratorBeat(args.exchange, extra);
+  } catch (err) {
+    console.warn('[game][narrator][objective] request failed', err);
+    return null;
+  }
+}
+
+async function maybeFleshOutTowardObjective(args: {
+  connected: boolean;
+  connectionModel: string | null;
+  arcStage?: StoryArcStage | null;
+  storyContext: string;
+  sceneSummary: string;
+  exchange: ObjectiveExchange | null;
+  fallbackText: string;
+}): Promise<string> {
+  const objective = getStageObjective(args.arcStage);
+  if (!objective || !args.exchange) return args.fallbackText;
+
+  const context = [args.sceneSummary, args.storyContext].filter(Boolean).join('\n\n');
+  const fleshed = await requestObjectiveFleshOut({
+    connected: args.connected,
+    connectionModel: args.connectionModel,
+    objective,
+    exchange: args.exchange,
+    storyContext: context,
+  });
+  if (fleshed) return fleshed;
+  if (!args.connected) {
+    return `${args.fallbackText}\nThe scene edged toward: ${objective}.`;
+  }
+  return args.fallbackText;
 }
 
 function buildSceneSummarySentence(
@@ -205,6 +330,8 @@ export async function runSceneNarratorBeat({
   history,
   arcStage,
   completedTodoIds = [],
+  playerName,
+  npcName,
 }: RunSceneNarratorBeatArgs): Promise<NarratorBeatResult> {
   const fallback = () =>
     buildSceneNarratorFallbackBeat({ sceneLines, nextMomentName, isLastMoment });
@@ -213,9 +340,17 @@ export async function runSceneNarratorBeat({
     return fallback();
   }
 
-  const summaryText = normalizeNarratorSummary(
-    buildSceneSummarySentence(sceneLines, { nextMomentName, isLastMoment }),
-  );
+  const summaryText = await maybeFleshOutTowardObjective({
+    connected,
+    connectionModel,
+    arcStage,
+    storyContext,
+    sceneSummary,
+    exchange: resolveObjectiveExchange({ sceneLines, playerName, npcName }),
+    fallbackText: normalizeNarratorSummary(
+      buildSceneSummarySentence(sceneLines, { nextMomentName, isLastMoment }),
+    ),
+  });
 
   const todoSection = formatOpenTodosForNarrator(arcStage, completedTodoIds);
   const needsTodoScoring = connected && hasOpenArcTodos(arcStage, completedTodoIds);
@@ -345,15 +480,26 @@ export async function runNarratorBeat({
     playerMode,
   });
 
-  if (!connected) {
-    return fallbackBeat;
-  }
+  const beatText = summarizeOnly
+    ? fallbackBeat.text
+    : await maybeFleshOutTowardObjective({
+        connected,
+        connectionModel,
+        arcStage,
+        storyContext,
+        sceneSummary,
+        exchange: resolveObjectiveExchange({ userText, npcText, playerName, npcName }),
+        fallbackText: fallbackBeat.text,
+      });
 
   const todoSection = summarizeOnly ? '' : formatOpenTodosForNarrator(arcStage, completedTodoIds);
-  const needsTodoScoring = !summarizeOnly && hasOpenArcTodos(arcStage, completedTodoIds);
+  const needsTodoScoring = !summarizeOnly && connected && hasOpenArcTodos(arcStage, completedTodoIds);
 
-  if (summarizeOnly || !needsTodoScoring) {
-    return fallbackBeat;
+  if (!needsTodoScoring) {
+    return {
+      ...fallbackBeat,
+      text: beatText,
+    };
   }
 
   const npc = { name: npcName };
@@ -449,18 +595,24 @@ export async function runNarratorBeat({
     const rawText = res.ok ? extractAgentResponseText(raw).trim() : '';
 
     if (!rawText || /^none$/i.test(rawText)) {
-      return fallbackBeat;
+      return {
+        ...fallbackBeat,
+        text: beatText,
+      };
     }
 
     const parsed = parseNarratorTodoMarkers(rawText);
     return {
-      text: fallbackBeat.text,
+      text: beatText,
       completedTodoIds: parsed.completedTodoIds,
       stageComplete: parsed.stageComplete,
     };
   } catch (err) {
     console.warn('[game][narrator] request failed', err);
-    return fallbackBeat;
+    return {
+      ...fallbackBeat,
+      text: beatText,
+    };
   }
 }
 

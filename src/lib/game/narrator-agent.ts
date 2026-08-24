@@ -30,6 +30,20 @@ export const SCENE_NARRATOR_AGENT: Agent = {
   ].join(' '),
 };
 
+export const OBJECTIVE_NARRATOR_AGENT: Agent = {
+  id: NARRATOR_CHARACTER_ID,
+  name: 'Narrator',
+  description: [
+    'Objective narrator.',
+    'Flesh out a short player/NPC exchange with extra spoken lines that move the scene one step toward the stage objective.',
+    'The player character leads and later demands; the NPC character submits and later obeys.',
+    'Invent only the labeled extra dialogue requested.',
+    'Each invented line is one short spoken sentence.',
+    'Never rewrite the actual player or NPC lines.',
+    'Do not add narration, stage directions, or unlabeled text.',
+  ].join(' '),
+};
+
 
 
 export function ensureNarratorCharacterRecord(
