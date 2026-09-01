@@ -16,6 +16,10 @@
     "build": "node scripts/write-api-dynamic.mjs && node scripts/copy-sql-wasm.mjs && next build --webpack",
     "postinstall": "node scripts/copy-sql-wasm.mjs",
     "start": "next start",
+    "cf:build": "node scripts/write-api-dynamic.mjs && node scripts/copy-sql-wasm.mjs && opennextjs-cloudflare build",
+    "cf:preview": "pnpm cf:build && opennextjs-cloudflare preview",
+    "cf:deploy": "pnpm cf:build && opennextjs-cloudflare deploy",
+    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://127.0.0.1:3000 && electron . --user-data-dir=.tmp/electron-user-data\"",
     "electron:prod": "pnpm desktop:build && pnpm desktop:prepare && node scripts/run-packaged-electron.js",
     "desktop:build": "node scripts/build-desktop.js",
@@ -45,6 +49,7 @@
     "@lexical/react": "^0.39.0",
     "@lexical/rich-text": "^0.39.0",
     "@mediapipe/tasks-vision": "^0.10.34",
+    "@opennextjs/cloudflare": "^1.20.5",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -121,6 +126,7 @@
     "tailwindcss": "^3.4.19",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "wait-on": "^7.2.0"
+    "wait-on": "^7.2.0",
+    "wrangler": "^4.127.1"
   }
 }
